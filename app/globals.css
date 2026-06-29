@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f7fbfb;
+  color: #102033;
+  padding-bottom: 5rem;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: #a3e635;
+  color: #08243a;
+}
+
+.focus-ring {
+  @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-court-teal;
+}
+
+.surface-card {
+  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+}
+
+.soft-card {
+  @apply rounded-lg border border-slate-200 bg-slate-50;
+}
+
+.empty-state {
+  @apply rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm;
+}
+
+.section-kicker {
+  @apply text-xs font-black uppercase tracking-wide text-court-teal;
+}
+
+.section-title {
+  @apply text-xl font-black tracking-tight text-court-navy sm:text-2xl;
+}
+
+.action-card {
+  @apply rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-court-teal hover:shadow-court;
+}
+
+.stat-card {
+  @apply rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5;
+}
+
+.btn-primary {
+  @apply inline-flex justify-center rounded bg-court-blue px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700;
+}
+
+.btn-secondary {
+  @apply inline-flex justify-center rounded border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-court-navy transition hover:border-court-teal hover:bg-court-mist;
+}
+
+@media (min-width: 768px) {
+  body {
+    padding-bottom: 0;
+  }
+}
