@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 
 const playerLinks = [
-  { href: "/dashboard", label: "My PlayR", mobileLabel: "My PlayR" },
-  { href: "/dashboard/book-court", label: "Book a Court", mobileLabel: "Book" },
+  { href: "/dashboard/book-court", label: "Book", mobileLabel: "Book" },
   { href: "/dashboard/play", label: "Play", mobileLabel: "Play" },
+  { href: "/dashboard", label: "MyPlayR", mobileLabel: "MyPlayR", isHub: true },
   { href: "/dashboard/events", label: "Events", mobileLabel: "Events" },
-  { href: "/dashboard/profile", label: "Player Profile", mobileLabel: "Profile" }
+  { href: "/dashboard/profile", label: "Profile", mobileLabel: "Profile" }
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -33,7 +33,13 @@ export function PlayerDesktopNav({ showAdmin }: { showAdmin: boolean }) {
             aria-current={active ? "page" : undefined}
             className={clsx(
               "rounded px-3 py-2 transition",
-              active ? "bg-court-mist text-court-navy" : "hover:bg-slate-100 hover:text-court-blue"
+              link.isHub && active
+                ? "bg-court-navy text-white"
+                : link.isHub
+                  ? "bg-court-mist text-court-navy hover:bg-court-navy hover:text-white"
+                  : active
+                    ? "bg-court-mist text-court-navy"
+                    : "hover:bg-slate-100 hover:text-court-blue"
             )}
             href={link.href}
             key={link.href}
@@ -75,8 +81,12 @@ export function PlayerBottomNav({ showAdmin }: { showAdmin: boolean }) {
             <Link
               aria-current={active ? "page" : undefined}
               className={clsx(
-                "rounded px-2 py-2 text-center text-xs font-black transition",
-                active ? "bg-court-navy text-white" : "text-slate-600 hover:bg-court-mist hover:text-court-navy"
+                "grid min-h-12 place-items-center rounded px-1 text-center text-[11px] font-black transition",
+                link.isHub
+                  ? "bg-court-navy text-white shadow-court"
+                  : active
+                    ? "bg-court-mist text-court-navy"
+                    : "text-slate-600 hover:bg-court-mist hover:text-court-navy"
               )}
               href={link.href}
               key={link.href}

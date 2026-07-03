@@ -2,21 +2,29 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
-import { formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import type { Court, CourtBooking, MatchInviteStatus, MatchInviteType, MatchVerificationStatus, PlayerLevel, Profile, Rating, RatingChange } from "@/types/courtside";
+import type {
+  Court,
+  CourtBooking,
+  CourtSideEvent,
+  EntryStatus,
+  JuniorStage,
+  MatchInviteStatus,
+  MatchInviteType,
+  Profile,
+  Rating
+} from "@/types/courtside";
 
 export const dynamic = "force-dynamic";
 
-type BookingRow = Pick<CourtBooking, "id" | "start_time" | "end_time" | "booking_type" | "status"> & {
+type BookingRow = Pick<CourtBooking, "id" | "player_profile_id" | "start_time"> & {
   courts: Pick<Court, "name"> | null;
-  profiles: Pick<Profile, "first_name" | "last_name" | "is_junior"> | null;
 };
 
 type DashboardMatchInvite = {
   id: string;
-  invited_by_user_id: string;
   inviter_profile_id: string;
   opponent_profile_id: string;
   match_type: MatchInviteType;
@@ -24,51 +32,191 @@ type DashboardMatchInvite = {
   created_at: string;
 };
 
-type DashboardMatch = {
+type DashboardEventEntry = {
   id: string;
-  match_invite_id: string;
-  submitted_by_user_id: string;
-  verification_status: MatchVerificationStatus;
-  submitted_at: string;
+  profile_id: string;
+  entry_status: EntryStatus;
+  events: Pick<CourtSideEvent, "title" | "start_datetime"> | null;
 };
 
-function provisionalRating(level: PlayerLevel | null | undefined) {
-  switch (level) {
-    case "advanced":
-      return { value: "8.0", band: "Advanced" };
-    case "club_competitive":
-      return { value: "6.5", band: "Club Competitive" };
-    case "intermediate":
-      return { value: "5.0", band: "Intermediate" };
-    case "social":
-      return { value: "3.5", band: "Social" };
-    case "beginner":
-      return { value: "2.0", band: "Beginner" };
+type JuniorCardProfile = Pick<
+  Profile,
+  | "id"
+  | "first_name"
+  | "last_name"
+  | "junior_stage"
+  | "junior_rating"
+  | "junior_rating_confidence"
+  | "participation_score"
+>;
+
+type ActivityCounts = {
+  invites: number;
+  events: number;
+  bookings: number;
+};
+
+function playerName(profile: Pick<Profile, "first_name" | "last_name">) {
+  return `${profile.first_name} ${profile.last_name}`;
+}
+
+function emptyActivity(): ActivityCounts {
+  return { invites: 0, events: 0, bookings: 0 };
+}
+
+function formatJuniorStageLabel(stage: JuniorStage | string | null | undefined) {
+  switch (stage) {
+    case "red_ball":
+    case "red":
+      return "Red Ball";
+    case "orange_ball":
+    case "orange":
+      return "Orange Ball";
+    case "green_ball":
+    case "green":
+      return "Green Ball";
+    case "yellow_ball":
+    case "yellow":
+      return "Yellow Ball";
+    case "not_sure":
+      return "Ball stage pending";
     default:
-      return { value: "3.5", band: "Social" };
+      return "Junior Player";
   }
 }
 
-function profileCompletion(profile: Profile | null) {
-  if (!profile) {
-    return { percent: 0, label: "Player Profile needed", text: "Create your Player Profile to unlock court bookings and player progress." };
+function activityLabel(count: number, singular: string, plural: string, empty: string) {
+  if (count === 0) {
+    return empty;
   }
 
-  const fields = [profile.first_name, profile.last_name, profile.email, profile.phone, profile.date_of_birth, profile.primary_sport, profile.player_level !== "unknown" ? profile.player_level : ""];
-  const complete = fields.filter(Boolean).length;
-  const percent = Math.round((complete / fields.length) * 100);
+  return count === 1 ? singular : plural;
+}
 
-  return {
-    percent,
-    label: percent >= 85 ? "Ready to play" : "Almost ready",
-    text: percent >= 85 ? "Your player basics are in place." : "Add a few more details to make club admin easier."
-  };
+function ActivityMetric({
+  count,
+  label,
+  singular,
+  plural,
+  empty,
+  dark = false
+}: {
+  count: number;
+  label: string;
+  singular: string;
+  plural: string;
+  empty: string;
+  dark?: boolean;
+}) {
+  return (
+    <div className={dark ? "border-t border-white/15 pt-3" : "border-t border-slate-200 pt-3"}>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className={dark ? "text-xs font-black uppercase tracking-wide text-blue-100" : "text-xs font-black uppercase tracking-wide text-slate-500"}>{label}</p>
+        <p className={dark ? "text-2xl font-black text-white" : "text-2xl font-black text-court-navy"}>{count}</p>
+      </div>
+      <p className={dark ? "mt-1 text-sm text-blue-50" : "mt-1 text-sm text-slate-600"}>{activityLabel(count, singular, plural, empty)}</p>
+    </div>
+  );
+}
+
+function MemberCard({
+  profile,
+  rating,
+  activity,
+  juniorCount
+}: {
+  profile: Profile | null;
+  rating: Rating | null;
+  activity: ActivityCounts;
+  juniorCount: number;
+}) {
+  const name = profile ? playerName(profile) : "Set up your profile";
+  const memberType = juniorCount > 0 ? "Parent / Member Profile" : "Member / Player";
+  const ratingText = rating ? rating.rating_value.toFixed(1) : "No active rating yet";
+
+  return (
+    <article className="overflow-hidden rounded-lg border border-court-navy/15 bg-white shadow-court">
+      <div className="h-2 bg-court-teal" />
+      <div className="p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-court-teal">Main member</p>
+            <h3 className="mt-2 text-2xl font-black text-court-navy">{name}</h3>
+            <p className="mt-1 text-sm font-bold text-slate-600">{memberType}</p>
+          </div>
+          <div className="rounded bg-court-mist px-4 py-3 sm:text-right">
+            <p className="text-xs font-black uppercase tracking-wide text-court-teal">Rating</p>
+            <p className="mt-1 text-lg font-black text-court-navy">{ratingText}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <ActivityMetric count={activity.invites} empty="No pending invites" label="Match Invites" plural="Pending invites" singular="Pending invite" />
+          <ActivityMetric count={activity.events} empty="No upcoming events" label="Upcoming Events" plural="Upcoming events" singular="Upcoming event" />
+          <ActivityMetric count={activity.bookings} empty="No court bookings" label="Upcoming Bookings" plural="Court bookings" singular="Court booking" />
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link className="btn-primary" href="/dashboard/profile">
+            View Profile
+          </Link>
+          {!profile ? (
+            <Link className="btn-secondary" href="/dashboard/profile">
+              Complete Profile
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function JuniorCard({ junior, activity }: { junior: JuniorCardProfile; activity: ActivityCounts }) {
+  return (
+    <article className="overflow-hidden rounded-lg bg-court-navy text-white shadow-court">
+      <div className="h-2 bg-court-lime" />
+      <div className="p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-court-lime">Linked junior</p>
+            <h3 className="mt-2 text-2xl font-black">{playerName(junior)}</h3>
+            <p className="mt-1 text-sm font-bold text-blue-50">{formatJuniorStageLabel(junior.junior_stage)}</p>
+          </div>
+          <div className="rounded bg-white/10 px-4 py-3 sm:text-right">
+            <p className="text-xs font-black uppercase tracking-wide text-blue-100">Rating</p>
+            <p className="mt-1 text-lg font-black">{formatJuniorRating(junior.junior_stage, junior.junior_rating)}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="border-t border-white/15 pt-3">
+            <p className="text-xs font-black uppercase tracking-wide text-blue-100">Confidence</p>
+            <p className="mt-1 text-lg font-black">{formatLabel(junior.junior_rating_confidence)}</p>
+          </div>
+          <div className="border-t border-white/15 pt-3">
+            <p className="text-xs font-black uppercase tracking-wide text-blue-100">Participation</p>
+            <p className="mt-1 text-lg font-black">{junior.participation_score} pts</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <ActivityMetric count={activity.invites} dark empty="No pending invites" label="Match Invites" plural="Pending invites" singular="Pending invite" />
+          <ActivityMetric count={activity.events} dark empty="No upcoming events" label="Upcoming Events" plural="Upcoming events" singular="Upcoming event" />
+          <ActivityMetric count={activity.bookings} dark empty="No court bookings" label="Upcoming Bookings" plural="Court bookings" singular="Court booking" />
+        </div>
+
+        <Link className="mt-5 inline-flex justify-center rounded bg-court-teal px-4 py-3 text-sm font-bold text-white transition hover:bg-teal-500" href={`/dashboard/juniors#junior-${junior.id}`}>
+          Open Player Card
+        </Link>
+      </div>
+    </article>
+  );
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams?: { profile?: string } }) {
   if (!hasSupabaseConfig()) {
     return (
-      <PageShell eyebrow="My PlayR" title="Supabase is not configured.">
+      <PageShell eyebrow="MyPlayR" title="Supabase is not configured.">
         <div className="rounded-lg border border-slate-200 bg-white p-6">
           <p className="text-slate-700">Add Supabase environment variables to use account and profile features.</p>
         </div>
@@ -93,321 +241,172 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     .maybeSingle();
 
   const profile = profileData as Profile | null;
-  const { count: juniorCount } = profile
-    ? await supabase
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .eq("parent_profile_id", profile.id)
-        .eq("is_junior", true)
-    : { count: 0 };
-
+  let juniorRows: JuniorCardProfile[] = [];
   const profileIds = profile ? [profile.id] : [];
-  let juniorProgressRows: Pick<Profile, "id" | "first_name" | "last_name" | "junior_stage" | "junior_rating" | "junior_rating_confidence" | "participation_score" | "stage_readiness_score">[] = [];
+
   if (profile) {
-    const { data: juniorIds } = await supabase
+    const { data: juniorData, error: juniorError } = await supabase
       .from("profiles")
-      .select("id,first_name,last_name,junior_stage,junior_rating,junior_rating_confidence,participation_score,stage_readiness_score")
+      .select("id,first_name,last_name,junior_stage,junior_rating,junior_rating_confidence,participation_score")
       .eq("parent_profile_id", profile.id)
       .eq("is_junior", true)
       .order("participation_score", { ascending: false });
-    juniorProgressRows = (juniorIds ?? []) as Pick<Profile, "id" | "first_name" | "last_name" | "junior_stage" | "junior_rating" | "junior_rating_confidence" | "participation_score" | "stage_readiness_score">[];
-    profileIds.push(...juniorProgressRows.map((junior) => junior.id));
+
+    if (juniorError) {
+      console.error("CourtSide dashboard juniors load failed", { userId: user.id, error: juniorError });
+    }
+
+    juniorRows = (juniorData ?? []) as JuniorCardProfile[];
+    profileIds.push(...juniorRows.map((junior) => junior.id));
   }
 
-  const { count: currentEntryCount } =
-    profileIds.length > 0
-      ? await supabase.from("event_entries").select("id", { count: "exact", head: true }).in("profile_id", profileIds).neq("entry_status", "cancelled")
-      : { count: 0 };
-  const [{ data: inviteData, error: inviteError }, { data: matchData, error: matchError }] =
-    profileIds.length > 0 ? await Promise.all([supabase.rpc("match_invites_for_user"), supabase.rpc("matches_for_user")]) : [{ data: [], error: null }, { data: [], error: null }];
-
-  const [{ data: ratingData, error: ratingError }, { data: ratingChangeData, error: ratingChangeError }] =
+  const now = new Date().toISOString();
+  const [{ data: inviteData, error: inviteError }, { data: ratingData, error: ratingError }, { data: entryData, error: entryError }, { data: bookingData, error: bookingError }] =
     profileIds.length > 0
       ? await Promise.all([
+          supabase.rpc("match_invites_for_user"),
           supabase.from("ratings").select("*").in("profile_id", profileIds),
-          supabase.from("rating_changes").select("*").in("profile_id", profileIds).order("created_at", { ascending: false }).limit(1)
+          supabase
+            .from("event_entries")
+            .select("id,profile_id,entry_status,events:event_id(title,start_datetime)")
+            .in("profile_id", profileIds)
+            .neq("entry_status", "cancelled"),
+          supabase
+            .from("court_bookings")
+            .select("id,player_profile_id,start_time,courts:court_id(name)")
+            .in("player_profile_id", profileIds)
+            .eq("status", "confirmed")
+            .gte("start_time", now)
+            .order("start_time", { ascending: true })
         ])
-      : [{ data: [], error: null }, { data: [], error: null }];
+      : [
+          { data: [], error: null },
+          { data: [], error: null },
+          { data: [], error: null },
+          { data: [], error: null }
+        ];
 
-  const { data: bookingData, error: bookingError } =
-    profileIds.length > 0
-      ? await supabase
-          .from("court_bookings")
-          .select("id,start_time,end_time,booking_type,status,courts:court_id(name),profiles:player_profile_id(first_name,last_name,is_junior)")
-          .in("player_profile_id", profileIds)
-          .eq("status", "confirmed")
-          .gte("start_time", new Date().toISOString())
-          .order("start_time", { ascending: true })
-          .limit(3)
-      : { data: [], error: null };
-
-  if (bookingError) {
-    console.error("CourtSide dashboard bookings load failed", { userId: user.id, error: bookingError });
-  }
   if (inviteError) {
     console.error("CourtSide dashboard match invites load failed", { userId: user.id, error: inviteError });
-  }
-  if (matchError) {
-    console.error("CourtSide dashboard matches load failed", { userId: user.id, error: matchError });
   }
   if (ratingError) {
     console.error("CourtSide dashboard ratings load failed", { userId: user.id, error: ratingError });
   }
-  if (ratingChangeError) {
-    console.error("CourtSide dashboard rating changes load failed", { userId: user.id, error: ratingChangeError });
+  if (entryError) {
+    console.error("CourtSide dashboard event entries load failed", { userId: user.id, error: entryError });
+  }
+  if (bookingError) {
+    console.error("CourtSide dashboard bookings load failed", { userId: user.id, error: bookingError });
   }
 
-  const upcomingBookings = bookingError ? [] : ((bookingData ?? []) as unknown as BookingRow[]);
+  const activityByProfileId = new Map<string, ActivityCounts>();
+  profileIds.forEach((profileId) => {
+    activityByProfileId.set(profileId, emptyActivity());
+  });
+
+  const addActivity = (profileId: string | null | undefined, key: keyof ActivityCounts) => {
+    if (!profileId || !activityByProfileId.has(profileId)) {
+      return;
+    }
+
+    const current = activityByProfileId.get(profileId) ?? emptyActivity();
+    activityByProfileId.set(profileId, { ...current, [key]: current[key] + 1 });
+  };
+
   const invites = inviteError ? [] : ((inviteData ?? []) as DashboardMatchInvite[]);
-  const matches = matchError ? [] : ((matchData ?? []) as DashboardMatch[]);
+  invites
+    .filter((invite) => invite.status === "pending")
+    .forEach((invite) => {
+      addActivity(invite.inviter_profile_id, "invites");
+      addActivity(invite.opponent_profile_id, "invites");
+    });
+
+  const upcomingEntries = entryError
+    ? []
+    : ((entryData ?? []) as unknown as DashboardEventEntry[]).filter((entry) => entry.entry_status !== "cancelled" && entry.events?.start_datetime && entry.events.start_datetime >= now);
+  upcomingEntries.forEach((entry) => addActivity(entry.profile_id, "events"));
+
+  const upcomingBookings = bookingError ? [] : ((bookingData ?? []) as unknown as BookingRow[]);
+  upcomingBookings.forEach((booking) => addActivity(booking.player_profile_id, "bookings"));
+
   const ratings = ratingError ? [] : ((ratingData ?? []) as Rating[]);
-  const latestRatingChange = ratingChangeError ? null : (((ratingChangeData ?? []) as RatingChange[])[0] ?? null);
-  const pendingReceivedInvites = invites.filter((invite) => invite.status === "pending" && profileIds.includes(invite.opponent_profile_id)).length;
-  const pendingSentInvites = invites.filter((invite) => invite.status === "pending" && profileIds.includes(invite.inviter_profile_id)).length;
-  const resultsWaitingForConfirmation = matches.filter((match) => match.verification_status === "pending_confirmation" && match.submitted_by_user_id !== user.id).length;
-  const disputedResults = matches.filter((match) => match.verification_status === "disputed").length;
-  const verifiedMatchCount = matches.filter((match) => match.verification_status === "verified" || match.verification_status === "admin_verified").length;
-  const actionNeededCount = pendingReceivedInvites + resultsWaitingForConfirmation + disputedResults;
-  const nextBooking = upcomingBookings[0] ?? null;
-  const completion = profileCompletion(profile);
-  const startingRating = provisionalRating(profile?.player_level);
-  const adultRating = profile ? ratings.find((rating) => rating.profile_id === profile.id) : null;
-  const ratingValue = adultRating ? adultRating.rating_value.toFixed(1) : startingRating.value;
-  const ratingBand = adultRating ? `${formatLabel(adultRating.confidence)} confidence` : `${startingRating.band} start`;
-  const ratingProvisional = adultRating?.provisional ?? true;
-  const ratingMatchCount = adultRating?.verified_match_count ?? 0;
-  const latestMovement = latestRatingChange ? `${latestRatingChange.rating_delta > 0 ? "+" : ""}${latestRatingChange.rating_delta.toFixed(2)}` : null;
+  const adultRating = profile ? ratings.find((rating) => rating.profile_id === profile.id) ?? null : null;
+  const memberActivity = profile ? activityByProfileId.get(profile.id) ?? emptyActivity() : emptyActivity();
+  const totalPendingInvites = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.invites, 0);
+  const totalUpcomingEvents = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.events, 0);
+  const totalUpcomingBookings = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.bookings, 0);
 
   return (
-    <PageShell eyebrow="Book. Play. Compete. Progress." title="My PlayR">
+    <PageShell eyebrow="MyPlayR" title="MyPlayR">
       <StatusAlert className="mb-5" message={searchParams?.profile === "saved" ? "Profile saved." : null} tone="success" />
       {!profile ? (
         <StatusAlert
           className="mb-5"
-          message="Start by completing your player profile. Once it is saved, you can book courts, add juniors, and enter events."
+          message="Start by completing your member profile. Once it is saved, you can link juniors, book courts, enter events, and manage match invites."
           tone="info"
         />
       ) : null}
 
-      <section className="mb-6 overflow-hidden rounded-lg bg-court-navy text-white shadow-court">
-        <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+      <p className="mb-6 max-w-2xl text-sm leading-6 text-slate-600">Your players, progress and upcoming tennis activity.</p>
+
+      <section className="mb-6 rounded-lg bg-court-navy px-5 py-4 text-white shadow-court">
+        <div className="grid gap-4 sm:grid-cols-3">
           <div>
-            <p className="text-sm font-black uppercase tracking-wide text-court-lime">Welcome back</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">
-              {profile ? `${profile.first_name}, what are we playing today?` : "Set up your player profile to get started."}
-            </h2>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-blue-50">
-              Book courts, invite opponents, enter events, and build a verified player record from confirmed results.
-            </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="inline-flex w-full justify-center rounded bg-court-teal px-4 py-3 font-bold text-white sm:w-auto" href="/dashboard/book-court">
-                Book a Court
-              </Link>
-              <Link className="inline-flex w-full justify-center rounded border border-white/30 px-4 py-3 font-bold text-white sm:w-auto" href="/dashboard/profile#progress">
-                View progress
-              </Link>
-            </div>
+            <p className="text-xs font-black uppercase tracking-wide text-court-lime">Match Invites</p>
+            <p className="mt-1 text-2xl font-black">{totalPendingInvites}</p>
           </div>
-          <div className="rounded-lg bg-white/10 p-5">
-            <p className="text-sm font-bold uppercase tracking-wide text-blue-100">PlayR Rating</p>
-            <p className="mt-2 text-5xl font-black">{ratingValue}</p>
-            <p className="mt-1 text-sm font-bold text-court-lime">{ratingProvisional ? "Provisional" : "Verified"} / {ratingBand}</p>
-            <p className="mt-3 text-sm leading-6 text-blue-50">
-              {ratingMatchCount} verified match{ratingMatchCount === 1 ? "" : "es"}
-              {latestMovement ? ` / latest movement ${latestMovement}` : " / no movement yet"}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Link className="action-card border-court-teal/40" href="/dashboard/book-court">
-          <p className="section-kicker">Book</p>
-          <h2 className="mt-3 text-2xl font-black text-court-navy">Book a Court</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Reserve a 60-minute slot for yourself or a linked junior.</p>
-          <p className="mt-5 font-bold text-court-blue">See availability</p>
-        </Link>
-        <Link className="action-card" href="/dashboard/play">
-          <p className="text-sm font-black uppercase tracking-wide text-slate-500">Play</p>
-          <h2 className="mt-3 text-2xl font-black text-court-navy">Find Match</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Invite an opponent, attach a court time, and confirm verified results after the match.</p>
-          <p className="mt-5 font-bold text-court-blue">{pendingReceivedInvites ? `${pendingReceivedInvites} invite${pendingReceivedInvites === 1 ? "" : "s"} to answer` : "Send invite"}</p>
-        </Link>
-        <Link className="action-card" href="/dashboard/events">
-          <p className="section-kicker">Compete</p>
-          <h2 className="mt-3 text-2xl font-black text-court-navy">Join Event</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Enter club events and track payment status from your dashboard.</p>
-          <p className="mt-5 font-bold text-court-blue">{currentEntryCount ? `${currentEntryCount} current entries` : "Browse events"}</p>
-        </Link>
-        <Link className="action-card" href="/dashboard/profile#progress">
-          <p className="section-kicker">Progress</p>
-          <h2 className="mt-3 text-2xl font-black text-court-navy">My Progress</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Review your rating, confidence, recent movement, and verified match history.</p>
-          <p className="mt-5 font-bold text-court-blue">View profile</p>
-        </Link>
-      </section>
-
-      <section className="mb-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="surface-card p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-sm font-black uppercase tracking-wide text-court-teal">Next booking</p>
-              <h2 className="mt-2 text-2xl font-black text-court-navy">
-                {nextBooking ? `${nextBooking.courts?.name ?? "Court"} at ${formatDateTime(nextBooking.start_time)}` : "No upcoming court booked"}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                {nextBooking
-                  ? nextBooking.profiles
-                    ? `Booked for ${nextBooking.profiles.first_name} ${nextBooking.profiles.last_name}${nextBooking.profiles.is_junior ? " (junior)" : ""}.`
-                    : "Booking profile unavailable."
-                  : profile
-                    ? "Pick a slot in the next 7 days and get on court."
-                    : "Create your profile first, then book your first session."}
-              </p>
-            </div>
-            <Link className="btn-primary shrink-0" href="/dashboard/book-court">
-              Book a Court
-            </Link>
-          </div>
-          {upcomingBookings.length > 1 ? (
-            <div className="mt-5 divide-y divide-slate-200 rounded border border-slate-200">
-              {upcomingBookings.slice(1).map((booking) => (
-                <div className="flex flex-col gap-1 p-3 text-sm sm:flex-row sm:items-center sm:justify-between" key={booking.id}>
-                  <span className="font-bold text-court-navy">{booking.courts?.name ?? "Court"}</span>
-                  <span className="text-slate-600">{formatDateTime(booking.start_time)}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <Link className="mt-5 inline-flex font-bold text-court-blue" href="/dashboard/my-bookings">
-            View all bookings
-          </Link>
-        </div>
-
-        <div className="surface-card p-5">
-          <p className="section-kicker">Progress snapshot</p>
-          <div className="mt-4 flex items-end justify-between gap-4">
-            <div>
-              <p className="text-4xl font-black text-court-navy">{completion.percent}%</p>
-              <p className="mt-1 font-bold text-court-ink">{completion.label}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-black text-court-navy">{ratingValue}</p>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{ratingProvisional ? "Provisional" : "Verified"} rating</p>
-            </div>
-          </div>
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-court-teal" style={{ width: `${completion.percent}%` }} />
-          </div>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            {completion.text} Ratings only move after verified match results; confidence improves as more results are confirmed.
-          </p>
-          <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded bg-court-mist p-3">
-              <p className="font-black text-court-navy">{juniorCount ?? 0}</p>
-              <p className="text-slate-600">Linked juniors</p>
-            </div>
-            <div className="rounded bg-court-mist p-3">
-              <p className="font-black text-court-navy">{ratingMatchCount}</p>
-              <p className="text-slate-600">Rated matches</p>
-            </div>
-          </div>
-          <p className="mt-4 rounded bg-slate-50 p-3 text-sm text-slate-600">
-            {latestMovement ? `Latest rating movement: ${latestMovement}` : "No rating movement yet. Verified match results will create the first change."}
-          </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="btn-primary" href="/dashboard/profile#progress">
-              View progress
-            </Link>
-            <Link className="btn-secondary" href="/dashboard/profile">
-              {profile ? "Edit profile" : "Complete profile"}
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <section className="surface-card mb-6 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-wide text-court-teal">Match invites / action needed</p>
-            <h2 className="mt-2 text-2xl font-black text-court-navy">{actionNeededCount ? `${actionNeededCount} item${actionNeededCount === 1 ? "" : "s"} need attention` : "You are all caught up"}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Answer incoming invites and confirm submitted results. Confirming a verified match can update PlayR Ratings for both players.
-            </p>
+            <p className="text-xs font-black uppercase tracking-wide text-court-lime">Upcoming Events</p>
+            <p className="mt-1 text-2xl font-black">{totalUpcomingEvents}</p>
           </div>
-          <Link className="inline-flex shrink-0 justify-center rounded bg-court-teal px-4 py-3 text-sm font-bold text-white transition hover:bg-teal-500" href="/dashboard/play">
-            Send Match Invite
-          </Link>
-        </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded bg-court-mist p-4">
-            <p className="text-2xl font-black text-court-navy">{pendingReceivedInvites}</p>
-            <p className="mt-1 text-sm text-slate-600">Pending invites received</p>
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-court-lime">Upcoming Bookings</p>
+            <p className="mt-1 text-2xl font-black">{totalUpcomingBookings}</p>
           </div>
-          <div className="rounded bg-slate-50 p-4">
-            <p className="text-2xl font-black text-court-navy">{pendingSentInvites}</p>
-            <p className="mt-1 text-sm text-slate-600">Sent invites waiting</p>
-          </div>
-          <div className="rounded bg-slate-50 p-4">
-            <p className="text-2xl font-black text-court-navy">{resultsWaitingForConfirmation}</p>
-            <p className="mt-1 text-sm text-slate-600">Results to confirm</p>
-          </div>
-          <div className="rounded bg-slate-50 p-4">
-            <p className="text-2xl font-black text-court-navy">{disputedResults}</p>
-            <p className="mt-1 text-sm text-slate-600">Disputed results</p>
-          </div>
-        </div>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <Link className="btn-secondary" href="/dashboard/play">
-            View Play
-          </Link>
-          <Link className="btn-secondary" href="/dashboard/profile#progress">
-            View Progress
-          </Link>
         </div>
       </section>
 
-      <section className="grid gap-5 md:grid-cols-2">
-        <div className="surface-card p-5">
-          <p className="section-kicker">Achievements</p>
-          <h2 className="mt-2 text-xl font-black text-court-navy">{juniorProgressRows.length ? "Junior pathway active" : "Badges start with participation"}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {juniorProgressRows.length
-              ? "Linked juniors earn progress through events, verified matches, wins, close matches, and ClubR-approved achievements."
-              : "Your first booking, first event entry, match wins, and club milestones will appear here as PlayR progress tracking grows."}
-          </p>
-          {juniorProgressRows.length ? (
-            <div className="mt-4 space-y-3">
-              {juniorProgressRows.slice(0, 3).map((junior) => (
-                <div className="rounded border border-slate-200 bg-slate-50 p-3" key={junior.id}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-black text-court-navy">{junior.first_name} {junior.last_name}</p>
-                      <p className="text-sm text-slate-600">{formatJuniorRating(junior.junior_stage, junior.junior_rating)} / {formatLabel(junior.junior_rating_confidence)} confidence</p>
-                    </div>
-                    <p className="text-right text-sm font-black text-court-teal">{junior.participation_score} pts</p>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                    <div className="h-full rounded-full bg-court-teal" style={{ width: `${junior.stage_readiness_score}%` }} />
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">{junior.stage_readiness_score}% stage readiness</p>
-                </div>
-              ))}
+      <section className="mb-6">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="section-kicker">Family hub</p>
+            <h2 className="mt-2 text-2xl font-black text-court-navy">My PlayR Cards</h2>
+          </div>
+          <Link className="btn-secondary" href="/dashboard/juniors">
+            Manage Juniors
+          </Link>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <MemberCard activity={memberActivity} juniorCount={juniorRows.length} profile={profile} rating={adultRating} />
+
+          {juniorRows.map((junior) => (
+            <JuniorCard activity={activityByProfileId.get(junior.id) ?? emptyActivity()} junior={junior} key={junior.id} />
+          ))}
+
+          {profile && juniorRows.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-5">
+              <p className="text-sm font-black uppercase tracking-wide text-court-teal">Linked juniors</p>
+              <h3 className="mt-2 text-xl font-black text-court-navy">No junior players linked yet</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Add a junior player to show their ball stage, rating, participation score, invites, events, and bookings here.</p>
+              <Link className="btn-primary mt-5" href="/dashboard/juniors">
+                Add Junior Player
+              </Link>
             </div>
           ) : null}
         </div>
-        <div className="surface-card p-5">
-          <p className="section-kicker">Match history</p>
-          <h2 className="mt-2 text-xl font-black text-court-navy">{verifiedMatchCount ? `${verifiedMatchCount} verified match${verifiedMatchCount === 1 ? "" : "es"}` : "No verified matches yet"}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {verifiedMatchCount
-              ? "Verified match history is now available in your profile progress area."
-              : "Match invite results will appear here once both sides confirm them. Event results still live on your results page."}
-          </p>
-          <Link className="mt-4 inline-flex font-bold text-court-blue" href="/dashboard/profile#progress">
-            View progress
-          </Link>
-        </div>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Link className="rounded-lg border border-slate-200 bg-white p-4 font-bold text-court-navy transition hover:border-court-teal hover:bg-court-mist" href="/dashboard/book-court">
+          Book a Court
+        </Link>
+        <Link className="rounded-lg border border-slate-200 bg-white p-4 font-bold text-court-navy transition hover:border-court-teal hover:bg-court-mist" href="/dashboard/play">
+          Send Match Invite
+        </Link>
+        <Link className="rounded-lg border border-slate-200 bg-white p-4 font-bold text-court-navy transition hover:border-court-teal hover:bg-court-mist" href="/dashboard/events">
+          Browse Events
+        </Link>
       </section>
     </PageShell>
   );

@@ -171,7 +171,7 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
           {juniors.length > 0 ? (
             <div className="mt-5 space-y-5">
               {juniors.map((junior) => (
-                <form action={updateJuniorProfile} className="grid gap-4 rounded border border-slate-200 p-4 md:grid-cols-2" key={junior.id}>
+                <form action={updateJuniorProfile} className="grid scroll-mt-24 gap-4 rounded border border-slate-200 p-4 md:grid-cols-2" id={`junior-${junior.id}`} key={junior.id}>
                   <input name="junior_profile_id" type="hidden" value={junior.id} />
                   <div className="md:col-span-2">
                     <p className="font-black text-court-navy">
