@@ -4,7 +4,7 @@ import { createJuniorProfile, updateJuniorProfile } from "@/app/dashboard/junior
 import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
-import { formatLabel } from "@/lib/courtside-format";
+import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { JuniorStage, PlayerLevel, Profile, Sport } from "@/types/courtside";
@@ -180,6 +180,28 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
                     <p className="text-sm text-slate-600">
                       {formatLabel(junior.member_status)} / {formatLabel(junior.primary_sport)} / {junior.junior_stage ? formatLabel(junior.junior_stage) : "Stage not set"}
                     </p>
+                    <div className="mt-3 grid gap-2 rounded bg-court-mist p-3 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xl font-black text-court-navy">{formatJuniorRating(junior.junior_stage, junior.junior_rating)}</p>
+                        <p className="text-xs font-bold uppercase tracking-wide text-court-teal">
+                          {formatLabel(junior.junior_rating_confidence)} confidence{junior.rating_locked ? " / Locked" : ""}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-black text-court-navy">{junior.participation_score}</p>
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Participation score</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-black text-court-navy">{junior.stage_readiness_score}%</p>
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Stage readiness</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-4">
+                      <p className="rounded bg-slate-50 p-2"><span className="font-black text-court-navy">{junior.matches_played}</span> matches</p>
+                      <p className="rounded bg-slate-50 p-2"><span className="font-black text-court-navy">{junior.wins}</span> wins</p>
+                      <p className="rounded bg-slate-50 p-2"><span className="font-black text-court-navy">{junior.losses}</span> losses</p>
+                      <p className="rounded bg-slate-50 p-2"><span className="font-black text-court-navy">{junior.events_played}</span> events</p>
+                    </div>
                   </div>
                   <JuniorFields junior={junior} />
                   <SubmitButton className="rounded bg-court-blue px-4 py-3 font-bold text-white md:col-span-2" pendingText="Saving junior...">

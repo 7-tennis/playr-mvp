@@ -35,10 +35,10 @@ function playRedirect(params: Record<string, string>): never {
 }
 
 async function applyRatingForVerifiedMatch(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, matchId: string, userId: string) {
-  const { error } = await supabase.rpc("apply_verified_match_rating", { target_match_id: matchId });
+  const { error } = await supabase.rpc("apply_verified_match_progress", { target_match_id: matchId });
 
   if (error) {
-    console.error("CourtSide rating calculation failed after player verification", { userId, matchId, error });
+    console.error("PlayR match progress calculation failed after player verification", { userId, matchId, error });
   }
 }
 

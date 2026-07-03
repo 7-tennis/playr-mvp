@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAdminContext } from "@/lib/admin-auth";
-import type { CourtBookingType, CourtStatus, EntryStatus, EventStatus, MatchVerificationStatus, MemberStatus, PaymentStatus, Sport } from "@/types/courtside";
+import type { CourtBookingType, CourtStatus, EntryStatus, EventStatus, JuniorStage, MatchVerificationStatus, MemberStatus, PaymentStatus, Sport } from "@/types/courtside";
 
 const eventStatuses: EventStatus[] = ["draft", "published", "cancelled", "completed"];
 const sports: Sport[] = ["tennis", "pickleball", "futsal", "multi_sport"];
 const courtStatuses: CourtStatus[] = ["active", "inactive"];
 const courtBookingTypes: CourtBookingType[] = ["player_booking", "lesson", "maintenance", "club_programme", "competition", "americano"];
 const matchVerificationStatuses: MatchVerificationStatus[] = ["pending_confirmation", "verified", "disputed", "admin_verified", "cancelled"];
+const juniorStages: JuniorStage[] = ["red_ball", "orange_ball", "green_ball", "yellow_ball", "not_sure"];
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -74,10 +75,10 @@ async function requireAdminSupabase() {
 }
 
 async function applyRatingForVerifiedMatch(supabase: Awaited<ReturnType<typeof requireAdminSupabase>>["supabase"], matchId: string, userId: string) {
-  const { error } = await supabase.rpc("apply_verified_match_rating", { target_match_id: matchId });
+  const { error } = await supabase.rpc("apply_verified_match_progress", { target_match_id: matchId });
 
   if (error) {
-    console.error("CourtSide rating calculation failed after admin verification", { userId, matchId, error });
+    console.error("PlayR match progress calculation failed after admin verification", { userId, matchId, error });
   }
 }
 
@@ -91,6 +92,101 @@ export async function updateProfileMemberStatus(formData: FormData) {
   }
 
   revalidatePath("/admin/profiles");
+}
+
+export async function updateJuniorRatingControls(formData: FormData) {
+  const { supabase } = await requireAdminSupabase();
+  const profileId = text(formData, "profileId");
+  const stage = requireStatus<JuniorStage>(text(formData, "juniorStage"), juniorStages, "red_ball");
+  const rating = numberValue(formData, "juniorRating", 2.5);
+  const stageReadiness = numberValue(formData, "stageReadinessScore", 0);
+  const ratingLocked = text(formData, "ratingLocked") === "on";
+  const ratingNotes = nullableText(formData, "ratingNotes");
+
+  if (!profileId) {
+    redirect("/admin/profiles?admin_message=invalid_profile");
+  }
+
+  const { error } = await supabase.rpc("admin_adjust_junior_rating", {
+    target_player_id: profileId,
+    target_stage: stage,
+    target_rating: rating,
+    target_locked: ratingLocked,
+    target_stage_readiness: stageReadiness,
+    target_notes: ratingNotes,
+    target_reason: "manual_adjustment"
+  });
+
+  if (error) {
+    console.error("PlayR junior rating update failed", { profileId, error });
+    redirect("/admin/profiles?admin_message=junior_rating_failed");
+  }
+
+  revalidatePath("/admin/profiles");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/juniors");
+  redirect("/admin/profiles?admin_message=junior_rating_updated&profile_type=junior");
+}
+
+export async function transitionJuniorStage(formData: FormData) {
+  const { supabase } = await requireAdminSupabase();
+  const profileId = text(formData, "profileId");
+  const stage = requireStatus<JuniorStage>(text(formData, "targetStage"), juniorStages, "orange_ball");
+  const notes = nullableText(formData, "transitionNotes");
+
+  if (!profileId) {
+    redirect("/admin/profiles?admin_message=invalid_profile");
+  }
+
+  const { error } = await supabase.rpc("admin_transition_junior_stage", {
+    target_player_id: profileId,
+    target_stage: stage,
+    target_notes: notes
+  });
+
+  if (error) {
+    console.error("PlayR junior stage transition failed", { profileId, stage, error });
+    redirect("/admin/profiles?admin_message=junior_transition_failed");
+  }
+
+  revalidatePath("/admin/profiles");
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/juniors");
+  redirect("/admin/profiles?admin_message=junior_stage_updated&profile_type=junior");
+}
+
+export async function awardJuniorAchievement(formData: FormData) {
+  const { supabase } = await requireAdminSupabase();
+  const profileId = text(formData, "profileId");
+  const badgeKey = text(formData, "badgeKey") || "coach_achievement";
+  const badgeName = text(formData, "badgeName") || "Coach Achievement";
+  const notes = nullableText(formData, "achievementNotes");
+
+  if (!profileId) {
+    redirect("/admin/profiles?admin_message=invalid_profile");
+  }
+
+  const { error } = await supabase.rpc("admin_award_junior_badge", {
+    target_player_id: profileId,
+    target_badge_key: badgeKey,
+    target_badge_name: badgeName,
+    target_category: "coach",
+    target_stage: "all",
+    target_badge_type: "admin_approved",
+    target_notes: notes
+  });
+
+  if (error) {
+    console.error("PlayR junior achievement award failed", { profileId, badgeKey, error });
+    redirect("/admin/profiles?admin_message=junior_badge_failed");
+  }
+
+  revalidatePath("/admin/profiles");
+  revalidatePath("/dashboard/profile");
+  revalidatePath("/dashboard/juniors");
+  redirect("/admin/profiles?admin_message=junior_badge_awarded&profile_type=junior");
 }
 
 function eventPayload(formData: FormData) {

@@ -31,3 +31,26 @@ export function formatLabel(value: string | null) {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
+
+export function formatJuniorStage(value: string | null | undefined) {
+  switch (value) {
+    case "red_ball":
+    case "red":
+      return "Red";
+    case "orange_ball":
+    case "orange":
+      return "Orange";
+    case "green_ball":
+    case "green":
+      return "Green";
+    case "yellow_ball":
+    case "yellow":
+      return "Yellow";
+    default:
+      return "Red";
+  }
+}
+
+export function formatJuniorRating(stage: string | null | undefined, rating: number | null | undefined) {
+  return `${formatJuniorStage(stage)} ${(rating ?? 2.5).toFixed(1)}`;
+}

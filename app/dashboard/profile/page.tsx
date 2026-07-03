@@ -4,10 +4,10 @@ import { saveOwnProfile } from "@/app/dashboard/profile/actions";
 import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
-import { formatDate, formatLabel } from "@/lib/courtside-format";
+import { formatDate, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import type { MatchVerificationStatus, PlayerLevel, Profile, Rating, RatingChange, Sport } from "@/types/courtside";
+import type { JuniorAchievement, JuniorRatingHistory, MatchVerificationStatus, PlayerLevel, Profile, Rating, RatingChange, Sport } from "@/types/courtside";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +39,32 @@ type RatingRow = Rating & {
 
 type RatingChangeRow = RatingChange & {
   profiles: Pick<Profile, "first_name" | "last_name" | "is_junior"> | null;
+};
+
+type JuniorProgressProfile = Pick<
+  Profile,
+  | "id"
+  | "first_name"
+  | "last_name"
+  | "date_of_birth"
+  | "primary_sport"
+  | "player_level"
+  | "junior_stage"
+  | "junior_rating"
+  | "junior_rating_confidence"
+  | "participation_score"
+  | "matches_played"
+  | "wins"
+  | "losses"
+  | "events_played"
+  | "close_matches"
+  | "stage_readiness_score"
+  | "rating_locked"
+  | "rating_notes"
+  | "member_status"
+> & {
+  junior_achievements: Pick<JuniorAchievement, "id" | "badge_name" | "category" | "earned_at">[] | null;
+  junior_rating_history: Pick<JuniorRatingHistory, "id" | "previous_rating" | "new_rating" | "change_amount" | "reason" | "created_at">[] | null;
 };
 
 function provisionalRating(level: PlayerLevel | null | undefined) {
@@ -93,13 +119,13 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
   const { data: juniorData } = profile
     ? await supabase
         .from("profiles")
-        .select("id,first_name,last_name,date_of_birth,primary_sport,player_level,junior_stage,member_status")
+        .select("id,first_name,last_name,date_of_birth,primary_sport,player_level,junior_stage,junior_rating,junior_rating_confidence,participation_score,matches_played,wins,losses,events_played,close_matches,stage_readiness_score,rating_locked,rating_notes,member_status,junior_achievements(id,badge_name,category,earned_at),junior_rating_history(id,previous_rating,new_rating,change_amount,reason,created_at)")
         .eq("parent_profile_id", profile.id)
         .eq("is_junior", true)
         .order("first_name", { ascending: true })
     : { data: [] };
 
-  const juniors = (juniorData ?? []) as Pick<Profile, "id" | "first_name" | "last_name" | "date_of_birth" | "primary_sport" | "player_level" | "junior_stage" | "member_status">[];
+  const juniors = (juniorData ?? []) as unknown as JuniorProgressProfile[];
   const userMetadata = user.user_metadata as { phone?: string | null; marketing_consent?: boolean | null };
   const defaultPhone = profile?.phone ?? userMetadata.phone ?? "";
   const defaultMarketingConsent = profile?.marketing_consent ?? Boolean(userMetadata.marketing_consent);
@@ -202,8 +228,8 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
                       <span className="font-bold text-slate-700">
                         {row.profiles ? playerName(row.profiles.first_name, row.profiles.last_name, row.profiles.is_junior) : "Linked junior"}
                       </span>
-                      <span className="font-black text-court-navy">
-                        {row.rating_value.toFixed(1)} / {formatLabel(row.confidence)}
+                    <span className="font-black text-court-navy">
+                        {row.profiles?.is_junior ? "Junior pathway" : `${row.rating_value.toFixed(1)} / ${formatLabel(row.confidence)}`}
                       </span>
                     </div>
                   ))}
@@ -358,10 +384,10 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
             Save your adult profile first. Then you can add junior profiles linked to your account.
           </div>
         ) : juniors.length > 0 ? (
-          <div className="mt-5 grid gap-3">
+          <div className="mt-5 grid gap-4">
             {juniors.map((junior) => (
               <div className="rounded border border-slate-200 bg-slate-50 p-4" key={junior.id}>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="font-black text-court-navy">
                       {junior.first_name} {junior.last_name}
@@ -369,8 +395,70 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
                     <p className="mt-1 text-sm text-slate-600">
                       {formatLabel(junior.primary_sport)} / {junior.junior_stage ? formatLabel(junior.junior_stage) : "Stage not set"} / {formatLabel(junior.player_level)}
                     </p>
+                    {junior.rating_notes ? <p className="mt-2 text-sm leading-6 text-slate-600">{junior.rating_notes}</p> : null}
                   </div>
-                  <span className="rounded bg-court-mist px-3 py-1 text-xs font-black uppercase tracking-wide text-court-teal">{formatLabel(junior.member_status)}</span>
+                  <div className="text-left sm:text-right">
+                    <p className="text-2xl font-black text-court-navy">{formatJuniorRating(junior.junior_stage, junior.junior_rating)}</p>
+                    <p className="text-xs font-black uppercase tracking-wide text-court-teal">
+                      {formatLabel(junior.junior_rating_confidence)} confidence{junior.rating_locked ? " / Locked" : ""}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded bg-white p-3">
+                    <p className="text-xl font-black text-court-navy">{junior.participation_score}</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Participation</p>
+                  </div>
+                  <div className="rounded bg-white p-3">
+                    <p className="text-xl font-black text-court-navy">{junior.matches_played}</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Matches</p>
+                  </div>
+                  <div className="rounded bg-white p-3">
+                    <p className="text-xl font-black text-court-navy">{junior.wins}-{junior.losses}</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Wins-losses</p>
+                  </div>
+                  <div className="rounded bg-white p-3">
+                    <p className="text-xl font-black text-court-navy">{junior.events_played}</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Events</p>
+                  </div>
+                  <div className="rounded bg-white p-3">
+                    <p className="text-xl font-black text-court-navy">{junior.close_matches}</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Close matches</p>
+                  </div>
+                  <div className="rounded bg-white p-3">
+                    <p className="text-xl font-black text-court-navy">{junior.stage_readiness_score}%</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Stage readiness</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="rounded bg-white p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Badges</p>
+                    {junior.junior_achievements?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {junior.junior_achievements.slice(0, 6).map((badge) => (
+                          <span className="rounded-full bg-court-mist px-3 py-1 text-xs font-bold text-court-navy" key={badge.id}>
+                            {badge.badge_name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-600">Badges appear after events, verified matches, wins, and coach-approved achievements.</p>
+                    )}
+                  </div>
+                  <div className="rounded bg-white p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent rating history</p>
+                    {junior.junior_rating_history?.length ? (
+                      <div className="mt-2 space-y-2">
+                        {junior.junior_rating_history.slice(0, 3).map((history) => (
+                          <p className="text-sm text-slate-700" key={history.id}>
+                            {formatLabel(history.reason)}: {history.previous_rating?.toFixed(1) ?? "-"} to {history.new_rating?.toFixed(1) ?? "-"} ({history.change_amount > 0 ? "+" : ""}{history.change_amount.toFixed(2)})
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-600">Rating history starts after a verified junior result or ClubR adjustment.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

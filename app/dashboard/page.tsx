@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
-import { formatDateTime, formatLabel } from "@/lib/courtside-format";
+import { formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { Court, CourtBooking, MatchInviteStatus, MatchInviteType, MatchVerificationStatus, PlayerLevel, Profile, Rating, RatingChange } from "@/types/courtside";
@@ -102,9 +102,16 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     : { count: 0 };
 
   const profileIds = profile ? [profile.id] : [];
+  let juniorProgressRows: Pick<Profile, "id" | "first_name" | "last_name" | "junior_stage" | "junior_rating" | "junior_rating_confidence" | "participation_score" | "stage_readiness_score">[] = [];
   if (profile) {
-    const { data: juniorIds } = await supabase.from("profiles").select("id").eq("parent_profile_id", profile.id).eq("is_junior", true);
-    profileIds.push(...((juniorIds ?? []) as Pick<Profile, "id">[]).map((junior) => junior.id));
+    const { data: juniorIds } = await supabase
+      .from("profiles")
+      .select("id,first_name,last_name,junior_stage,junior_rating,junior_rating_confidence,participation_score,stage_readiness_score")
+      .eq("parent_profile_id", profile.id)
+      .eq("is_junior", true)
+      .order("participation_score", { ascending: false });
+    juniorProgressRows = (juniorIds ?? []) as Pick<Profile, "id" | "first_name" | "last_name" | "junior_stage" | "junior_rating" | "junior_rating_confidence" | "participation_score" | "stage_readiness_score">[];
+    profileIds.push(...juniorProgressRows.map((junior) => junior.id));
   }
 
   const { count: currentEntryCount } =
@@ -363,10 +370,31 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
       <section className="grid gap-5 md:grid-cols-2">
         <div className="surface-card p-5">
           <p className="section-kicker">Achievements</p>
-          <h2 className="mt-2 text-xl font-black text-court-navy">Badges coming soon</h2>
+          <h2 className="mt-2 text-xl font-black text-court-navy">{juniorProgressRows.length ? "Junior pathway active" : "Badges start with participation"}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Your first booking, first event entry, match wins, and club milestones will appear here as PlayR progress tracking grows.
+            {juniorProgressRows.length
+              ? "Linked juniors earn progress through events, verified matches, wins, close matches, and ClubR-approved achievements."
+              : "Your first booking, first event entry, match wins, and club milestones will appear here as PlayR progress tracking grows."}
           </p>
+          {juniorProgressRows.length ? (
+            <div className="mt-4 space-y-3">
+              {juniorProgressRows.slice(0, 3).map((junior) => (
+                <div className="rounded border border-slate-200 bg-slate-50 p-3" key={junior.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black text-court-navy">{junior.first_name} {junior.last_name}</p>
+                      <p className="text-sm text-slate-600">{formatJuniorRating(junior.junior_stage, junior.junior_rating)} / {formatLabel(junior.junior_rating_confidence)} confidence</p>
+                    </div>
+                    <p className="text-right text-sm font-black text-court-teal">{junior.participation_score} pts</p>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full rounded-full bg-court-teal" style={{ width: `${junior.stage_readiness_score}%` }} />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{junior.stage_readiness_score}% stage readiness</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="surface-card p-5">
           <p className="section-kicker">Match history</p>

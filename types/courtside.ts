@@ -1,6 +1,10 @@
 export type MemberStatus = "member" | "non_member" | "pending" | "inactive";
 export type PlayerLevel = "beginner" | "social" | "intermediate" | "club_competitive" | "advanced" | "unknown";
 export type JuniorStage = "red_ball" | "orange_ball" | "green_ball" | "yellow_ball" | "not_sure";
+export type JuniorRatingConfidence = "new" | "building" | "active" | "established" | "needs_update";
+export type JuniorRatingHistoryReason = "event_result" | "manual_adjustment" | "stage_transition" | "admin_correction";
+export type JuniorAchievementCategory = "participation" | "match" | "rating" | "coach" | "stage";
+export type JuniorAchievementType = "automatic" | "coach_approved" | "admin_approved";
 export type Sport = "tennis" | "pickleball" | "futsal" | "multi_sport";
 export type EventStatus = "draft" | "published" | "cancelled" | "completed";
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "refunded" | "cancelled";
@@ -25,6 +29,18 @@ export interface Profile {
   is_junior: boolean;
   parent_profile_id: string | null;
   junior_stage: JuniorStage | null;
+  junior_rating: number;
+  junior_rating_confidence: JuniorRatingConfidence;
+  participation_score: number;
+  matches_played: number;
+  wins: number;
+  losses: number;
+  events_played: number;
+  close_matches: number;
+  stage_readiness_score: number;
+  last_rating_update: string | null;
+  rating_locked: boolean;
+  rating_notes: string | null;
   member_status: MemberStatus;
   player_level: PlayerLevel;
   primary_sport: Sport;
@@ -183,4 +199,35 @@ export interface RatingChange {
   rating_delta: number;
   reason: string;
   created_at: string;
+}
+
+export interface JuniorRatingHistory {
+  id: string;
+  player_id: string;
+  previous_stage: string | null;
+  previous_rating: number | null;
+  new_stage: string | null;
+  new_rating: number | null;
+  change_amount: number;
+  reason: JuniorRatingHistoryReason;
+  event_id: string | null;
+  match_id: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface JuniorAchievement {
+  id: string;
+  player_id: string;
+  badge_key: string;
+  badge_name: string;
+  category: JuniorAchievementCategory;
+  stage: string;
+  badge_type: JuniorAchievementType;
+  earned_at: string;
+  approved_by: string | null;
+  related_event_id: string | null;
+  related_match_id: string | null;
+  notes: string | null;
 }
