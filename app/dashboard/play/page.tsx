@@ -4,7 +4,7 @@ import { cancelMatchInvite, createMatchInvite, respondToMatchInvite, respondToMa
 import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
-import { formatDate, formatDateTime, formatLabel } from "@/lib/courtside-format";
+import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type {
@@ -16,12 +16,28 @@ import type {
   MatchVerificationStatus,
   PlayerLevel,
   Profile,
+  Rating,
   Sport
 } from "@/types/courtside";
 
 export const dynamic = "force-dynamic";
 
-type ProfileOption = Pick<Profile, "id" | "first_name" | "last_name" | "is_junior" | "primary_sport" | "player_level" | "junior_stage">;
+type ProfileOption = Pick<
+  Profile,
+  | "id"
+  | "first_name"
+  | "last_name"
+  | "is_junior"
+  | "primary_sport"
+  | "player_level"
+  | "junior_stage"
+  | "junior_rating"
+  | "junior_rating_confidence"
+  | "participation_score"
+  | "matches_played"
+  | "wins"
+  | "losses"
+>;
 
 type MatchCandidate = {
   id: string;
@@ -39,6 +55,8 @@ type BookingOption = Pick<CourtBooking, "id" | "start_time" | "end_time" | "play
   courts: Pick<Court, "name"> | null;
   profiles: Pick<Profile, "first_name" | "last_name" | "is_junior"> | null;
 };
+
+type CandidateProfileDetail = Pick<Profile, "id" | "junior_rating" | "junior_rating_confidence" | "participation_score" | "matches_played" | "wins" | "losses">;
 
 type MatchInviteDetail = {
   id: string;
@@ -90,6 +108,7 @@ type DashboardPlayPageProps = {
     q?: string;
     date?: string;
     court?: string;
+    player?: string;
     invite?: string;
     result?: string;
     error?: string;
@@ -171,6 +190,314 @@ function errorMessage(value?: string) {
 
 function playerName(firstName: string, lastName: string, isJunior: boolean) {
   return `${firstName} ${lastName}${isJunior ? " (junior)" : ""}`;
+}
+
+function countLabel(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function playerInitials(firstName: string, lastName: string) {
+  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+}
+
+function juniorStageLabel(stage: JuniorStage | string | null | undefined) {
+  switch (stage) {
+    case "red_ball":
+      return "Red Ball";
+    case "orange_ball":
+      return "Orange Ball";
+    case "green_ball":
+      return "Green Ball";
+    case "yellow_ball":
+      return "Yellow Ball";
+    case "not_sure":
+      return "Ball stage pending";
+    default:
+      return "Junior";
+  }
+}
+
+function playerLevelRating(level: PlayerLevel | null | undefined) {
+  switch (level) {
+    case "advanced":
+      return 8;
+    case "club_competitive":
+      return 6.5;
+    case "intermediate":
+      return 5;
+    case "social":
+      return 3.5;
+    case "beginner":
+      return 2;
+    default:
+      return 3.5;
+  }
+}
+
+function profileRatingValue(profile: ProfileOption, ratingsByProfileId: Map<string, Rating>) {
+  if (profile.is_junior) {
+    return profile.junior_rating;
+  }
+
+  return ratingsByProfileId.get(profile.id)?.rating_value ?? playerLevelRating(profile.player_level);
+}
+
+function profileRatingLabel(profile: ProfileOption, ratingsByProfileId: Map<string, Rating>) {
+  if (profile.is_junior) {
+    return formatJuniorRating(profile.junior_stage, profile.junior_rating);
+  }
+
+  const rating = ratingsByProfileId.get(profile.id);
+  return rating ? rating.rating_value.toFixed(1) : `${playerLevelRating(profile.player_level).toFixed(1)} est.`;
+}
+
+function candidateRatingValue(candidate: MatchCandidate, detailsByProfileId: Map<string, CandidateProfileDetail>, ratingsByProfileId: Map<string, Rating>) {
+  if (candidate.is_junior) {
+    return detailsByProfileId.get(candidate.id)?.junior_rating ?? null;
+  }
+
+  return ratingsByProfileId.get(candidate.id)?.rating_value ?? playerLevelRating(candidate.player_level);
+}
+
+function candidateRatingLabel(candidate: MatchCandidate, detailsByProfileId: Map<string, CandidateProfileDetail>, ratingsByProfileId: Map<string, Rating>) {
+  if (candidate.is_junior) {
+    const detail = detailsByProfileId.get(candidate.id);
+    return detail ? formatJuniorRating(candidate.junior_stage, detail.junior_rating) : `${juniorStageLabel(candidate.junior_stage)} rating pending`;
+  }
+
+  const rating = ratingsByProfileId.get(candidate.id);
+  return rating ? rating.rating_value.toFixed(1) : `${playerLevelRating(candidate.player_level).toFixed(1)} est.`;
+}
+
+function possibleUnlocks(profile: ProfileOption, stronger = false) {
+  if (!profile.is_junior) {
+    return stronger ? ["Upset Win", "Rating Climber", "Verified Result"] : ["Verified Result", "Match Practice"];
+  }
+
+  const unlocks: string[] = [];
+  if (profile.matches_played === 0) {
+    unlocks.push("First Match");
+  }
+  if (profile.wins === 0) {
+    unlocks.push("First Win");
+  }
+  if (profile.matches_played === 4) {
+    unlocks.push("5 Matches");
+  }
+  if (profile.matches_played === 9) {
+    unlocks.push("10 Matches");
+  }
+  unlocks.push(stronger ? "Upset Win" : "Close Match Player");
+  if (stronger) {
+    unlocks.push("Rating Climber");
+  }
+  return unlocks.slice(0, 3);
+}
+
+function challengeStyle(type: "close" | "stronger") {
+  return type === "stronger"
+    ? {
+        label: "Stronger Challenge",
+        icon: "🔵",
+        description: "Test yourself against a stronger player.",
+        badge: "bg-court-navy text-white",
+        tint: "bg-court-navy/5",
+        border: "border-court-navy/20"
+      }
+    : {
+        label: "Close Match",
+        icon: "🟢",
+        description: "A balanced challenge near your level.",
+        badge: "bg-emerald-50 text-emerald-700",
+        tint: "bg-emerald-50/70",
+        border: "border-emerald-200"
+      };
+}
+
+function actionTone(tone: "teal" | "navy" | "green" | "blue") {
+  switch (tone) {
+    case "navy":
+      return { icon: "bg-court-navy text-white", action: "bg-court-navy text-white", meta: "bg-court-navy/10 text-court-navy" };
+    case "green":
+      return { icon: "bg-emerald-50 text-emerald-700", action: "bg-emerald-600 text-white", meta: "bg-emerald-50 text-emerald-700" };
+    case "blue":
+      return { icon: "bg-sky-50 text-court-blue", action: "bg-court-blue text-white", meta: "bg-sky-50 text-court-blue" };
+    default:
+      return { icon: "bg-court-mist text-court-teal", action: "bg-court-teal text-white", meta: "bg-court-mist text-court-teal" };
+  }
+}
+
+function ActionCard({
+  description,
+  href,
+  icon,
+  title,
+  action,
+  meta,
+  tone = "teal"
+}: {
+  description: string;
+  href: string;
+  icon: string;
+  title: string;
+  action: string;
+  meta?: string;
+  tone?: "teal" | "navy" | "green" | "blue";
+}) {
+  const styles = actionTone(tone);
+
+  return (
+    <Link className="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-court-teal hover:shadow-court" href={href}>
+      <div className="flex items-start gap-3">
+        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded text-xl ${styles.icon}`} aria-hidden="true">
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h2 className="text-lg font-black text-court-navy">{title}</h2>
+            {meta ? <span className={`rounded px-2 py-1 text-xs font-black uppercase tracking-wide ${styles.meta}`}>{meta}</span> : null}
+          </div>
+          <p className="mt-1 text-sm leading-5 text-slate-600">{description}</p>
+          <p className={`mt-3 inline-flex rounded px-3 py-2 text-sm font-bold transition group-hover:shadow-sm ${styles.action}`}>{action}</p>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function ImpactChips({ type }: { type: "close" | "stronger" }) {
+  const win = type === "stronger" ? "+0.25" : "+0.15";
+  const loss = type === "stronger" ? "-0.05" : "-0.10";
+
+  return (
+    <div className="flex flex-wrap gap-2 text-xs">
+      <span className="rounded bg-emerald-50 px-2.5 py-1 font-bold text-emerald-700">⭐ Win {win}</span>
+      <span className="rounded bg-rose-50 px-2.5 py-1 font-bold text-rose-700">↘ Loss {loss}</span>
+    </div>
+  );
+}
+
+function SuggestionCard({
+  candidate,
+  detailsByProfileId,
+  ratingsByProfileId,
+  selectedProfile,
+  type
+}: {
+  candidate: MatchCandidate;
+  detailsByProfileId: Map<string, CandidateProfileDetail>;
+  ratingsByProfileId: Map<string, Rating>;
+  selectedProfile: ProfileOption;
+  type: "close" | "stronger";
+}) {
+  const unlocks = possibleUnlocks(selectedProfile, type === "stronger");
+  const detail = detailsByProfileId.get(candidate.id);
+  const rating = ratingsByProfileId.get(candidate.id);
+  const confidence = candidate.is_junior ? detail?.junior_rating_confidence : rating?.confidence;
+  const matchCount = candidate.is_junior ? detail?.matches_played : rating?.verified_match_count;
+  const challenge = challengeStyle(type);
+  const playerType = candidate.is_junior ? "Junior" : "Adult";
+  const ratingContext = candidate.is_junior ? `${juniorStageLabel(candidate.junior_stage)} · ${candidateRatingLabel(candidate, detailsByProfileId, ratingsByProfileId)}` : `Adult · ${candidateRatingLabel(candidate, detailsByProfileId, ratingsByProfileId)}`;
+
+  return (
+    <article className={`overflow-hidden rounded-lg border bg-white shadow-sm ${challenge.border}`}>
+      <div className={`h-1.5 ${type === "stronger" ? "bg-court-navy" : "bg-court-teal"}`} />
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded bg-court-navy text-sm font-black text-white">
+            {playerInitials(candidate.first_name, candidate.last_name)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="truncate font-black text-court-navy">
+                  {candidate.first_name} {candidate.last_name}
+                </h3>
+                <p className="mt-1 text-sm font-semibold text-slate-600">{ratingContext}</p>
+              </div>
+              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-slate-600">{playerType}</span>
+            </div>
+            <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">{candidate.is_junior ? juniorStageLabel(candidate.junior_stage) : formatLabel(candidate.player_level)}</p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-court-navy">
+          {confidence ? <span className="rounded bg-court-mist px-2 py-1">🛡️ {formatLabel(confidence)}</span> : null}
+          {typeof matchCount === "number" ? <span className="rounded bg-slate-100 px-2 py-1">🎾 {countLabel(matchCount, "match", "matches")}</span> : null}
+        </div>
+        <div className={`mt-4 rounded border p-3 ${challenge.tint} ${challenge.border}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded px-2.5 py-1 text-xs font-black uppercase tracking-wide ${challenge.badge}`}>
+              {challenge.icon} {challenge.label}
+            </span>
+            <span className="text-xs font-semibold text-slate-600">{challenge.description}</span>
+          </div>
+          <div className="mt-3 grid gap-3">
+            <div>
+              <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Estimated rating</p>
+              <ImpactChips type={type} />
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs font-bold">
+              <span className="rounded bg-white px-2.5 py-1 text-court-navy shadow-sm">⚡ Participation +15</span>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Possible unlocks</p>
+              {unlocks.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {unlocks.map((unlock) => (
+                    <span className="rounded bg-white px-2.5 py-1 text-xs font-bold text-court-navy shadow-sm" key={unlock}>
+                      🏅 {unlock}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs font-semibold text-slate-600">Keep playing to unlock badges.</p>
+              )}
+            </div>
+          </div>
+        </div>
+        <form action={createMatchInvite} className="mt-4">
+          <input name="inviter_profile_id" type="hidden" value={selectedProfile.id} />
+          <input name="opponent_profile_id" type="hidden" value={candidate.id} />
+          <input name="booking_mode" type="hidden" value="existing" />
+          <input name="match_type" type="hidden" value="verified" />
+          <input name="message" type="hidden" value={type === "stronger" ? "Challenge up from PlayR." : "Challenge from PlayR."} />
+          <SubmitButton className="w-full rounded bg-court-teal px-3 py-2 text-sm font-bold text-white" pendingText="Sending...">
+            {type === "stronger" ? "Challenge Up" : "Send Challenge"}
+          </SubmitButton>
+        </form>
+      </div>
+    </article>
+  );
+}
+
+function UpcomingMatchCard({ invite, ownProfileIds }: { invite: MatchInviteDetail; ownProfileIds: string[] }) {
+  const sent = ownProfileIds.includes(invite.inviter_profile_id);
+  const opponentName = sent
+    ? playerName(invite.opponent_first_name, invite.opponent_last_name, invite.opponent_is_junior)
+    : playerName(invite.inviter_first_name, invite.inviter_last_name, invite.inviter_is_junior);
+  const actionHref = invite.status === "accepted" ? "#submit-result" : sent ? "#sent-invites" : "#received-invites";
+  const actionText = invite.status === "accepted" ? "Submit Result" : sent ? "View Sent" : "Respond";
+
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded bg-court-mist px-2.5 py-1 text-xs font-black uppercase tracking-wide text-court-teal">📩 {formatLabel(invite.status)}</span>
+            <span className="rounded bg-slate-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-slate-600">🎾 {formatLabel(invite.match_type)}</span>
+          </div>
+          <h3 className="mt-1 font-black text-court-navy">vs {opponentName}</h3>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
+            <span className="rounded bg-slate-50 px-2.5 py-1">📅 {invite.booking_start_time ? formatDateTime(invite.booking_start_time) : "Time TBC"}</span>
+            <span className="rounded bg-slate-50 px-2.5 py-1">🏟️ {invite.booking_court_name ?? "Court TBC"}</span>
+          </div>
+        </div>
+        <Link className="inline-flex shrink-0 justify-center rounded bg-court-teal px-3 py-2 text-sm font-bold text-white" href={actionHref}>
+          {actionText}
+        </Link>
+      </div>
+    </article>
+  );
 }
 
 function zaDateInput(date = new Date()) {
@@ -369,7 +696,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
 
   const { data: adultProfileData } = await supabase
     .from("profiles")
-    .select("id,first_name,last_name,is_junior,primary_sport,player_level,junior_stage")
+    .select("id,first_name,last_name,is_junior,primary_sport,player_level,junior_stage,junior_rating,junior_rating_confidence,participation_score,matches_played,wins,losses")
     .eq("user_id", user.id)
     .eq("is_junior", false)
     .maybeSingle();
@@ -391,13 +718,14 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
 
   const { data: juniorData } = await supabase
     .from("profiles")
-    .select("id,first_name,last_name,is_junior,primary_sport,player_level,junior_stage")
+    .select("id,first_name,last_name,is_junior,primary_sport,player_level,junior_stage,junior_rating,junior_rating_confidence,participation_score,matches_played,wins,losses")
     .eq("parent_profile_id", adultProfile.id)
     .eq("is_junior", true)
     .order("first_name", { ascending: true });
 
   const ownProfiles = [adultProfile, ...((juniorData ?? []) as ProfileOption[])];
   const ownProfileIds = ownProfiles.map((profile) => profile.id);
+  const selectedProfile = ownProfiles.find((profile) => profile.id === searchParams?.player) ?? ownProfiles[0];
   const search = searchParams?.q?.trim() ?? "";
   const selectedDate = clampDate(searchParams?.date);
   const dayStart = dateWithSaOffset(selectedDate, 0);
@@ -415,7 +743,8 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
     { data: inviteData, error: inviteError },
     { data: bookingData, error: bookingError },
     { data: matchData, error: matchError },
-    { data: slotBookingData, error: slotBookingError }
+    { data: slotBookingData, error: slotBookingError },
+    { data: ownRatingData, error: ownRatingError }
   ] = await Promise.all([
     supabase.rpc("match_profile_options", { search_text: search || null }),
     supabase.rpc("match_invites_for_user"),
@@ -436,10 +765,54 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
           .eq("status", "confirmed")
           .gte("start_time", dayStart.toISOString())
           .lt("start_time", dayEnd.toISOString())
-      : { data: [], error: null }
+      : { data: [], error: null },
+    supabase.from("ratings").select("*").in("profile_id", ownProfileIds)
   ]);
 
-  const candidates = ((candidateData ?? []) as MatchCandidate[]).filter((profile) => !ownProfileIds.includes(profile.id)).slice(0, 12);
+  const candidates = ((candidateData ?? []) as MatchCandidate[]).filter((profile) => !ownProfileIds.includes(profile.id)).slice(0, 30);
+  const candidateIds = candidates.map((candidate) => candidate.id);
+  const [{ data: candidateProfileData }, { data: candidateRatingData }] =
+    candidateIds.length > 0
+      ? await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id,junior_rating,junior_rating_confidence,participation_score,matches_played,wins,losses")
+            .in("id", candidateIds),
+          supabase.from("ratings").select("*").in("profile_id", candidateIds)
+        ])
+      : [{ data: [] }, { data: [] }];
+  const ownRatingsByProfileId = new Map(((ownRatingData ?? []) as Rating[]).map((rating) => [rating.profile_id, rating]));
+  const candidateDetailsByProfileId = new Map(((candidateProfileData ?? []) as CandidateProfileDetail[]).map((profile) => [profile.id, profile]));
+  const candidateRatingsByProfileId = new Map(((candidateRatingData ?? []) as Rating[]).map((rating) => [rating.profile_id, rating]));
+  const selectedRatingValue = profileRatingValue(selectedProfile, ownRatingsByProfileId);
+  const compatibleCandidates = candidates.filter((candidate) => {
+    if (selectedProfile.is_junior || candidate.is_junior) {
+      return selectedProfile.is_junior && candidate.is_junior && selectedProfile.junior_stage === candidate.junior_stage && selectedProfile.junior_stage !== "not_sure";
+    }
+
+    return candidate.primary_sport === selectedProfile.primary_sport;
+  });
+  const closeSuggestions = compatibleCandidates
+    .filter((candidate) => {
+      const ratingValue = candidateRatingValue(candidate, candidateDetailsByProfileId, candidateRatingsByProfileId);
+      if (ratingValue === null) {
+        return candidate.is_junior && selectedProfile.is_junior && candidate.junior_stage === selectedProfile.junior_stage;
+      }
+
+      return Math.abs(ratingValue - selectedRatingValue) <= 0.5;
+    })
+    .slice(0, 4);
+  const strongerSuggestions = compatibleCandidates
+    .filter((candidate) => {
+      const ratingValue = candidateRatingValue(candidate, candidateDetailsByProfileId, candidateRatingsByProfileId);
+      if (ratingValue === null) {
+        return false;
+      }
+
+      const difference = ratingValue - selectedRatingValue;
+      return difference > 0.5 && difference <= 1.0;
+    })
+    .slice(0, 4);
   const invites = (inviteData ?? []) as MatchInviteDetail[];
   const matches = (matchData ?? []) as MatchDetail[];
   const matchInviteIds = new Set(matches.map((match) => match.match_invite_id));
@@ -448,6 +821,9 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
   const acceptedInvitesWithoutResult = invites.filter(
     (invite) => invite.status === "accepted" && (ownProfileIds.includes(invite.inviter_profile_id) || ownProfileIds.includes(invite.opponent_profile_id)) && !matchInviteIds.has(invite.id)
   );
+  const upcomingMatchInvites = invites
+    .filter((invite) => ["pending", "accepted"].includes(invite.status) && (ownProfileIds.includes(invite.inviter_profile_id) || ownProfileIds.includes(invite.opponent_profile_id)) && !matchInviteIds.has(invite.id))
+    .slice(0, 6);
   const pendingConfirmations = matches.filter((match) => match.verification_status === "pending_confirmation" && match.submitted_by_user_id !== user.id);
   const awaitingOpponentConfirmations = matches.filter((match) => match.verification_status === "pending_confirmation" && match.submitted_by_user_id === user.id);
   const bookings = (bookingData ?? []) as unknown as BookingOption[];
@@ -460,20 +836,142 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
       <StatusAlert className="mb-5" message={resultMessage(searchParams?.result)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
 
-      <section className="mb-6 rounded-lg border border-court-teal/30 bg-court-mist p-5">
-        <p className="section-kicker">Play V1</p>
-        <h2 className="mt-2 text-2xl font-black text-court-navy">Simple match invites</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-court-ink">
-          Invite another PlayR player, optionally attach a court time, and submit the score after an accepted match. Casual matches are social; verified matches can affect PlayR Rating once the other side confirms the result.
-        </p>
+      <p className="mb-6 max-w-2xl text-sm leading-6 text-slate-600">Start a match, find a challenge, see what you can earn, and track upcoming matches.</p>
+
+      <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <ActionCard action="Send Invite" description="Already booked? Invite someone to play." href="#new-invite" icon="📩" meta={countLabel(bookings.length, "booking")} title="New Invite" tone="teal" />
+        <ActionCard
+          action="Start Match Request"
+          description="Challenge first. Agree on time and court after they accept."
+          href="#match-request"
+          icon="🏟️"
+          meta="Booking optional"
+          title="Match Invite + Court Booking"
+          tone="blue"
+        />
+        <ActionCard
+          action="View Challenges"
+          description="Find players near your level."
+          href="#challenge-players"
+          icon="⚡"
+          meta={countLabel(closeSuggestions.length + strongerSuggestions.length, "suggestion")}
+          title="Challenge Players"
+          tone="green"
+        />
+        <ActionCard action="View Matches" description="See pending and accepted matches." href="#upcoming-matches" icon="📅" meta={countLabel(upcomingMatchInvites.length, "match", "matches")} title="Upcoming Matches" tone="navy" />
+      </section>
+
+      <section className="surface-card mb-6 p-5" id="challenge-players">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="section-kicker">Challenge Players</p>
+            <h2 className="mt-2 text-2xl font-black text-court-navy">Find a good match</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Pick a balanced match or test yourself against a stronger player. Rating movement is estimated.
+            </p>
+          </div>
+          <form className="grid gap-3 sm:grid-cols-[1fr_auto] lg:min-w-96">
+            <input name="q" type="hidden" value={search} />
+            <input name="date" type="hidden" value={selectedDate} />
+            <input name="court" type="hidden" value={selectedCourtId} />
+            <label className="text-sm font-semibold text-slate-700">
+              Challenge as
+              <select className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-3 focus-ring" defaultValue={selectedProfile.id} name="player">
+                {ownProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.first_name} {profile.last_name} · {profileRatingLabel(profile, ownRatingsByProfileId)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="self-end rounded bg-court-blue px-4 py-3 font-bold text-white transition hover:bg-blue-700" type="submit">
+              Update
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black text-court-navy">Close Match</h3>
+                <p className="mt-1 text-sm text-slate-600">A balanced challenge near your level.</p>
+              </div>
+              <span className="rounded bg-emerald-50 px-2 py-1 text-xs font-black uppercase tracking-wide text-emerald-700">🟢 Balanced</span>
+            </div>
+            {closeSuggestions.length > 0 ? (
+              <div className="mt-3 grid gap-3">
+                {closeSuggestions.map((candidate) => (
+                  <SuggestionCard candidate={candidate} detailsByProfileId={candidateDetailsByProfileId} key={candidate.id} ratingsByProfileId={candidateRatingsByProfileId} selectedProfile={selectedProfile} type="close" />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                No close matches found yet. Try searching by name or choose another linked player.
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black text-court-navy">Stronger Challenge</h3>
+                <p className="mt-1 text-sm text-slate-600">Test yourself against a stronger player.</p>
+              </div>
+              <span className="rounded bg-court-navy px-2 py-1 text-xs font-black uppercase tracking-wide text-white">🔵 Higher reward</span>
+            </div>
+            {strongerSuggestions.length > 0 ? (
+              <div className="mt-3 grid gap-3">
+                {strongerSuggestions.map((candidate) => (
+                  <SuggestionCard candidate={candidate} detailsByProfileId={candidateDetailsByProfileId} key={candidate.id} ratingsByProfileId={candidateRatingsByProfileId} selectedProfile={selectedProfile} type="stronger" />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                No stronger challenges available right now. Check back later or search for a player by name.
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="surface-card mb-6 p-5" id="upcoming-matches">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="section-kicker">Upcoming Matches</p>
+            <h2 className="mt-2 text-2xl font-black text-court-navy">Match queue</h2>
+            <p className="mt-2 text-sm text-slate-600">Pending and accepted matches in one scan.</p>
+          </div>
+          <Link className="btn-secondary" href="#new-invite">
+            Send Invite
+          </Link>
+        </div>
+        {upcomingMatchInvites.length > 0 ? (
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            {upcomingMatchInvites.map((invite) => (
+              <UpcomingMatchCard invite={invite} key={invite.id} ownProfileIds={ownProfileIds} />
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+            No upcoming matches yet. Send a challenge or accept an invite to get started.
+          </div>
+        )}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <section className="surface-card p-5">
-          <h2 className="section-title">Invite to Play</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">One quick flow: choose who is playing, find an opponent, pick casual or verified, add a court/time, then send.</p>
+        <section className="surface-card p-5" id="new-invite">
+          <p className="section-kicker">New Invite</p>
+          <h2 className="section-title mt-2">Send a match invite</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Choose who is playing, pick an opponent, and send the request.</p>
+
+          <div className="mt-4 rounded-lg border border-court-teal/25 bg-court-mist p-4" id="match-request">
+            <p className="text-sm font-black text-court-navy">Challenge first, book later</p>
+            <p className="mt-1 text-sm leading-6 text-court-ink">Send the match request without a court booking. Once accepted, choose a court and time together.</p>
+          </div>
 
           <form className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <input name="player" type="hidden" value={selectedProfile.id} />
             <input name="date" type="hidden" value={selectedDate} />
             <input name="court" type="hidden" value={selectedCourtId} />
             <label className="text-sm font-semibold text-slate-700">
@@ -485,10 +983,11 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
             </button>
           </form>
 
-          <form className="soft-card mt-5 p-4">
+          <form className="soft-card mt-5 p-4" id="invite-booking">
             <input name="q" type="hidden" value={search} />
-            <h3 className="font-black text-court-navy">New court booking options</h3>
-            <p className="mt-1 text-sm leading-6 text-slate-600">Only needed if you want this invite to reserve a fresh court slot. Existing bookings can still be linked below.</p>
+            <input name="player" type="hidden" value={selectedProfile.id} />
+            <h3 className="font-black text-court-navy">Court booking options</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600">Optional: reserve a fresh court slot now, or send the invite and arrange the booking after acceptance.</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
               <label className="text-sm font-semibold text-slate-700">
                 Date
@@ -520,14 +1019,14 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
             </div>
           </form>
 
-          {candidateError || bookingError || courtsError || slotBookingError ? (
+          {candidateError || bookingError || courtsError || slotBookingError || ownRatingError ? (
             <StatusAlert className="mt-4" message="Some match invite or court availability options could not be loaded right now." tone="error" />
           ) : null}
 
           <form action={createMatchInvite} className="mt-5 grid gap-4">
             <label className="text-sm font-semibold text-slate-700">
               Invite from
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-3 focus-ring" name="inviter_profile_id" required>
+              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-3 focus-ring" defaultValue={selectedProfile.id} name="inviter_profile_id" required>
                 {ownProfiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
                     {profile.first_name} {profile.last_name}
@@ -552,19 +1051,19 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
                 )}
               </select>
               <span className="mt-2 block text-xs font-normal leading-5 text-slate-600">
-                Showing up to 12 player profiles. Search by name to narrow the list before sending.
+                Showing up to 30 player profiles. Search by name to narrow the list before sending.
               </span>
             </label>
 
             <div className="rounded-lg border border-slate-200 p-4">
               <h3 className="font-black text-court-navy">Court/time</h3>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Link this invite to one of your existing bookings, or book a new 60-minute slot as part of the invite.
+                Link an existing booking, create a 60-minute slot, or leave it unlinked and agree on a court after acceptance.
               </p>
               <div className="mt-4 grid gap-3">
                 <label className="flex gap-3 rounded border border-court-teal/30 bg-court-mist p-3 text-sm font-semibold text-court-navy">
                   <input className="mt-1" defaultChecked name="booking_mode" type="radio" value="existing" />
-                  <span>Use an existing future booking</span>
+                  <span>Use an existing booking or leave unlinked</span>
                 </label>
                 <label className="text-sm font-semibold text-slate-700">
                   Existing booking <span className="font-normal text-slate-500">(optional)</span>
@@ -677,7 +1176,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
             )}
           </div>
 
-          <div className="surface-card p-5">
+          <div className="surface-card p-5" id="submit-result">
             <h2 className="section-title">Submit a result</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Results can be submitted only after an invite is accepted. Verified match results wait for confirmation before ratings move.
@@ -724,7 +1223,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
             )}
           </div>
 
-          <div className="surface-card p-5">
+          <div className="surface-card p-5" id="received-invites">
             <h2 className="section-title">Received invites</h2>
             {inviteError ? <StatusAlert className="mt-4" message="Match invites could not be loaded right now." tone="error" /> : null}
             {receivedInvites.length > 0 ? (
@@ -740,7 +1239,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
             )}
           </div>
 
-          <div className="surface-card p-5">
+          <div className="surface-card p-5" id="sent-invites">
             <h2 className="section-title">Sent invites</h2>
             {sentInvites.length > 0 ? (
               <div className="mt-4 grid gap-3">
