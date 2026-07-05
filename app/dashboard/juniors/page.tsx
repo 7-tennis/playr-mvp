@@ -135,7 +135,7 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
   const juniors = (data ?? []) as Profile[];
 
   return (
-    <PageShell eyebrow="Junior Players" title="Junior Players">
+    <PageShell eyebrow="Junior Players" subtitle="Manage linked junior players and PlayR progress." title="Junior Players">
       <StatusAlert className="mb-5" message={searchParams?.saved ? "Junior profile saved." : null} tone="success" />
       <StatusAlert
         className="mb-5"
@@ -148,11 +148,9 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
         }
         tone="error"
       />
-      <section className="mb-6 rounded-lg border border-court-teal/30 bg-court-mist p-5 text-sm leading-6 text-court-navy">
+      <section className="mb-6 rounded-lg border border-court-teal/30 bg-court-mist p-5 text-sm leading-6 text-court-navy shadow-sm">
         <h2 className="text-xl font-black">Family & Junior Players</h2>
-        <p className="mt-2">
-          Junior players are managed by your parent/guardian account. PlayR uses them for court bookings, event entries, match invites, junior progress, and important club communication. Junior players do not get separate login accounts yet.
-        </p>
+        <p className="mt-2">Linked juniors can be selected for court bookings, event entries, match invites and junior progress tracking.</p>
       </section>
       <div className="grid gap-6 md:grid-cols-[1fr_1fr]">
         <form action={createJuniorProfile} className="surface-card grid gap-4 p-5 sm:p-6 md:grid-cols-2">
@@ -171,7 +169,7 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
           {juniors.length > 0 ? (
             <div className="mt-5 space-y-5">
               {juniors.map((junior) => (
-                <form action={updateJuniorProfile} className="grid scroll-mt-24 gap-4 rounded border border-slate-200 p-4 md:grid-cols-2" id={`junior-${junior.id}`} key={junior.id}>
+                <form action={updateJuniorProfile} className="soft-card grid scroll-mt-24 gap-4 p-4 md:grid-cols-2" id={`junior-${junior.id}`} key={junior.id}>
                   <input name="junior_profile_id" type="hidden" value={junior.id} />
                   <div className="md:col-span-2">
                     <p className="font-black text-court-navy">
@@ -211,7 +209,7 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
               ))}
             </div>
           ) : (
-            <p className="mt-3 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+            <p className="ui-empty-card mt-3">
               No junior players linked yet. Add a junior player to book courts, enter events, and track progress for your child.
             </p>
           )}

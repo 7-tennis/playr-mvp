@@ -59,7 +59,7 @@ export default async function DashboardResultsPage() {
   const results = (data ?? []) as unknown as ResultRow[];
 
   return (
-    <PageShell eyebrow="Results" title="Results">
+    <PageShell eyebrow="Results" subtitle="Review posted event and match results." title="Results">
       {error ? <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Results could not be loaded right now.</p> : null}
 
       {results.length > 0 ? (

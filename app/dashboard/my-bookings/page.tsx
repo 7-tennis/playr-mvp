@@ -92,7 +92,7 @@ export default async function MyBookingsPage({ searchParams }: { searchParams?: 
   }
 
   return (
-    <PageShell eyebrow="Bookings" title="My Bookings">
+    <PageShell eyebrow="Bookings" subtitle="Review upcoming and past court reservations." title="My Bookings">
       <StatusAlert className="mb-5" message={message(searchParams)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams)} tone="error" />
       {error ? <StatusAlert className="mb-5" message="Your bookings could not be loaded right now." tone="error" /> : null}

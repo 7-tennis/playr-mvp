@@ -66,8 +66,8 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
       <div className="mb-4 -mx-1 flex gap-2 overflow-x-auto px-1 pb-2">
         {courts.map((court) => (
           <a
-            className={`shrink-0 rounded-full border px-4 py-3 text-sm font-bold transition sm:py-2 ${
-              court.id === selectedCourtId ? "border-court-teal bg-court-teal text-white" : "border-slate-200 bg-white text-court-navy hover:border-court-teal"
+            className={`shrink-0 rounded border px-3 py-2 text-sm font-black transition ${
+              court.id === selectedCourtId ? "border-court-navy bg-court-navy text-white" : "border-slate-200 bg-white text-court-navy hover:border-court-teal hover:bg-court-mist"
             }`}
             href={`/dashboard/book-court?date=${selectedDate}&court=${court.id}`}
             key={court.id}
@@ -89,7 +89,7 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
               Choose date
               <input className="mt-1 w-full rounded border border-slate-300 px-3 py-3 focus-ring sm:py-2" name="date" type="date" defaultValue={selectedDate} />
             </label>
-            <button className="rounded bg-court-blue px-4 py-3 font-bold text-white sm:py-2" type="submit">
+            <button className="rounded bg-court-blue px-4 py-3 font-bold text-white transition hover:bg-blue-700 sm:py-2" type="submit">
               Show slots
             </button>
           </form>

@@ -148,19 +148,17 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
   }));
 
   return (
-    <PageShell eyebrow="Book" title="Book a Court">
+    <PageShell eyebrow="Book" subtitle="Reserve courts and manage upcoming bookings." title="Book">
       <StatusAlert className="mb-5" message={successMessage(searchParams?.booking)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
       <section className="surface-card mb-5 p-5">
         <h2 className="section-title">Availability for {formatDate(dayStart.toISOString())}</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          Choose a court, choose a time, then confirm who the booking is for. Parent/guardian accounts can book for linked juniors. Normal users can book 60-minute slots up to 7 days ahead.
-        </p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Choose a court, time and player. Slots are 60 minutes and can be booked up to 7 days ahead.</p>
         <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
-          <span className="rounded bg-emerald-50 px-3 py-1 text-emerald-700">Available</span>
-          <span className="rounded bg-court-mist px-3 py-1 text-court-navy">Your booking</span>
-          <span className="rounded bg-slate-100 px-3 py-1 text-slate-600">Booked</span>
-          <span className="rounded bg-amber-50 px-3 py-1 text-amber-800">Club block</span>
+          <span className="ui-chip ui-chip-success">Available</span>
+          <span className="ui-chip ui-chip-brand">Your booking</span>
+          <span className="ui-chip ui-chip-muted">Booked</span>
+          <span className="ui-chip ui-chip-warning">Club block</span>
         </div>
       </section>
 

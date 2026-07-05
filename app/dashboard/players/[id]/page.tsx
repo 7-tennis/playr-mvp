@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type {
@@ -12,7 +13,6 @@ import type {
   EntryStatus,
   JuniorAchievement,
   JuniorRatingHistory,
-  JuniorStage,
   MatchInviteStatus,
   MatchInviteType,
   MatchVerificationStatus,
@@ -75,52 +75,6 @@ type PlayerDetailPageProps = {
   };
 };
 
-type CardAccent = {
-  border: string;
-  strip: string;
-  tint: string;
-  badge: string;
-  avatar: string;
-};
-
-const accents: Record<"member" | "red" | "orange" | "green" | "yellow", CardAccent> = {
-  member: {
-    border: "border-court-teal/50",
-    strip: "bg-court-teal",
-    tint: "bg-court-mist",
-    badge: "bg-court-mist text-court-teal",
-    avatar: "bg-court-teal text-white"
-  },
-  red: {
-    border: "border-red-300",
-    strip: "bg-red-500",
-    tint: "bg-red-50",
-    badge: "bg-red-50 text-red-700",
-    avatar: "bg-red-500 text-white"
-  },
-  orange: {
-    border: "border-orange-300",
-    strip: "bg-orange-500",
-    tint: "bg-orange-50",
-    badge: "bg-orange-50 text-orange-700",
-    avatar: "bg-orange-500 text-white"
-  },
-  green: {
-    border: "border-emerald-300",
-    strip: "bg-emerald-500",
-    tint: "bg-emerald-50",
-    badge: "bg-emerald-50 text-emerald-700",
-    avatar: "bg-emerald-500 text-white"
-  },
-  yellow: {
-    border: "border-amber-300",
-    strip: "bg-amber-400",
-    tint: "bg-amber-50",
-    badge: "bg-amber-50 text-amber-700",
-    avatar: "bg-amber-400 text-court-navy"
-  }
-};
-
 function playerName(profile: Pick<Profile, "first_name" | "last_name">) {
   return `${profile.first_name} ${profile.last_name}`;
 }
@@ -129,40 +83,12 @@ function playerInitials(profile: Pick<Profile, "first_name" | "last_name">) {
   return `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase();
 }
 
-function stageLabel(stage: JuniorStage | null | undefined) {
-  switch (stage) {
-    case "red_ball":
-      return "Red Ball";
-    case "orange_ball":
-      return "Orange Ball";
-    case "green_ball":
-      return "Green Ball";
-    case "yellow_ball":
-      return "Yellow Ball";
-    case "not_sure":
-      return "Ball stage pending";
-    default:
-      return "Member";
-  }
-}
-
 function accentFor(profile: Profile) {
   if (!profile.is_junior) {
-    return accents.member;
+    return playrAccents.member;
   }
 
-  switch (profile.junior_stage) {
-    case "red_ball":
-      return accents.red;
-    case "orange_ball":
-      return accents.orange;
-    case "green_ball":
-      return accents.green;
-    case "yellow_ball":
-    case "not_sure":
-    default:
-      return accents.yellow;
-  }
+  return playrAccentForJuniorStage(profile.junior_stage);
 }
 
 function plural(value: number, singular: string, pluralValue: string) {
@@ -202,7 +128,7 @@ function SectionCard({ children, title }: { children: ReactNode; title: string }
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">{text}</p>;
+  return <p className="ui-empty-card">{text}</p>;
 }
 
 function ActivityItem({ icon, title, meta }: { icon: string; title: string; meta: string }) {
@@ -368,13 +294,13 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
     : ((juniorHistoryData ?? []) as Pick<JuniorRatingHistory, "id" | "previous_rating" | "new_rating" | "change_amount" | "reason" | "created_at">[]);
 
   const clubName = bookings[0]?.courts?.venues?.name ?? upcomingEntries.find((entry) => entry.events?.location)?.events?.location ?? null;
-  const playerType = player.is_junior ? stageLabel(player.junior_stage) : parentProfile.id === player.id && parentProfile.parent_profile_id === null ? "Parent / Member" : "Member";
+  const playerType = player.is_junior ? playrJuniorStageLabel(player.junior_stage) : parentProfile.id === player.id && parentProfile.parent_profile_id === null ? "Parent / Member" : "Member";
   const ratingText = player.is_junior ? formatJuniorRating(player.junior_stage, player.junior_rating) : rating ? rating.rating_value.toFixed(1) : "No active rating yet";
   const confidenceText = player.is_junior ? formatLabel(player.junior_rating_confidence) : rating ? formatLabel(rating.confidence) : "No rating yet";
   const participationText = player.is_junior ? `${player.participation_score} pts` : `${player.participation_score ?? 0} pts`;
 
   return (
-    <PageShell eyebrow="Player Detail" title={playerName(player)}>
+    <PageShell eyebrow="Player Detail" subtitle="Player profile, progress and upcoming tennis activity." title={playerName(player)}>
       <div className="mb-5">
         <Link className="font-bold text-court-blue" href="/dashboard">
           Back to MyPlayR

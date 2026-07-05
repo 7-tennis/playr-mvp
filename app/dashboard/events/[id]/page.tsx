@@ -47,25 +47,25 @@ const DEFAULT_VISUAL: EventVisual = {
 
 const EVENT_VISUALS: Record<string, EventVisual> = {
   red: {
-    border: "border-red-200",
+    border: "border-red-300",
     strip: "bg-red-500",
     badge: "bg-red-50 text-red-700",
     icon: "bg-red-500 text-white"
   },
   orange: {
-    border: "border-orange-200",
+    border: "border-orange-300",
     strip: "bg-orange-500",
     badge: "bg-orange-50 text-orange-700",
     icon: "bg-orange-500 text-white"
   },
   green: {
-    border: "border-emerald-200",
+    border: "border-emerald-300",
     strip: "bg-emerald-500",
     badge: "bg-emerald-50 text-emerald-700",
     icon: "bg-emerald-500 text-white"
   },
   yellow: {
-    border: "border-amber-200",
+    border: "border-amber-300",
     strip: "bg-amber-400",
     badge: "bg-amber-50 text-amber-700",
     icon: "bg-amber-400 text-court-navy"
@@ -351,7 +351,7 @@ export default async function DashboardEventDetailPage({ params, searchParams }:
   const capacityLabel = event.max_entries ? `${entryCount} / ${event.max_entries}` : `${entryCount} entered`;
 
   return (
-    <PageShell eyebrow="Events" title={event.title}>
+    <PageShell eyebrow="Events" subtitle="Event overview, entry status and actions." title={event.title}>
       <Link className="mb-5 inline-flex rounded border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-court-navy hover:border-court-teal" href="/dashboard/events">
         Back to Events
       </Link>
@@ -371,16 +371,16 @@ export default async function DashboardEventDetailPage({ params, searchParams }:
             <div className={`grid h-16 w-16 shrink-0 place-items-center rounded ${visual.icon} text-2xl font-black`}>🎾</div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap gap-2 text-sm font-bold">
-                <span className={`rounded px-2.5 py-1 ${visual.badge}`}>🏷 {eventAudienceLabel(event)}</span>
-                <span className="rounded bg-slate-100 px-2.5 py-1 text-court-navy">🎟 {statusLabel}</span>
-                {host ? <span className="rounded bg-slate-100 px-2.5 py-1 text-court-navy">{host}</span> : null}
-                {entries.some((entry) => entry.entry_status !== "cancelled") ? <span className="rounded bg-emerald-50 px-2.5 py-1 text-emerald-700">✅ Entered</span> : null}
+                <span className={`ui-chip ${visual.badge}`}>🏷 {eventAudienceLabel(event)}</span>
+                <span className="ui-chip ui-chip-muted">🎟 {statusLabel}</span>
+                {host ? <span className="ui-chip ui-chip-muted">{host}</span> : null}
+                {entries.some((entry) => entry.entry_status !== "cancelled") ? <span className="ui-chip ui-chip-success">✅ Entered</span> : null}
               </div>
               <div className="mt-4 grid gap-2 text-sm font-bold text-court-navy sm:grid-cols-2 lg:grid-cols-4">
-                <span className="rounded bg-slate-100 px-3 py-2">📅 {formatDateTime(event.start_datetime)}</span>
-                <span className="rounded bg-slate-100 px-3 py-2">📍 {event.location ?? "Venue TBC"}</span>
-                <span className="rounded bg-slate-100 px-3 py-2">💳 {eventCostLabel(event)}</span>
-                <span className="rounded bg-slate-100 px-3 py-2">👥 {capacityLabel}</span>
+                <span className="ui-chip ui-chip-muted ui-chip-block">📅 {formatDateTime(event.start_datetime)}</span>
+                <span className="ui-chip ui-chip-muted ui-chip-block">📍 {event.location ?? "Venue TBC"}</span>
+                <span className="ui-chip ui-chip-muted ui-chip-block">💳 {eventCostLabel(event)}</span>
+                <span className="ui-chip ui-chip-muted ui-chip-block">👥 {capacityLabel}</span>
               </div>
             </div>
           </div>
@@ -407,18 +407,18 @@ export default async function DashboardEventDetailPage({ params, searchParams }:
 
           <DetailSection icon="👥" title="Entries">
             <div className="flex flex-wrap gap-2 text-sm font-bold text-court-navy">
-              <span className="rounded bg-slate-100 px-2.5 py-1">{entryCount} entered</span>
-              {spotsLeft !== null ? <span className="rounded bg-slate-100 px-2.5 py-1">{spotsLeft} spots left</span> : <span className="rounded bg-slate-100 px-2.5 py-1">Open entries</span>}
+              <span className="ui-chip ui-chip-muted">{entryCount} entered</span>
+              {spotsLeft !== null ? <span className="ui-chip ui-chip-muted">{spotsLeft} spots left</span> : <span className="ui-chip ui-chip-muted">Open entries</span>}
             </div>
             <p className="mt-3 text-sm text-slate-600">Your entered players are shown in the actions panel.</p>
           </DetailSection>
 
           <DetailSection icon="🎾" title="Format">
             <div className="flex flex-wrap gap-2 text-sm font-bold text-court-navy">
-              <span className="rounded bg-slate-100 px-2.5 py-1">{formatLabel(event.sport)}</span>
-              {event.event_type ? <span className="rounded bg-slate-100 px-2.5 py-1">{formatLabel(event.event_type)}</span> : null}
-              {event.category ? <span className="rounded bg-slate-100 px-2.5 py-1">{formatLabel(event.category)}</span> : null}
-              {event.age_group ? <span className="rounded bg-slate-100 px-2.5 py-1">{formatLabel(event.age_group)}</span> : null}
+              <span className="ui-chip ui-chip-muted">{formatLabel(event.sport)}</span>
+              {event.event_type ? <span className="ui-chip ui-chip-muted">{formatLabel(event.event_type)}</span> : null}
+              {event.category ? <span className="ui-chip ui-chip-muted">{formatLabel(event.category)}</span> : null}
+              {event.age_group ? <span className="ui-chip ui-chip-muted">{formatLabel(event.age_group)}</span> : null}
             </div>
             {!event.event_type && !event.category ? <p className="mt-3 rounded bg-slate-50 p-4 text-sm text-slate-600">Format to be confirmed.</p> : null}
           </DetailSection>
@@ -438,17 +438,17 @@ export default async function DashboardEventDetailPage({ params, searchParams }:
 
           <DetailSection icon="💳" title="Payment">
             <div className="flex flex-wrap gap-2 text-sm font-bold text-court-navy">
-              <span className="rounded bg-slate-100 px-2.5 py-1">{eventCostLabel(event)}</span>
-              <span className="rounded bg-court-mist px-2.5 py-1 text-court-navy">Payment handled by organiser</span>
+              <span className="ui-chip ui-chip-muted">{eventCostLabel(event)}</span>
+              <span className="ui-chip ui-chip-brand">Payment handled by organiser</span>
             </div>
             <p className="mt-3 text-sm leading-6 text-slate-600">Online payment is not enabled yet. The organiser can mark payment received after entry.</p>
           </DetailSection>
 
           <DetailSection icon="⚡" title="Rewards">
             <div className="flex flex-wrap gap-2 text-sm font-bold text-court-navy">
-              <span className="rounded bg-slate-100 px-2.5 py-1">⚡ Participation rewards TBC</span>
-              <span className="rounded bg-slate-100 px-2.5 py-1">🏅 Badge eligibility TBC</span>
-              {ratingRelevant ? <span className="rounded bg-court-navy px-2.5 py-1 text-white">⭐ Rating relevant</span> : <span className="rounded bg-slate-100 px-2.5 py-1">⭐ Rating not marked</span>}
+              <span className="ui-chip ui-chip-muted">⚡ Participation rewards TBC</span>
+              <span className="ui-chip ui-chip-muted">🏅 Badge eligibility TBC</span>
+              {ratingRelevant ? <span className="ui-chip ui-chip-navy">⭐ Rating relevant</span> : <span className="ui-chip ui-chip-muted">⭐ Rating not marked</span>}
             </div>
           </DetailSection>
 

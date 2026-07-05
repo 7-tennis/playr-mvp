@@ -169,7 +169,7 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
   const ratingChangeByMatchId = new Map(ratingChanges.map((change) => [change.match_id, change]));
 
   return (
-    <PageShell eyebrow="Player Profile" title="Player Profile">
+    <PageShell eyebrow="Profile" subtitle="Manage your account, players and PlayR settings." title="Profile">
       <StatusAlert
         className="mb-4 max-w-3xl"
         message={
@@ -184,7 +184,7 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
         tone="error"
       />
       {!profile ? (
-        <div className="mb-5 max-w-3xl rounded-lg border border-court-teal/30 bg-court-mist p-4 text-sm leading-6 text-court-navy">
+        <div className="mb-5 max-w-3xl rounded-lg border border-court-teal/30 bg-court-mist p-4 text-sm leading-6 text-court-navy shadow-sm">
           Complete your Player Profile before entering events. You can add junior players after your own profile is saved.
         </div>
       ) : null}
@@ -253,7 +253,7 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
               </div>
             </div>
           ) : (
-            <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+            <div className="ui-empty-card mt-4">
               No rating changes yet. Send a verified match invite, submit the result, and ask the other side to confirm it to create the first movement.
             </div>
           )}
@@ -297,7 +297,7 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
               })}
             </div>
           ) : (
-            <div className="mt-4 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+            <div className="ui-empty-card mt-4">
               No verified match history yet. Accepted match invite results will appear here once both sides confirm.
             </div>
           )}
@@ -386,7 +386,7 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
         ) : juniors.length > 0 ? (
           <div className="mt-5 grid gap-4">
             {juniors.map((junior) => (
-              <div className="rounded border border-slate-200 bg-slate-50 p-4" key={junior.id}>
+              <div className="soft-card p-4" key={junior.id}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="font-black text-court-navy">
@@ -464,7 +464,7 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
             ))}
           </div>
         ) : (
-          <div className="mt-5 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+          <div className="ui-empty-card mt-5">
             No junior players linked yet. Add a junior player to book courts, enter events, and track progress for your child.
           </div>
         )}

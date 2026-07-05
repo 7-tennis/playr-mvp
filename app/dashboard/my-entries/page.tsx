@@ -119,7 +119,7 @@ export default async function MyEntriesPage() {
   const { entries, isLoggedIn, error } = await getMyEntries();
 
   return (
-    <PageShell eyebrow="Events" title="My Entries">
+    <PageShell eyebrow="Events" subtitle="Track event entries, payment status and results." title="My Entries">
       {error ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</p> : null}
 
       {!isLoggedIn && !error ? (

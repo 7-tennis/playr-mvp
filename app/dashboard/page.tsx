@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type {
@@ -10,7 +11,6 @@ import type {
   CourtBooking,
   CourtSideEvent,
   EntryStatus,
-  JuniorStage,
   MatchInviteStatus,
   MatchInviteType,
   Profile,
@@ -65,101 +65,12 @@ function emptyActivity(): ActivityCounts {
   return { invites: 0, events: 0, bookings: 0 };
 }
 
-function formatJuniorStageLabel(stage: JuniorStage | string | null | undefined) {
-  switch (stage) {
-    case "red_ball":
-    case "red":
-      return "Red Ball";
-    case "orange_ball":
-    case "orange":
-      return "Orange Ball";
-    case "green_ball":
-    case "green":
-      return "Green Ball";
-    case "yellow_ball":
-    case "yellow":
-      return "Yellow Ball";
-    case "not_sure":
-      return "Ball stage pending";
-    default:
-      return "Junior Player";
-  }
-}
-
 function playerInitials(profile: Pick<Profile, "first_name" | "last_name"> | null) {
   if (!profile) {
     return "PR";
   }
 
   return `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase();
-}
-
-type CardAccent = {
-  border: string;
-  strip: string;
-  tint: string;
-  badge: string;
-  avatar: string;
-  ring: string;
-};
-
-const cardAccents: Record<"member" | "red" | "orange" | "green" | "yellow", CardAccent> = {
-  member: {
-    border: "border-court-teal/55",
-    strip: "bg-court-teal",
-    tint: "bg-court-mist",
-    badge: "bg-court-mist text-court-teal",
-    avatar: "bg-court-teal text-white",
-    ring: "group-hover:ring-court-teal/25"
-  },
-  red: {
-    border: "border-red-300",
-    strip: "bg-red-500",
-    tint: "bg-red-50",
-    badge: "bg-red-50 text-red-700",
-    avatar: "bg-red-500 text-white",
-    ring: "group-hover:ring-red-200"
-  },
-  orange: {
-    border: "border-orange-300",
-    strip: "bg-orange-500",
-    tint: "bg-orange-50",
-    badge: "bg-orange-50 text-orange-700",
-    avatar: "bg-orange-500 text-white",
-    ring: "group-hover:ring-orange-200"
-  },
-  green: {
-    border: "border-emerald-300",
-    strip: "bg-emerald-500",
-    tint: "bg-emerald-50",
-    badge: "bg-emerald-50 text-emerald-700",
-    avatar: "bg-emerald-500 text-white",
-    ring: "group-hover:ring-emerald-200"
-  },
-  yellow: {
-    border: "border-amber-300",
-    strip: "bg-amber-400",
-    tint: "bg-amber-50",
-    badge: "bg-amber-50 text-amber-700",
-    avatar: "bg-amber-400 text-court-navy",
-    ring: "group-hover:ring-amber-200"
-  }
-};
-
-function accentForStage(stage: JuniorStage | null | undefined) {
-  switch (stage) {
-    case "red_ball":
-      return cardAccents.red;
-    case "orange_ball":
-      return cardAccents.orange;
-    case "green_ball":
-      return cardAccents.green;
-    case "yellow_ball":
-    case "not_sure":
-      return cardAccents.yellow;
-    default:
-      return cardAccents.yellow;
-  }
 }
 
 function InfoRow({ icon, value, muted = false }: { icon: string; value: string; muted?: boolean }) {
@@ -175,7 +86,7 @@ function InfoRow({ icon, value, muted = false }: { icon: string; value: string; 
 
 function CounterPill({ icon, count, label }: { icon: string; count: number; label: string }) {
   return (
-    <div className="flex min-w-0 items-center justify-center gap-1.5 rounded bg-white/75 px-2.5 py-2 text-sm font-black text-court-navy ring-1 ring-slate-200">
+    <div className="ui-counter">
       <span aria-hidden="true">{icon}</span>
       <span>{count}</span>
       <span className="hidden truncate sm:inline">{label}</span>
@@ -199,7 +110,7 @@ function MemberCard({
   const name = profile ? playerName(profile) : "Set up your profile";
   const memberType = juniorCount > 0 ? "Parent / Member" : "Member";
   const ratingText = rating ? rating.rating_value.toFixed(1) : "No active rating yet";
-  const accent = cardAccents.member;
+  const accent = playrAccents.member;
   const href = profile ? `/dashboard/players/${profile.id}` : "/dashboard/profile";
 
   return (
@@ -234,8 +145,8 @@ function MemberCard({
 
 function JuniorCard({ junior, activity, clubName }: { junior: JuniorCardProfile; activity: ActivityCounts; clubName: string | null }) {
   const name = playerName(junior);
-  const accent = accentForStage(junior.junior_stage);
-  const stageLabel = formatJuniorStageLabel(junior.junior_stage);
+  const accent = playrAccentForJuniorStage(junior.junior_stage);
+  const stageLabel = playrJuniorStageLabel(junior.junior_stage);
 
   return (
     <Link aria-label={`Open ${name} player detail`} className="group block rounded-lg focus-ring" href={`/dashboard/players/${junior.id}`}>
@@ -403,7 +314,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   const totalUpcomingBookings = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.bookings, 0);
 
   return (
-    <PageShell eyebrow="MyPlayR" title="MyPlayR">
+    <PageShell eyebrow="MyPlayR" subtitle="Your players, progress and upcoming tennis activity." title="MyPlayR">
       <StatusAlert className="mb-5" message={searchParams?.profile === "saved" ? "Profile saved." : null} tone="success" />
       {!profile ? (
         <StatusAlert
@@ -412,8 +323,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           tone="info"
         />
       ) : null}
-
-      <p className="mb-6 max-w-2xl text-sm leading-6 text-slate-600">Your players, progress and upcoming tennis activity.</p>
 
       <section className="mb-6 rounded-lg bg-court-navy px-5 py-4 text-white shadow-court">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -464,14 +373,17 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-3">
-        <Link className="rounded-lg border border-slate-200 bg-white p-4 font-bold text-court-navy transition hover:border-court-teal hover:bg-court-mist" href="/dashboard/book-court">
-          Book a Court
+        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/book-court">
+          <span aria-hidden="true">🏟️</span>
+          <span>Book Court</span>
         </Link>
-        <Link className="rounded-lg border border-slate-200 bg-white p-4 font-bold text-court-navy transition hover:border-court-teal hover:bg-court-mist" href="/dashboard/play">
-          Send Match Invite
+        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/play">
+          <span aria-hidden="true">📩</span>
+          <span>Send Invite</span>
         </Link>
-        <Link className="rounded-lg border border-slate-200 bg-white p-4 font-bold text-court-navy transition hover:border-court-teal hover:bg-court-mist" href="/dashboard/events">
-          Browse Events
+        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/events">
+          <span aria-hidden="true">📅</span>
+          <span>Browse Events</span>
         </Link>
       </section>
     </PageShell>

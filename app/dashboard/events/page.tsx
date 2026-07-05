@@ -69,25 +69,25 @@ const DEFAULT_VISUAL: EventVisual = {
 
 const EVENT_VISUALS: Record<string, EventVisual> = {
   red: {
-    border: "border-red-200",
+    border: "border-red-300",
     strip: "bg-red-500",
     badge: "bg-red-50 text-red-700",
     icon: "bg-red-500 text-white"
   },
   orange: {
-    border: "border-orange-200",
+    border: "border-orange-300",
     strip: "bg-orange-500",
     badge: "bg-orange-50 text-orange-700",
     icon: "bg-orange-500 text-white"
   },
   green: {
-    border: "border-emerald-200",
+    border: "border-emerald-300",
     strip: "bg-emerald-500",
     badge: "bg-emerald-50 text-emerald-700",
     icon: "bg-emerald-500 text-white"
   },
   yellow: {
-    border: "border-amber-200",
+    border: "border-amber-300",
     strip: "bg-amber-400",
     badge: "bg-amber-50 text-amber-700",
     icon: "bg-amber-400 text-court-navy"
@@ -391,13 +391,13 @@ function SpotlightEventCard({
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
-            <span className={`rounded px-2.5 py-1 ${visual.badge}`}>🏷 {eventAudienceLabel(event)}</span>
-            {host ? <span className="rounded bg-slate-100 px-2.5 py-1 text-slate-700">{host}</span> : null}
-            <span className="rounded bg-slate-100 px-2.5 py-1 text-slate-700">📅 {formatDate(event.start_datetime)}</span>
-            <span className="rounded bg-slate-100 px-2.5 py-1 text-slate-700">👥 {event.entry_count ?? 0} entered</span>
-            <span className="rounded bg-slate-100 px-2.5 py-1 text-slate-700">💳 {eventCostLabel(event)}</span>
-            <span className="rounded bg-slate-100 px-2.5 py-1 text-slate-700">⚡ Rewards TBC</span>
-            {isRatingRelevant(event) ? <span className="rounded bg-court-navy px-2.5 py-1 text-white">⭐ Rating relevant</span> : null}
+            <span className={`ui-chip ${visual.badge}`}>🏷 {eventAudienceLabel(event)}</span>
+            {host ? <span className="ui-chip ui-chip-muted">{host}</span> : null}
+            <span className="ui-chip ui-chip-muted">📅 {formatDate(event.start_datetime)}</span>
+            <span className="ui-chip ui-chip-muted">👥 {event.entry_count ?? 0} entered</span>
+            <span className="ui-chip ui-chip-muted">💳 {eventCostLabel(event)}</span>
+            <span className="ui-chip ui-chip-muted">⚡ Rewards TBC</span>
+            {isRatingRelevant(event) ? <span className="ui-chip ui-chip-navy">⭐ Rating relevant</span> : null}
           </div>
         </div>
         <Link className="inline-flex justify-center rounded bg-court-teal px-5 py-3 text-sm font-black text-white transition hover:bg-teal-500" href={`/dashboard/events/${event.id}`}>
@@ -435,23 +435,23 @@ function EventCard({
           <div className={`grid h-11 w-11 shrink-0 place-items-center rounded ${visual.icon} font-black`}>🎾</div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-2">
-              <span className={`rounded px-2.5 py-1 text-xs font-black ${visual.badge}`}>🏷 {eventAudienceLabel(event)}</span>
-              {enteredStatus ? <span className="rounded bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700">{enteredStatus}</span> : null}
-              {isFull ? <span className="rounded bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">Full</span> : null}
+              <span className={`ui-chip ${visual.badge}`}>🏷 {eventAudienceLabel(event)}</span>
+              {enteredStatus ? <span className="ui-chip ui-chip-success">{enteredStatus}</span> : null}
+              {isFull ? <span className="ui-chip ui-chip-muted">Full</span> : null}
             </div>
             <h3 className="mt-2 text-xl font-black text-court-navy">{event.title}</h3>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold text-court-navy">
-          {host ? <span className="rounded bg-slate-100 px-2.5 py-1">{host}</span> : null}
-          <span className="rounded bg-slate-100 px-2.5 py-1">📅 {formatDateTime(event.start_datetime)}</span>
-          <span className="rounded bg-slate-100 px-2.5 py-1">📍 {event.location ?? "Venue TBC"}</span>
-          <span className="rounded bg-slate-100 px-2.5 py-1">👥 {event.entry_count ?? 0} entered</span>
-          <span className="rounded bg-slate-100 px-2.5 py-1">🎟 {spotsLabel(event)}</span>
-          <span className="rounded bg-slate-100 px-2.5 py-1">💳 {eventCostLabel(event)}</span>
-          <span className="rounded bg-slate-100 px-2.5 py-1">⚡ Rewards TBC</span>
-          {isRatingRelevant(event) ? <span className="rounded bg-court-navy px-2.5 py-1 text-white">⭐ Rating relevant</span> : null}
+          {host ? <span className="ui-chip ui-chip-muted">{host}</span> : null}
+          <span className="ui-chip ui-chip-muted">📅 {formatDateTime(event.start_datetime)}</span>
+          <span className="ui-chip ui-chip-muted">📍 {event.location ?? "Venue TBC"}</span>
+          <span className="ui-chip ui-chip-muted">👥 {event.entry_count ?? 0} entered</span>
+          <span className="ui-chip ui-chip-muted">🎟 {spotsLabel(event)}</span>
+          <span className="ui-chip ui-chip-muted">💳 {eventCostLabel(event)}</span>
+          <span className="ui-chip ui-chip-muted">⚡ Rewards TBC</span>
+          {isRatingRelevant(event) ? <span className="ui-chip ui-chip-navy">⭐ Rating relevant</span> : null}
         </div>
 
         <div className="mt-4 grid gap-3 lg:grid-cols-[auto_1fr] lg:items-end">
@@ -608,9 +608,7 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
   const message = errorMessage(searchParams?.error);
 
   return (
-    <PageShell eyebrow="Events" title="Events">
-      <p className="-mt-3 mb-5 max-w-2xl text-sm font-medium text-slate-600">Find matchplay, competitions and events suited to your players.</p>
-
+    <PageShell eyebrow="Events" subtitle="Find matchplay, competitions and events suited to your players." title="Events">
       <StatusAlert
         className="mb-5"
         message={
@@ -729,7 +727,7 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
             })}
           </div>
         ) : (
-          <p className="mt-5 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">No event entries yet. Choose an open event below to get started.</p>
+          <p className="ui-empty-card mt-5">No event entries yet. Choose an open event below to get started.</p>
         )}
       </section>
 

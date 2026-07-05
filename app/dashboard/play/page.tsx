@@ -371,8 +371,8 @@ function ImpactChips({ type }: { type: "close" | "stronger" }) {
 
   return (
     <div className="flex flex-wrap gap-2 text-xs">
-      <span className="rounded bg-emerald-50 px-2.5 py-1 font-bold text-emerald-700">⭐ Win {win}</span>
-      <span className="rounded bg-rose-50 px-2.5 py-1 font-bold text-rose-700">↘ Loss {loss}</span>
+      <span className="ui-chip ui-chip-success">⭐ Win {win}</span>
+      <span className="ui-chip bg-rose-50 text-rose-700">↘ Loss {loss}</span>
     </div>
   );
 }
@@ -421,8 +421,8 @@ function SuggestionCard({
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-court-navy">
-          {confidence ? <span className="rounded bg-court-mist px-2 py-1">🛡️ {formatLabel(confidence)}</span> : null}
-          {typeof matchCount === "number" ? <span className="rounded bg-slate-100 px-2 py-1">🎾 {countLabel(matchCount, "match", "matches")}</span> : null}
+          {confidence ? <span className="ui-chip ui-chip-brand">🛡️ {formatLabel(confidence)}</span> : null}
+          {typeof matchCount === "number" ? <span className="ui-chip ui-chip-muted">🎾 {countLabel(matchCount, "match", "matches")}</span> : null}
         </div>
         <div className={`mt-4 rounded border p-3 ${challenge.tint} ${challenge.border}`}>
           <div className="flex flex-wrap items-center gap-2">
@@ -831,12 +831,10 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
   const availableSlots = slotsForDate(selectedDate).filter((slot) => new Date(slot.startTime).getTime() > Date.now() && !bookedSlotTimes.has(new Date(slot.startTime).toISOString()));
 
   return (
-    <PageShell eyebrow="Play" title="Play">
+    <PageShell eyebrow="Play" subtitle="Challenge players, send invites and track upcoming matches." title="Play">
       <StatusAlert className="mb-5" message={inviteMessage(searchParams?.invite)} tone="success" />
       <StatusAlert className="mb-5" message={resultMessage(searchParams?.result)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
-
-      <p className="mb-6 max-w-2xl text-sm leading-6 text-slate-600">Start a match, find a challenge, see what you can earn, and track upcoming matches.</p>
 
       <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <ActionCard action="Send Invite" description="Already booked? Invite someone to play." href="#new-invite" icon="📩" meta={countLabel(bookings.length, "booking")} title="New Invite" tone="teal" />
@@ -897,7 +895,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
                 <h3 className="text-lg font-black text-court-navy">Close Match</h3>
                 <p className="mt-1 text-sm text-slate-600">A balanced challenge near your level.</p>
               </div>
-              <span className="rounded bg-emerald-50 px-2 py-1 text-xs font-black uppercase tracking-wide text-emerald-700">🟢 Balanced</span>
+              <span className="ui-chip ui-chip-success">🟢 Balanced</span>
             </div>
             {closeSuggestions.length > 0 ? (
               <div className="mt-3 grid gap-3">
@@ -906,7 +904,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
                 ))}
               </div>
             ) : (
-              <div className="mt-3 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              <div className="ui-empty-card mt-3">
                 No close matches found yet. Try searching by name or choose another linked player.
               </div>
             )}
@@ -918,7 +916,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
                 <h3 className="text-lg font-black text-court-navy">Stronger Challenge</h3>
                 <p className="mt-1 text-sm text-slate-600">Test yourself against a stronger player.</p>
               </div>
-              <span className="rounded bg-court-navy px-2 py-1 text-xs font-black uppercase tracking-wide text-white">🔵 Higher reward</span>
+              <span className="ui-chip ui-chip-navy">🔵 Higher reward</span>
             </div>
             {strongerSuggestions.length > 0 ? (
               <div className="mt-3 grid gap-3">
@@ -927,7 +925,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
                 ))}
               </div>
             ) : (
-              <div className="mt-3 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+              <div className="ui-empty-card mt-3">
                 No stronger challenges available right now. Check back later or search for a player by name.
               </div>
             )}
@@ -953,7 +951,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
             ))}
           </div>
         ) : (
-          <div className="mt-5 rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="ui-empty-card mt-5">
             No upcoming matches yet. Send a challenge or accept an invite to get started.
           </div>
         )}
