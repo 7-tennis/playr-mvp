@@ -5,94 +5,309 @@ import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
 import { formatDate, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import type { JuniorAchievement, JuniorRatingHistory, MatchVerificationStatus, PlayerLevel, Profile, Rating, RatingChange, Sport } from "@/types/courtside";
+import type { MemberStatus, PlayerLevel, Profile, Sport } from "@/types/courtside";
 
 export const dynamic = "force-dynamic";
 
 const sports: Sport[] = ["tennis", "pickleball", "futsal", "multi_sport"];
 const playerLevels: PlayerLevel[] = ["beginner", "social", "intermediate", "club_competitive", "advanced", "unknown"];
 
-type MatchHistoryRow = {
-  id: string;
-  winner_profile_id: string;
-  score_text: string;
-  verification_status: MatchVerificationStatus;
-  confirmed_at: string | null;
-  submitted_at: string;
-  inviter_profile_id: string;
-  inviter_first_name: string;
-  inviter_last_name: string;
-  inviter_is_junior: boolean;
-  opponent_profile_id: string;
-  opponent_first_name: string;
-  opponent_last_name: string;
-  opponent_is_junior: boolean;
-  booking_start_time: string | null;
-  booking_court_name: string | null;
+type ProfilePageProps = {
+  searchParams?: {
+    error?: string;
+    member?: string;
+  };
 };
 
-type RatingRow = Rating & {
-  profiles: Pick<Profile, "first_name" | "last_name" | "is_junior"> | null;
-};
+function profileName(profile: Pick<Profile, "first_name" | "last_name"> | null) {
+  return profile ? `${profile.first_name} ${profile.last_name}` : "Create your profile";
+}
 
-type RatingChangeRow = RatingChange & {
-  profiles: Pick<Profile, "first_name" | "last_name" | "is_junior"> | null;
-};
+function profileInitials(profile: Pick<Profile, "first_name" | "last_name"> | null) {
+  if (!profile) {
+    return "PR";
+  }
 
-type JuniorProgressProfile = Pick<
-  Profile,
-  | "id"
-  | "first_name"
-  | "last_name"
-  | "date_of_birth"
-  | "primary_sport"
-  | "player_level"
-  | "junior_stage"
-  | "junior_rating"
-  | "junior_rating_confidence"
-  | "participation_score"
-  | "matches_played"
-  | "wins"
-  | "losses"
-  | "events_played"
-  | "close_matches"
-  | "stage_readiness_score"
-  | "rating_locked"
-  | "rating_notes"
-  | "member_status"
-> & {
-  junior_achievements: Pick<JuniorAchievement, "id" | "badge_name" | "category" | "earned_at">[] | null;
-  junior_rating_history: Pick<JuniorRatingHistory, "id" | "previous_rating" | "new_rating" | "change_amount" | "reason" | "created_at">[] | null;
-};
+  return `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase();
+}
 
-function provisionalRating(level: PlayerLevel | null | undefined) {
-  switch (level) {
-    case "advanced":
-      return { value: "8.0", band: "Advanced" };
-    case "club_competitive":
-      return { value: "6.5", band: "Club Competitive" };
-    case "intermediate":
-      return { value: "5.0", band: "Intermediate" };
-    case "social":
-      return { value: "3.5", band: "Social" };
-    case "beginner":
-      return { value: "2.0", band: "Beginner" };
+function memberStatusLabel(status: MemberStatus | null | undefined) {
+  switch (status) {
+    case "member":
+      return "Active member";
+    case "pending":
+      return "Membership pending";
+    case "inactive":
+      return "Inactive membership";
+    case "non_member":
+      return "Non-member";
     default:
-      return { value: "3.5", band: "Social" };
+      return "Membership details to be confirmed";
   }
 }
 
-function playerName(firstName: string, lastName: string, isJunior: boolean) {
-  return `${firstName} ${lastName}${isJunior ? " (junior)" : ""}`;
+function memberRole(member: Profile, parentProfile: Profile | null, juniorCount: number) {
+  if (member.is_junior) {
+    return "Linked Junior";
+  }
+
+  if (parentProfile?.id === member.id && juniorCount > 0) {
+    return "Main Member / Parent";
+  }
+
+  return "Main Member / Account Holder";
 }
 
-export default async function ProfilePage({ searchParams }: { searchParams?: { error?: string } }) {
+function memberHref(member: Profile) {
+  return `/dashboard/profile?member=${member.id}#member-details`;
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded bg-slate-50 p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 break-words font-black text-court-navy">{value}</p>
+    </div>
+  );
+}
+
+function MemberAvatar({ member }: { member: Profile | null }) {
+  const accent = member?.is_junior ? playrAccentForJuniorStage(member.junior_stage) : playrAccents.member;
+
+  return <div className={`grid h-14 w-14 shrink-0 place-items-center rounded-lg text-sm font-black ${accent.avatar}`}>{profileInitials(member)}</div>;
+}
+
+function MemberSummaryCard({ profile, juniorCount }: { profile: Profile | null; juniorCount: number }) {
+  const name = profileName(profile);
+
+  return (
+    <section className={`overflow-hidden rounded-lg border bg-white shadow-court ${playrAccents.member.border}`}>
+      <div className={`h-1.5 ${playrAccents.member.strip}`} />
+      <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <MemberAvatar member={profile} />
+          <div className="min-w-0">
+            <h2 className="text-2xl font-black text-court-navy sm:text-3xl">{name}</h2>
+            <span className={`ui-chip mt-2 ${playrAccents.member.badge}`}>{profile ? memberRole(profile, profile, juniorCount) : "Account Holder"}</span>
+            <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
+              <span className="ui-chip ui-chip-muted">🎾 No club linked yet</span>
+              <span className="ui-chip ui-chip-muted">💳 {profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"}</span>
+              <span className="ui-chip ui-chip-muted">🔁 Renewal date to be confirmed</span>
+              <span className={profile?.member_status === "member" ? "ui-chip ui-chip-success" : "ui-chip ui-chip-brand"}>
+                {profile ? formatLabel(profile.member_status) : "Profile setup needed"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <Link className="btn-secondary" href={profile ? memberHref(profile) : "#account-details"}>
+          View Details
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function MembershipCard({ profile, juniorCount }: { profile: Profile | null; juniorCount: number }) {
+  return (
+    <article className="surface-card overflow-hidden">
+      <div className="h-1.5 bg-court-teal" />
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="section-kicker">Membership</p>
+            <h3 className="mt-1 text-xl font-black text-court-navy">Membership setup</h3>
+            <p className="mt-1 text-sm text-slate-600">{profile ? profileName(profile) : "Main member"}</p>
+          </div>
+          <span className="ui-chip ui-chip-brand">Private</span>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
+          <span className="ui-chip ui-chip-muted">💳 {profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"}</span>
+          <span className="ui-chip ui-chip-muted">🎾 No club linked yet</span>
+          <span className="ui-chip ui-chip-muted">🔁 Renewal date to be confirmed</span>
+          <span className="ui-chip ui-chip-muted">👥 {juniorCount + (profile ? 1 : 0)} linked</span>
+        </div>
+        <div className="ui-empty-card mt-4">Pricing, renewal rules and membership type will be confirmed by your club.</div>
+      </div>
+    </article>
+  );
+}
+
+function BenefitChip({ icon, label }: { icon: string; label: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <p className="font-black text-court-navy">
+        <span aria-hidden="true" className="mr-2">
+          {icon}
+        </span>
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function LinkedMemberCard({ member, parentProfile, juniorCount }: { member: Profile; parentProfile: Profile | null; juniorCount: number }) {
+  const accent = member.is_junior ? playrAccentForJuniorStage(member.junior_stage) : playrAccents.member;
+
+  return (
+    <Link className="group block rounded-lg focus-ring" href={memberHref(member)}>
+      <article className={`overflow-hidden rounded-lg border bg-white shadow-sm transition group-hover:-translate-y-0.5 group-hover:shadow-court group-hover:ring-4 ${accent.border} ${accent.ring}`}>
+        <div className={`h-1.5 ${accent.strip}`} />
+        <div className="p-4">
+          <div className="flex gap-3">
+            <MemberAvatar member={member} />
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-lg font-black text-court-navy">{profileName(member)}</h3>
+              <p className="mt-1 text-sm font-bold text-slate-600">{memberRole(member, parentProfile, juniorCount)}</p>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className={`ui-chip ${accent.badge}`}>{member.is_junior ? `🏷 ${playrJuniorStageLabel(member.junior_stage)}` : "💳 Main Member"}</span>
+            <span className="ui-chip ui-chip-muted">🎾 No club linked yet</span>
+            {member.is_junior ? <span className="ui-chip ui-chip-muted">🏫 School to be confirmed</span> : null}
+          </div>
+        </div>
+      </article>
+    </Link>
+  );
+}
+
+function PrivateMemberDetails({ member, parentProfile, juniorCount, loginEmail }: { member: Profile | null; parentProfile: Profile | null; juniorCount: number; loginEmail: string | null }) {
+  if (!member) {
+    return (
+      <section className="surface-card p-5" id="member-details">
+        <h2 className="section-title">Private Member Details</h2>
+        <div className="ui-empty-card mt-4">Create your profile to view private member details.</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="surface-card p-5 sm:p-6" id="member-details">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex gap-3">
+          <MemberAvatar member={member} />
+          <div>
+            <p className="section-kicker">Private Details</p>
+            <h2 className="section-title mt-1">{profileName(member)}</h2>
+            <p className="mt-1 text-sm font-bold text-slate-600">{memberRole(member, parentProfile, juniorCount)}</p>
+          </div>
+        </div>
+        <Link className="btn-secondary" href={`/dashboard/players/${member.id}`}>
+          Open Player Card
+        </Link>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <DetailRow label="Email" value={member.is_junior ? member.email ?? "No junior email linked" : member.email ?? loginEmail ?? "No email linked"} />
+        <DetailRow label="Phone" value={member.phone ?? "Phone number not set"} />
+        <DetailRow label="Date of Birth" value={member.date_of_birth ? formatDate(member.date_of_birth) : "Date of birth not set"} />
+        <DetailRow label="Role" value={memberRole(member, parentProfile, juniorCount)} />
+        <DetailRow label="Membership Status" value={memberStatusLabel(member.member_status)} />
+        <DetailRow label="Membership Type" value="Membership details to be confirmed" />
+        <DetailRow label="Renewal Date" value="Renewal date to be confirmed" />
+        <DetailRow label="Club" value="No club linked yet" />
+        <DetailRow label="Primary Sport" value={formatLabel(member.primary_sport)} />
+        <DetailRow label="Player Level" value={formatLabel(member.player_level)} />
+        {member.is_junior ? <DetailRow label="Junior Stage" value={playrJuniorStageLabel(member.junior_stage)} /> : null}
+        {member.is_junior ? <DetailRow label="Junior Rating" value={formatJuniorRating(member.junior_stage, member.junior_rating)} /> : null}
+        {member.is_junior ? <DetailRow label="School" value="School to be confirmed" /> : null}
+      </div>
+
+      <div className="mt-5 rounded-lg border border-court-teal/25 bg-court-mist p-4 text-sm leading-6 text-court-navy">
+        Private profile information is only shown inside this signed-in dashboard. Public profile photos and junior consent settings are not enabled in this MVP.
+      </div>
+    </section>
+  );
+}
+
+function AccountDetailsForm({
+  profile,
+  userEmail,
+  defaultPhone,
+  defaultMarketingConsent
+}: {
+  profile: Profile | null;
+  userEmail: string | null;
+  defaultPhone: string;
+  defaultMarketingConsent: boolean;
+}) {
+  return (
+    <form action={saveOwnProfile} className="surface-card grid gap-4 p-5 sm:p-6 md:grid-cols-2" id="account-details">
+      <div className="md:col-span-2">
+        <p className="section-kicker">Account Details</p>
+        <h2 className="section-title mt-2">Private member details</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Keep your account holder details current for club communication, bookings and event entries.</p>
+      </div>
+      <label className="text-sm font-semibold text-slate-700">
+        First name <span className="font-normal text-slate-500">(required)</span>
+        <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.first_name ?? ""} name="first_name" required type="text" />
+      </label>
+      <label className="text-sm font-semibold text-slate-700">
+        Last name <span className="font-normal text-slate-500">(required)</span>
+        <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.last_name ?? ""} name="last_name" required type="text" />
+      </label>
+      <label className="text-sm font-semibold text-slate-700">
+        Login email
+        <input className="mt-2 w-full rounded border border-slate-300 bg-slate-50 px-3 py-2 text-slate-600" defaultValue={userEmail ?? profile?.email ?? ""} name="email" readOnly type="email" />
+      </label>
+      <label className="text-sm font-semibold text-slate-700">
+        Phone number <span className="font-normal text-slate-500">(optional)</span>
+        <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultPhone} name="phone" type="tel" />
+      </label>
+      <label className="text-sm font-semibold text-slate-700">
+        Date of birth <span className="font-normal text-slate-500">(optional)</span>
+        <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.date_of_birth ?? ""} name="date_of_birth" type="date" />
+      </label>
+      <label className="text-sm font-semibold text-slate-700">
+        Primary sport
+        <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.primary_sport ?? "tennis"} name="primary_sport">
+          {sports.map((sport) => (
+            <option key={sport} value={sport}>
+              {formatLabel(sport)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+        Player level
+        <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.player_level ?? "unknown"} name="player_level">
+          {playerLevels.map((level) => (
+            <option key={level} value={level}>
+              {formatLabel(level)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+        <span className="flex gap-3 text-sm leading-6 text-slate-700">
+          <input className="mt-1 h-4 w-4 rounded border-slate-300" defaultChecked={defaultMarketingConsent} name="marketing_consent" type="checkbox" />
+          <span>I agree to receive optional PlayR marketing updates. This is separate from important account and club communication.</span>
+        </span>
+      </label>
+      <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+        Notes <span className="font-normal text-slate-500">(optional)</span>
+        <textarea
+          className="mt-2 min-h-24 w-full rounded border border-slate-300 px-3 py-2 focus-ring"
+          defaultValue={profile?.notes ?? ""}
+          name="notes"
+          placeholder="Optional profile notes, medical/payment context, or parent/guardian notes if relevant."
+        />
+      </label>
+      <SubmitButton className="rounded bg-court-blue px-4 py-3 font-bold text-white md:col-span-2" pendingText="Saving profile...">
+        Save Profile
+      </SubmitButton>
+    </form>
+  );
+}
+
+export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   if (!hasSupabaseConfig()) {
     return (
-      <PageShell eyebrow="Player Profile" title="Supabase is not configured.">
-        <div className="rounded-lg border border-slate-200 bg-white p-6">
+      <PageShell eyebrow="Profile" title="Supabase is not configured.">
+        <div className="empty-state">
           <p className="text-slate-700">Add Supabase environment variables to create or edit a player profile.</p>
         </div>
       </PageShell>
@@ -119,356 +334,111 @@ export default async function ProfilePage({ searchParams }: { searchParams?: { e
   const { data: juniorData } = profile
     ? await supabase
         .from("profiles")
-        .select("id,first_name,last_name,date_of_birth,primary_sport,player_level,junior_stage,junior_rating,junior_rating_confidence,participation_score,matches_played,wins,losses,events_played,close_matches,stage_readiness_score,rating_locked,rating_notes,member_status,junior_achievements(id,badge_name,category,earned_at),junior_rating_history(id,previous_rating,new_rating,change_amount,reason,created_at)")
+        .select("*")
         .eq("parent_profile_id", profile.id)
         .eq("is_junior", true)
         .order("first_name", { ascending: true })
     : { data: [] };
 
-  const juniors = (juniorData ?? []) as unknown as JuniorProgressProfile[];
+  const juniors = (juniorData ?? []) as Profile[];
+  const members = [...(profile ? [profile] : []), ...juniors];
+  const selectedMember = members.find((member) => member.id === searchParams?.member) ?? profile;
   const userMetadata = user.user_metadata as { phone?: string | null; marketing_consent?: boolean | null };
   const defaultPhone = profile?.phone ?? userMetadata.phone ?? "";
   const defaultMarketingConsent = profile?.marketing_consent ?? Boolean(userMetadata.marketing_consent);
-  const rating = provisionalRating(profile?.player_level);
-  const { data: matchHistoryData } = profile ? await supabase.rpc("matches_for_user") : { data: [] };
-  const verifiedMatches = ((matchHistoryData ?? []) as MatchHistoryRow[])
-    .filter((match) => match.verification_status === "verified" || match.verification_status === "admin_verified")
-    .slice(0, 6);
-  const profileIds = profile ? [profile.id, ...juniors.map((junior) => junior.id)] : [];
-  const [{ data: ratingData, error: ratingError }, { data: ratingChangeData, error: ratingChangeError }] =
-    profileIds.length > 0
-      ? await Promise.all([
-          supabase
-            .from("ratings")
-            .select("*,profiles:profile_id(first_name,last_name,is_junior)")
-            .in("profile_id", profileIds)
-            .order("verified_match_count", { ascending: false }),
-          supabase
-            .from("rating_changes")
-            .select("*,profiles:profile_id(first_name,last_name,is_junior)")
-            .in("profile_id", profileIds)
-            .order("created_at", { ascending: false })
-            .limit(8)
-        ])
-      : [{ data: [], error: null }, { data: [], error: null }];
-
-  if (ratingError) {
-    console.error("CourtSide profile ratings load failed", { userId: user.id, error: ratingError });
-  }
-  if (ratingChangeError) {
-    console.error("CourtSide profile rating changes load failed", { userId: user.id, error: ratingChangeError });
-  }
-
-  const ratingRows = ratingError ? [] : ((ratingData ?? []) as unknown as RatingRow[]);
-  const ratingChanges = ratingChangeError ? [] : ((ratingChangeData ?? []) as unknown as RatingChangeRow[]);
-  const adultRating = profile ? ratingRows.find((row) => row.profile_id === profile.id) : null;
-  const ratingValue = adultRating ? adultRating.rating_value.toFixed(1) : rating.value;
-  const ratingStatus = adultRating?.provisional ?? true;
-  const ratingConfidence = adultRating ? formatLabel(adultRating.confidence) : "Low";
-  const ratingMatchCount = adultRating?.verified_match_count ?? 0;
-  const ratingChangeByMatchId = new Map(ratingChanges.map((change) => [change.match_id, change]));
 
   return (
-    <PageShell eyebrow="Profile" subtitle="Manage your account, players and PlayR settings." title="Profile">
+    <PageShell eyebrow="Profile" subtitle="Manage memberships, linked members and account details." title="Profile">
       <StatusAlert
-        className="mb-4 max-w-3xl"
+        className="mb-5"
         message={
           searchParams?.error === "missing_name"
             ? "First name and last name are required."
             : searchParams?.error === "parent_profile_required"
               ? "Create your adult profile before adding junior profiles."
-            : searchParams?.error === "save_failed"
-              ? "Profile could not be saved. Please check your details and try again."
-              : null
+              : searchParams?.error === "save_failed"
+                ? "Profile could not be saved. Please check your details and try again."
+                : null
         }
         tone="error"
       />
+
       {!profile ? (
-        <div className="mb-5 max-w-3xl rounded-lg border border-court-teal/30 bg-court-mist p-4 text-sm leading-6 text-court-navy shadow-sm">
-          Complete your Player Profile before entering events. You can add junior players after your own profile is saved.
+        <div className="mb-5 rounded-lg border border-court-teal/30 bg-court-mist p-4 text-sm leading-6 text-court-navy shadow-sm">
+          Complete your main member profile first. Membership, linked members and private account details will appear here.
         </div>
       ) : null}
-      <section className="mb-5 grid max-w-3xl gap-4 md:grid-cols-[0.8fr_1.2fr]" id="progress">
-        <div className="rounded-lg bg-court-navy p-5 text-white">
-          <p className="text-sm font-black uppercase tracking-wide text-court-lime">PlayR Rating</p>
-          <p className="mt-3 text-5xl font-black">{ratingValue}</p>
-          <p className="mt-1 text-sm font-bold text-blue-50">{ratingStatus ? "Provisional" : "Verified"} / {ratingConfidence} confidence</p>
-          <p className="mt-3 text-sm leading-6 text-blue-50">
-            {ratingMatchCount} verified match{ratingMatchCount === 1 ? "" : "es"}. {adultRating ? "Calculated from verified match results only." : `Starting estimate: ${rating.band}.`}
-          </p>
-        </div>
-        <div className="surface-card p-5">
-          <p className="section-kicker">Progress</p>
-          <h2 className="section-title mt-2">Rating summary</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Ratings move only after verified or admin-verified match results. Casual matches and disputed results do not change ratings. New ratings stay provisional until 8 verified matches.
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded bg-court-mist p-3">
-              <p className="text-lg font-black text-court-navy">{ratingValue}</p>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Current rating</p>
-            </div>
-            <div className="rounded bg-slate-50 p-3">
-              <p className="text-lg font-black text-court-navy">{ratingConfidence}</p>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Confidence</p>
-            </div>
-            <div className="rounded bg-slate-50 p-3">
-              <p className="text-lg font-black text-court-navy">{ratingMatchCount}</p>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Verified matches</p>
-            </div>
+
+      <div className="grid gap-6">
+        <MemberSummaryCard juniorCount={juniors.length} profile={profile} />
+
+        <section>
+          <div className="mb-4">
+            <p className="section-kicker">Memberships</p>
+            <h2 className="section-title mt-2">Membership setup</h2>
           </div>
-          {ratingRows.filter((row) => row.profile_id !== profile?.id).length > 0 ? (
-            <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
-              <p className="text-sm font-black text-court-navy">Linked junior ratings</p>
-              <div className="mt-3 grid gap-2">
-                {ratingRows
-                  .filter((row) => row.profile_id !== profile?.id)
-                  .map((row) => (
-                    <div className="flex items-center justify-between gap-3 text-sm" key={row.profile_id}>
-                      <span className="font-bold text-slate-700">
-                        {row.profiles ? playerName(row.profiles.first_name, row.profiles.last_name, row.profiles.is_junior) : "Linked junior"}
-                      </span>
-                    <span className="font-black text-court-navy">
-                        {row.profiles?.is_junior ? "Junior pathway" : `${row.rating_value.toFixed(1)} / ${formatLabel(row.confidence)}`}
-                      </span>
-                    </div>
-                  ))}
+          <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+            <MembershipCard juniorCount={juniors.length} profile={profile} />
+            <section className="surface-card p-5">
+              <p className="section-kicker">Benefits</p>
+              <h3 className="mt-1 text-xl font-black text-court-navy">Membership benefits</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Benefits may depend on your club membership setup. Your club can confirm exact inclusions, discounts and renewal rules.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <BenefitChip icon="🏟" label="Court booking access" />
+                <BenefitChip icon="🎟" label="Club event access" />
+                <BenefitChip icon="⭐" label="PlayR rating access" />
+                <BenefitChip icon="⚡" label="Participation tracking" />
+                <BenefitChip icon="🏅" label="Badges and achievements" />
+                <BenefitChip icon="👥" label="Linked junior profiles" />
               </div>
+            </section>
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="section-kicker">Linked Members</p>
+              <h2 className="section-title mt-2">Family and member links</h2>
             </div>
-          ) : null}
-          {ratingChanges.length > 0 ? (
-            <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
-              <p className="text-sm font-black text-court-navy">Recent rating changes</p>
-              <div className="mt-3 grid gap-2">
-                {ratingChanges.slice(0, 4).map((change) => (
-                  <div className="flex flex-col gap-1 rounded bg-white p-3 text-sm sm:flex-row sm:items-center sm:justify-between" key={change.id}>
-                    <span className="font-bold text-slate-700">
-                      {change.profiles ? playerName(change.profiles.first_name, change.profiles.last_name, change.profiles.is_junior) : "Player"}: {change.rating_before.toFixed(1)} to {change.rating_after.toFixed(1)}
-                    </span>
-                    <span className={change.rating_delta >= 0 ? "font-black text-emerald-700" : "font-black text-rose-700"}>
-                      {change.rating_delta > 0 ? "+" : ""}{change.rating_delta.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            <Link className="btn-secondary" href="/dashboard/juniors">
+              Manage Juniors
+            </Link>
+          </div>
+
+          {members.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {members.map((member) => (
+                <LinkedMemberCard juniorCount={juniors.length} key={member.id} member={member} parentProfile={profile} />
+              ))}
             </div>
           ) : (
-            <div className="ui-empty-card mt-4">
-              No rating changes yet. Send a verified match invite, submit the result, and ask the other side to confirm it to create the first movement.
-            </div>
+            <div className="ui-empty-card">No linked members yet. Create your profile first, then add junior profiles from the Juniors page.</div>
           )}
-        </div>
-      </section>
-      <section className="surface-card mb-5 max-w-3xl p-5">
-        <p className="section-kicker">Verified match history</p>
-        <h2 className="section-title mt-2">Recent verified matches</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          These are matches where the result was confirmed by the other side or by an admin. Rating movement appears when the match was eligible for ratings.
-        </p>
-          {verifiedMatches.length > 0 ? (
-            <div className="mt-4 grid gap-3">
-              {verifiedMatches.map((match) => {
-                const winnerName =
-                  match.winner_profile_id === match.inviter_profile_id
-                    ? playerName(match.inviter_first_name, match.inviter_last_name, match.inviter_is_junior)
-                    : playerName(match.opponent_first_name, match.opponent_last_name, match.opponent_is_junior);
-                const ratingChange = ratingChangeByMatchId.get(match.id);
+        </section>
 
-                return (
-                  <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm" key={match.id}>
-                    <p className="font-black text-court-navy">
-                      {playerName(match.inviter_first_name, match.inviter_last_name, match.inviter_is_junior)} vs{" "}
-                      {playerName(match.opponent_first_name, match.opponent_last_name, match.opponent_is_junior)}
-                    </p>
-                    <p className="mt-1 text-slate-600">
-                      Winner: {winnerName} / {match.score_text}
-                    </p>
-                    {ratingChange ? (
-                      <p className="mt-1 text-slate-600">
-                        Rating: {ratingChange.rating_before.toFixed(1)} to {ratingChange.rating_after.toFixed(1)} ({ratingChange.rating_delta > 0 ? "+" : ""}{ratingChange.rating_delta.toFixed(2)})
-                      </p>
-                    ) : null}
-                    <p className="mt-1 text-xs text-slate-500">
-                      {match.booking_start_time ? formatDate(match.booking_start_time) : formatDate(match.confirmed_at ?? match.submitted_at)}
-                      {match.booking_court_name ? ` / ${match.booking_court_name}` : ""}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="ui-empty-card mt-4">
-              No verified match history yet. Accepted match invite results will appear here once both sides confirm.
-            </div>
-          )}
-      </section>
-      <form action={saveOwnProfile} className="surface-card grid w-full max-w-3xl gap-4 p-5 sm:p-6 md:grid-cols-2">
-        <label className="text-sm font-semibold text-slate-700">
-          First name <span className="font-normal text-slate-500">(required)</span>
-          <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.first_name ?? ""} name="first_name" required type="text" />
-        </label>
-        <label className="text-sm font-semibold text-slate-700">
-          Last name <span className="font-normal text-slate-500">(required)</span>
-          <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.last_name ?? ""} name="last_name" required type="text" />
-        </label>
-        <label className="text-sm font-semibold text-slate-700">
-          Email address <span className="font-normal text-slate-500">(from your login)</span>
-          <input className="mt-2 w-full rounded border border-slate-300 bg-slate-50 px-3 py-2 text-slate-600" defaultValue={user.email ?? profile?.email ?? ""} name="email" readOnly type="email" />
-        </label>
-        <label className="text-sm font-semibold text-slate-700">
-          Cellphone number <span className="font-normal text-slate-500">(optional)</span>
-          <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultPhone} name="phone" type="tel" />
-          <span className="mt-2 block text-xs font-normal leading-5 text-slate-600">
-            We use your cellphone number for important account, booking, lesson, and club-related communication.
-          </span>
-        </label>
-        <label className="text-sm font-semibold text-slate-700">
-          Date of birth <span className="font-normal text-slate-500">(optional)</span>
-          <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.date_of_birth ?? ""} name="date_of_birth" type="date" />
-        </label>
-        <label className="text-sm font-semibold text-slate-700">
-          Primary sport
-          <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.primary_sport ?? "tennis"} name="primary_sport">
-            {sports.map((sport) => (
-              <option key={sport} value={sport}>
-                {formatLabel(sport)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm font-semibold text-slate-700 md:col-span-2">
-          Player level
-          <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.player_level ?? "unknown"} name="player_level">
-            {playerLevels.map((level) => (
-              <option key={level} value={level}>
-                {formatLabel(level)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm font-semibold text-slate-700 md:col-span-2">
-          <span className="flex gap-3 text-sm leading-6 text-slate-700">
-            <input className="mt-1 h-4 w-4 rounded border-slate-300" defaultChecked={defaultMarketingConsent} name="marketing_consent" type="checkbox" />
-            <span>I agree to receive optional PlayR marketing updates. This is separate from important account and club communication.</span>
-          </span>
-        </label>
-        <label className="text-sm font-semibold text-slate-700 md:col-span-2">
-          Notes <span className="font-normal text-slate-500">(optional)</span>
-          <textarea
-            className="mt-2 min-h-24 w-full rounded border border-slate-300 px-3 py-2 focus-ring"
-            defaultValue={profile?.notes ?? ""}
-            name="notes"
-            placeholder="Optional profile notes, medical/payment context, or parent/guardian notes if relevant."
-          />
-        </label>
-        <SubmitButton className="rounded bg-court-blue px-4 py-3 font-bold text-white md:col-span-2" pendingText="Saving profile...">
-          Save profile
-        </SubmitButton>
-      </form>
-      <section className="surface-card mt-6 max-w-3xl p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="section-kicker">Family & Junior Players</p>
-            <h2 className="section-title mt-2">Manage linked junior players</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Junior profiles are managed by the parent/guardian account and used for bookings, events, junior progress, and important club communication.
-            </p>
-          </div>
-          <Link className="inline-flex shrink-0 justify-center rounded bg-court-teal px-4 py-3 text-sm font-bold text-white transition hover:bg-teal-500" href="/dashboard/juniors">
-            Add junior player
-          </Link>
-        </div>
+        <PrivateMemberDetails juniorCount={juniors.length} loginEmail={user.email ?? null} member={selectedMember} parentProfile={profile} />
 
-        {!profile ? (
-          <div className="mt-5 rounded border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            Save your adult profile first. Then you can add junior profiles linked to your account.
+        <section className="surface-card p-5 sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="section-kicker">Account & Privacy</p>
+              <h2 className="section-title mt-2">Account settings</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Contact details and account preferences are private to your signed-in dashboard.</p>
+            </div>
+            <span className="ui-chip ui-chip-brand">Private</span>
           </div>
-        ) : juniors.length > 0 ? (
-          <div className="mt-5 grid gap-4">
-            {juniors.map((junior) => (
-              <div className="soft-card p-4" key={junior.id}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="font-black text-court-navy">
-                      {junior.first_name} {junior.last_name}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {formatLabel(junior.primary_sport)} / {junior.junior_stage ? formatLabel(junior.junior_stage) : "Stage not set"} / {formatLabel(junior.player_level)}
-                    </p>
-                    {junior.rating_notes ? <p className="mt-2 text-sm leading-6 text-slate-600">{junior.rating_notes}</p> : null}
-                  </div>
-                  <div className="text-left sm:text-right">
-                    <p className="text-2xl font-black text-court-navy">{formatJuniorRating(junior.junior_stage, junior.junior_rating)}</p>
-                    <p className="text-xs font-black uppercase tracking-wide text-court-teal">
-                      {formatLabel(junior.junior_rating_confidence)} confidence{junior.rating_locked ? " / Locked" : ""}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded bg-white p-3">
-                    <p className="text-xl font-black text-court-navy">{junior.participation_score}</p>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Participation</p>
-                  </div>
-                  <div className="rounded bg-white p-3">
-                    <p className="text-xl font-black text-court-navy">{junior.matches_played}</p>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Matches</p>
-                  </div>
-                  <div className="rounded bg-white p-3">
-                    <p className="text-xl font-black text-court-navy">{junior.wins}-{junior.losses}</p>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Wins-losses</p>
-                  </div>
-                  <div className="rounded bg-white p-3">
-                    <p className="text-xl font-black text-court-navy">{junior.events_played}</p>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Events</p>
-                  </div>
-                  <div className="rounded bg-white p-3">
-                    <p className="text-xl font-black text-court-navy">{junior.close_matches}</p>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Close matches</p>
-                  </div>
-                  <div className="rounded bg-white p-3">
-                    <p className="text-xl font-black text-court-navy">{junior.stage_readiness_score}%</p>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Stage readiness</p>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="rounded bg-white p-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Badges</p>
-                    {junior.junior_achievements?.length ? (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {junior.junior_achievements.slice(0, 6).map((badge) => (
-                          <span className="rounded-full bg-court-mist px-3 py-1 text-xs font-bold text-court-navy" key={badge.id}>
-                            {badge.badge_name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-slate-600">Badges appear after events, verified matches, wins, and coach-approved achievements.</p>
-                    )}
-                  </div>
-                  <div className="rounded bg-white p-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent rating history</p>
-                    {junior.junior_rating_history?.length ? (
-                      <div className="mt-2 space-y-2">
-                        {junior.junior_rating_history.slice(0, 3).map((history) => (
-                          <p className="text-sm text-slate-700" key={history.id}>
-                            {formatLabel(history.reason)}: {history.previous_rating?.toFixed(1) ?? "-"} to {history.new_rating?.toFixed(1) ?? "-"} ({history.change_amount > 0 ? "+" : ""}{history.change_amount.toFixed(2)})
-                          </p>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-slate-600">Rating history starts after a verified junior result or ClubR adjustment.</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <DetailRow label="Login Email" value={user.email ?? "Login email unavailable"} />
+            <DetailRow label="Phone" value={defaultPhone || "Phone number not set"} />
+            <DetailRow label="Notifications" value={defaultMarketingConsent ? "Marketing updates on" : "Marketing updates off"} />
+            <DetailRow label="Junior Consent" value="Consent settings coming soon" />
           </div>
-        ) : (
-          <div className="ui-empty-card mt-5">
-            No junior players linked yet. Add a junior player to book courts, enter events, and track progress for your child.
-          </div>
-        )}
-      </section>
+          <div className="ui-empty-card mt-4">More account, privacy, notification and photo-consent settings coming soon.</div>
+        </section>
+
+        <AccountDetailsForm defaultMarketingConsent={defaultMarketingConsent} defaultPhone={defaultPhone} profile={profile} userEmail={user.email ?? null} />
+      </div>
     </PageShell>
   );
 }
