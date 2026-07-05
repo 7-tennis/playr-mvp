@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createNotification } from "@/lib/notifications";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { Court, MatchInviteStatus, MatchInviteType, MatchVerificationStatus, Profile } from "@/types/courtside";
 
@@ -149,6 +150,22 @@ export async function createMatchInvite(formData: FormData) {
     }
 
     resolvedBookingId = createdBooking.id as string;
+    await createNotification(supabase, {
+      userId: user.id,
+      actorUserId: user.id,
+      profileId: inviterProfileId,
+      type: "court_booking_confirmed",
+      title: "Court booking confirmed",
+      message: "Your court booking for this match invite is confirmed.",
+      href: "/dashboard/my-bookings",
+      metadata: {
+        booking_id: resolvedBookingId,
+        profile_id: inviterProfileId,
+        court_id: (courtData as Pick<Court, "id">).id,
+        start_time: startTime.toISOString()
+      },
+      dedupeKey: `court_booking_confirmed:${resolvedBookingId}`
+    });
   } else if (bookingId) {
     const { data: booking } = await supabase
       .from("court_bookings")

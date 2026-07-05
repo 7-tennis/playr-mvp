@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createNotification } from "@/lib/notifications";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { CourtSideEvent, Profile } from "@/types/courtside";
 
@@ -110,6 +111,23 @@ export async function enterDashboardEvent(formData: FormData) {
 
     redirectWithParams(returnTo, { error: "entry_failed" });
   }
+
+  await createNotification(supabase, {
+    userId: user.id,
+    actorUserId: user.id,
+    profileId: profile.id,
+    juniorProfileId: profile.is_junior ? profile.id : null,
+    type: "event_entry_confirmed",
+    title: "Event entry confirmed",
+    message: `${profile.first_name} ${profile.last_name} is entered for ${event.title}.`,
+    href: `/dashboard/events/${event.id}`,
+    metadata: {
+      event_id: event.id,
+      event_slug: event.slug,
+      profile_id: profile.id
+    },
+    dedupeKey: `event_entry_confirmed:${event.id}:${profile.id}`
+  });
 
   revalidatePath("/dashboard/events");
   revalidatePath(`/dashboard/events/${event.id}`);

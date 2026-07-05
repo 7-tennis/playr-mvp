@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createNotification } from "@/lib/notifications";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { Court, Profile } from "@/types/courtside";
 
@@ -54,7 +55,7 @@ export async function createCourtBooking(formData: FormData) {
 
   const { data: profileData, error: profileError } = await supabase
     .from("profiles")
-    .select("id,first_name,last_name")
+    .select("id,first_name,last_name,is_junior")
     .eq("id", profileId)
     .single();
 
@@ -62,25 +63,48 @@ export async function createCourtBooking(formData: FormData) {
     redirectWithError("Choose your own profile or a linked junior profile.");
   }
 
-  const { error } = await supabase.from("court_bookings").insert({
-    court_id: (courtData as Pick<Court, "id">).id,
-    booked_by_user_id: user.id,
-    player_profile_id: (profileData as Pick<Profile, "id">).id,
-    start_time: startTime.toISOString(),
-    end_time: endTime.toISOString(),
-    status: "confirmed",
-    booking_type: "player_booking",
-    is_public: false,
-    notes: notes || null
-  });
+  const player = profileData as Pick<Profile, "id" | "first_name" | "last_name" | "is_junior">;
+  const { data: bookingData, error } = await supabase
+    .from("court_bookings")
+    .insert({
+      court_id: (courtData as Pick<Court, "id">).id,
+      booked_by_user_id: user.id,
+      player_profile_id: player.id,
+      start_time: startTime.toISOString(),
+      end_time: endTime.toISOString(),
+      status: "confirmed",
+      booking_type: "player_booking",
+      is_public: false,
+      notes: notes || null
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !bookingData) {
     console.error("CourtSide court booking failed", { courtId, profileId, startValue, error });
-    if (error.code === "23P01") {
+    if (error?.code === "23P01") {
       redirectWithError("That slot has just been booked. Choose another time.");
     }
     redirectWithError("We could not create that booking. Please try another slot.");
   }
+
+  await createNotification(supabase, {
+    userId: user.id,
+    actorUserId: user.id,
+    profileId: player.id,
+    juniorProfileId: player.is_junior ? player.id : null,
+    type: "court_booking_confirmed",
+    title: "Court booking confirmed",
+    message: `${player.first_name} ${player.last_name}'s court booking is confirmed.`,
+    href: "/dashboard/my-bookings",
+    metadata: {
+      booking_id: bookingData.id as string,
+      profile_id: player.id,
+      court_id: (courtData as Pick<Court, "id">).id,
+      start_time: startTime.toISOString()
+    },
+    dedupeKey: `court_booking_confirmed:${bookingData.id as string}`
+  });
 
   revalidatePath("/dashboard/book-court");
   revalidatePath("/dashboard/my-bookings");

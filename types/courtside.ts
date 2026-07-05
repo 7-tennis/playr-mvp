@@ -17,6 +17,20 @@ export type MatchInviteType = "casual" | "verified";
 export type MatchInviteStatus = "pending" | "accepted" | "declined" | "cancelled";
 export type MatchVerificationStatus = "pending_confirmation" | "verified" | "disputed" | "admin_verified" | "cancelled";
 export type RatingConfidence = "low" | "medium" | "high";
+export type NotificationType =
+  | "match_invite_received"
+  | "match_invite_accepted"
+  | "match_invite_declined"
+  | "match_invite_reminder"
+  | "court_booking_confirmed"
+  | "upcoming_booking_reminder"
+  | "event_entry_confirmed"
+  | "event_reminder"
+  | "rating_updated"
+  | "badge_unlocked"
+  | "leaderboard_changed"
+  | "membership_renewal"
+  | "shop_reservation_update";
 
 export interface Profile {
   id: string;
@@ -230,4 +244,20 @@ export interface JuniorAchievement {
   related_event_id: string | null;
   related_match_id: string | null;
   notes: string | null;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  actor_user_id: string | null;
+  profile_id: string | null;
+  junior_profile_id: string | null;
+  type: NotificationType;
+  title: string;
+  message: string;
+  href: string | null;
+  metadata: Record<string, unknown>;
+  dedupe_key: string | null;
+  read_at: string | null;
+  created_at: string;
 }

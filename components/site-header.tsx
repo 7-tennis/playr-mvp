@@ -6,7 +6,7 @@ import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 async function getSessionState() {
   if (!hasSupabaseConfig()) {
-    return { isLoggedIn: false, isAdmin: false };
+    return { isLoggedIn: false, isAdmin: false, unreadNotifications: 0 };
   }
 
   try {
@@ -16,18 +16,26 @@ async function getSessionState() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return { isLoggedIn: false, isAdmin: false };
+      return { isLoggedIn: false, isAdmin: false, unreadNotifications: 0 };
     }
 
-    const { data: adminUser } = await supabase.from("admin_users").select("id").eq("user_id", user.id).maybeSingle();
-    return { isLoggedIn: true, isAdmin: Boolean(adminUser) };
+    const [{ data: adminUser }, { count: unreadCount }] = await Promise.all([
+      supabase.from("admin_users").select("id").eq("user_id", user.id).maybeSingle(),
+      supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .is("read_at", null)
+    ]);
+
+    return { isLoggedIn: true, isAdmin: Boolean(adminUser), unreadNotifications: unreadCount ?? 0 };
   } catch {
-    return { isLoggedIn: false, isAdmin: false };
+    return { isLoggedIn: false, isAdmin: false, unreadNotifications: 0 };
   }
 }
 
 export async function SiteHeader() {
-  const { isLoggedIn, isAdmin } = await getSessionState();
+  const { isLoggedIn, isAdmin, unreadNotifications } = await getSessionState();
   const brandHref = isLoggedIn ? "/dashboard" : "/";
 
   return (
@@ -54,11 +62,27 @@ export async function SiteHeader() {
 
           <div className="flex items-center gap-2">
             {isLoggedIn ? (
-              <form action={signOut}>
-                <button className="rounded bg-court-blue px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700" type="submit">
-                  Sign out
-                </button>
-              </form>
+              <>
+                <Link
+                  aria-label={unreadNotifications > 0 ? `${unreadNotifications} unread notifications` : "Notifications"}
+                  className="relative inline-flex h-10 w-10 items-center justify-center rounded border border-slate-200 bg-white text-court-navy shadow-sm transition hover:border-court-teal hover:bg-court-mist"
+                  href="/dashboard/notifications"
+                >
+                  <span aria-hidden="true" className="text-base">
+                    🔔
+                  </span>
+                  {unreadNotifications > 0 ? (
+                    <span className="absolute -right-1 -top-1 min-w-[1.25rem] rounded-full bg-court-teal px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white ring-2 ring-white">
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </span>
+                  ) : null}
+                </Link>
+                <form action={signOut}>
+                  <button className="rounded bg-court-blue px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700" type="submit">
+                    Sign out
+                  </button>
+                </form>
+              </>
             ) : (
               <>
                 <Link className="rounded px-3 py-2 text-sm font-semibold text-court-navy transition hover:bg-court-mist" href="/login">
