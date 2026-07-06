@@ -2,6 +2,20 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { enterDashboardEvent, withdrawDashboardEventEntry } from "@/app/dashboard/events/actions";
 import { PageShell } from "@/components/page-shell";
+import {
+  ClubIcon,
+  CostIcon,
+  EntriesIcon,
+  EventIcon,
+  LeaderboardIcon,
+  LocationIcon,
+  ParticipationIcon,
+  RatingIcon,
+  SchoolIcon,
+  StatusIcon,
+  TagIcon,
+  TicketIcon
+} from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDate, formatDateTime, formatJuniorStage, formatLabel, formatPrice } from "@/lib/courtside-format";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
@@ -204,30 +218,44 @@ function hostLabel(event: CourtSideEvent) {
   const text = eventText(event);
 
   if (text.includes("school")) {
-    return "🏫 School Event";
+    return "School Event";
   }
 
   if (text.includes("district")) {
-    return "🏆 District Event";
+    return "District Event";
   }
 
   if (text.includes("club")) {
-    return "🏟 Club Event";
+    return "Club Event";
   }
 
   if (text.includes("academy")) {
-    return "🎾 Academy Event";
+    return "Academy Event";
   }
 
   if (text.includes("coach")) {
-    return "🎾 Coach Event";
+    return "Coach Event";
   }
 
   if (text.includes("playr")) {
-    return "🎾 PlayR Event";
+    return "PlayR Event";
   }
 
   return null;
+}
+
+function hostIcon(event: CourtSideEvent) {
+  const text = eventText(event);
+
+  if (text.includes("school")) {
+    return <SchoolIcon size={14} />;
+  }
+
+  if (text.includes("district")) {
+    return <LeaderboardIcon size={14} />;
+  }
+
+  return <ClubIcon size={14} />;
 }
 
 function isRatingRelevant(event: CourtSideEvent) {
@@ -351,10 +379,10 @@ function activeEntryStatus(entries: CurrentEntry[]) {
   }
 
   if (entries.some((entry) => entry.payment_status !== "paid")) {
-    return "⏳ Payment pending";
+    return "Payment pending";
   }
 
-  return entries.length === 1 ? "✅ Entered" : `✅ ${entries.length} entered`;
+  return entries.length === 1 ? "Entered" : `${entries.length} entered`;
 }
 
 function entryPlayerLabel(entry: CurrentEntry) {
@@ -384,20 +412,40 @@ function SpotlightEventCard({
         <div>
           <p className="text-sm font-black text-court-teal">{label}</p>
           <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className={`grid h-14 w-14 shrink-0 place-items-center rounded ${visual.icon} text-xl font-black`}>🎾</div>
+            <div className={`grid h-14 w-14 shrink-0 place-items-center rounded ${visual.icon} text-xl font-black`}>
+              <EventIcon size={24} />
+            </div>
             <div className="min-w-0">
               <h2 className="text-2xl font-black text-court-navy sm:text-3xl">{event.title}</h2>
               {profile ? <p className="mt-1 text-sm font-bold text-slate-600">Best fit for {profileName(profile)}</p> : null}
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
-            <span className={`ui-chip ${visual.badge}`}>🏷 {eventAudienceLabel(event)}</span>
-            {host ? <span className="ui-chip ui-chip-muted">{host}</span> : null}
-            <span className="ui-chip ui-chip-muted">📅 {formatDate(event.start_datetime)}</span>
-            <span className="ui-chip ui-chip-muted">👥 {event.entry_count ?? 0} entered</span>
-            <span className="ui-chip ui-chip-muted">💳 {eventCostLabel(event)}</span>
-            <span className="ui-chip ui-chip-muted">⚡ Rewards TBC</span>
-            {isRatingRelevant(event) ? <span className="ui-chip ui-chip-navy">⭐ Rating relevant</span> : null}
+            <span className={`ui-chip ${visual.badge}`}>
+              <TagIcon size={14} /> {eventAudienceLabel(event)}
+            </span>
+            {host ? (
+              <span className="ui-chip ui-chip-muted">
+                {hostIcon(event)} {host}
+              </span>
+            ) : null}
+            <span className="ui-chip ui-chip-muted">
+              <EventIcon size={14} /> {formatDate(event.start_datetime)}
+            </span>
+            <span className="ui-chip ui-chip-muted">
+              <EntriesIcon size={14} /> {event.entry_count ?? 0} entered
+            </span>
+            <span className="ui-chip ui-chip-muted">
+              <CostIcon size={14} /> {eventCostLabel(event)}
+            </span>
+            <span className="ui-chip ui-chip-muted">
+              <ParticipationIcon size={14} /> Rewards TBC
+            </span>
+            {isRatingRelevant(event) ? (
+              <span className="ui-chip ui-chip-navy">
+                <RatingIcon size={14} /> Rating relevant
+              </span>
+            ) : null}
           </div>
         </div>
         <Link className="inline-flex justify-center rounded bg-court-teal px-5 py-3 text-sm font-black text-white transition hover:bg-teal-500" href={`/dashboard/events/${event.id}`}>
@@ -432,11 +480,19 @@ function EventCard({
       <div className={`h-1.5 ${visual.strip}`} />
       <div className="p-4 sm:p-5">
         <div className="flex gap-3">
-          <div className={`grid h-11 w-11 shrink-0 place-items-center rounded ${visual.icon} font-black`}>🎾</div>
+          <div className={`grid h-11 w-11 shrink-0 place-items-center rounded ${visual.icon} font-black`}>
+            <EventIcon size={20} />
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap gap-2">
-              <span className={`ui-chip ${visual.badge}`}>🏷 {eventAudienceLabel(event)}</span>
-              {enteredStatus ? <span className="ui-chip ui-chip-success">{enteredStatus}</span> : null}
+              <span className={`ui-chip ${visual.badge}`}>
+                <TagIcon size={14} /> {eventAudienceLabel(event)}
+              </span>
+              {enteredStatus ? (
+                <span className="ui-chip ui-chip-success">
+                  <StatusIcon size={14} /> {enteredStatus}
+                </span>
+              ) : null}
               {isFull ? <span className="ui-chip ui-chip-muted">Full</span> : null}
             </div>
             <h3 className="mt-2 text-xl font-black text-court-navy">{event.title}</h3>
@@ -444,14 +500,34 @@ function EventCard({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold text-court-navy">
-          {host ? <span className="ui-chip ui-chip-muted">{host}</span> : null}
-          <span className="ui-chip ui-chip-muted">📅 {formatDateTime(event.start_datetime)}</span>
-          <span className="ui-chip ui-chip-muted">📍 {event.location ?? "Venue TBC"}</span>
-          <span className="ui-chip ui-chip-muted">👥 {event.entry_count ?? 0} entered</span>
-          <span className="ui-chip ui-chip-muted">🎟 {spotsLabel(event)}</span>
-          <span className="ui-chip ui-chip-muted">💳 {eventCostLabel(event)}</span>
-          <span className="ui-chip ui-chip-muted">⚡ Rewards TBC</span>
-          {isRatingRelevant(event) ? <span className="ui-chip ui-chip-navy">⭐ Rating relevant</span> : null}
+          {host ? (
+            <span className="ui-chip ui-chip-muted">
+              {hostIcon(event)} {host}
+            </span>
+          ) : null}
+          <span className="ui-chip ui-chip-muted">
+            <EventIcon size={14} /> {formatDateTime(event.start_datetime)}
+          </span>
+          <span className="ui-chip ui-chip-muted">
+            <LocationIcon size={14} /> {event.location ?? "Venue TBC"}
+          </span>
+          <span className="ui-chip ui-chip-muted">
+            <EntriesIcon size={14} /> {event.entry_count ?? 0} entered
+          </span>
+          <span className="ui-chip ui-chip-muted">
+            <TicketIcon size={14} /> {spotsLabel(event)}
+          </span>
+          <span className="ui-chip ui-chip-muted">
+            <CostIcon size={14} /> {eventCostLabel(event)}
+          </span>
+          <span className="ui-chip ui-chip-muted">
+            <ParticipationIcon size={14} /> Rewards TBC
+          </span>
+          {isRatingRelevant(event) ? (
+            <span className="ui-chip ui-chip-navy">
+              <RatingIcon size={14} /> Rating relevant
+            </span>
+          ) : null}
         </div>
 
         <div className="mt-4 grid gap-3 lg:grid-cols-[auto_1fr] lg:items-end">
@@ -705,10 +781,18 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
                         {entry.events?.title ?? "Event unavailable"}
                       </Link>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-court-navy">
-                        <span className="rounded bg-white px-2.5 py-1">🎾 {entryPlayerLabel(entry)}</span>
-                        <span className="rounded bg-white px-2.5 py-1">📅 {entry.events?.start_datetime ? formatDate(entry.events.start_datetime) : "Date TBC"}</span>
-                        <span className="rounded bg-white px-2.5 py-1">💳 {formatLabel(entry.payment_status)}</span>
-                        <span className="rounded bg-white px-2.5 py-1">🎟 {formatLabel(entry.entry_status)}</span>
+                        <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1">
+                          <ClubIcon size={14} /> {entryPlayerLabel(entry)}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1">
+                          <EventIcon size={14} /> {entry.events?.start_datetime ? formatDate(entry.events.start_datetime) : "Date TBC"}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1">
+                          <CostIcon size={14} /> {formatLabel(entry.payment_status)}
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1">
+                          <TicketIcon size={14} /> {formatLabel(entry.entry_status)}
+                        </span>
                       </div>
                       {entry.payment_notes ? <p className="mt-2 text-xs font-semibold text-slate-500">{entry.payment_notes}</p> : null}
                     </div>

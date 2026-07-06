@@ -1,7 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { cancelMatchInvite, createMatchInvite, respondToMatchInvite, respondToMatchResult, submitMatchResult } from "@/app/dashboard/play/actions";
 import { PageShell } from "@/components/page-shell";
+import {
+  BadgeIcon,
+  BookingIcon,
+  ChallengeIcon,
+  CloseMatchIcon,
+  ClubIcon,
+  ConfidenceIcon,
+  EventIcon,
+  InviteIcon,
+  ParticipationIcon,
+  RatingIcon,
+  ResultIcon
+} from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
@@ -298,7 +312,7 @@ function challengeStyle(type: "close" | "stronger") {
   return type === "stronger"
     ? {
         label: "Stronger Challenge",
-        icon: "🔵",
+        icon: <ChallengeIcon size={14} />,
         description: "Test yourself against a stronger player.",
         badge: "bg-court-navy text-white",
         tint: "bg-court-navy/5",
@@ -306,7 +320,7 @@ function challengeStyle(type: "close" | "stronger") {
       }
     : {
         label: "Close Match",
-        icon: "🟢",
+        icon: <CloseMatchIcon size={14} />,
         description: "A balanced challenge near your level.",
         badge: "bg-emerald-50 text-emerald-700",
         tint: "bg-emerald-50/70",
@@ -338,7 +352,7 @@ function ActionCard({
 }: {
   description: string;
   href: string;
-  icon: string;
+  icon: ReactNode;
   title: string;
   action: string;
   meta?: string;
@@ -349,7 +363,7 @@ function ActionCard({
   return (
     <Link className="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-court-teal hover:shadow-court" href={href}>
       <div className="flex items-start gap-3">
-        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded text-xl ${styles.icon}`} aria-hidden="true">
+        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded ${styles.icon}`}>
           {icon}
         </span>
         <div className="min-w-0 flex-1">
@@ -371,8 +385,12 @@ function ImpactChips({ type }: { type: "close" | "stronger" }) {
 
   return (
     <div className="flex flex-wrap gap-2 text-xs">
-      <span className="ui-chip ui-chip-success">⭐ Win {win}</span>
-      <span className="ui-chip bg-rose-50 text-rose-700">↘ Loss {loss}</span>
+      <span className="ui-chip ui-chip-success">
+        <RatingIcon size={14} /> Win {win}
+      </span>
+      <span className="ui-chip bg-rose-50 text-rose-700">
+        <ResultIcon size={14} /> Loss {loss}
+      </span>
     </div>
   );
 }
@@ -421,13 +439,23 @@ function SuggestionCard({
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-court-navy">
-          {confidence ? <span className="ui-chip ui-chip-brand">🛡️ {formatLabel(confidence)}</span> : null}
-          {typeof matchCount === "number" ? <span className="ui-chip ui-chip-muted">🎾 {countLabel(matchCount, "match", "matches")}</span> : null}
+          {confidence ? (
+            <span className="ui-chip ui-chip-brand">
+              <ConfidenceIcon size={14} /> {formatLabel(confidence)}
+            </span>
+          ) : null}
+          {typeof matchCount === "number" ? (
+            <span className="ui-chip ui-chip-muted">
+              <ClubIcon size={14} /> {countLabel(matchCount, "match", "matches")}
+            </span>
+          ) : null}
         </div>
         <div className={`mt-4 rounded border p-3 ${challenge.tint} ${challenge.border}`}>
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded px-2.5 py-1 text-xs font-black uppercase tracking-wide ${challenge.badge}`}>
-              {challenge.icon} {challenge.label}
+              <span className="inline-flex items-center gap-1.5">
+                {challenge.icon} {challenge.label}
+              </span>
             </span>
             <span className="text-xs font-semibold text-slate-600">{challenge.description}</span>
           </div>
@@ -437,7 +465,9 @@ function SuggestionCard({
               <ImpactChips type={type} />
             </div>
             <div className="flex flex-wrap gap-2 text-xs font-bold">
-              <span className="rounded bg-white px-2.5 py-1 text-court-navy shadow-sm">⚡ Participation +15</span>
+              <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1 text-court-navy shadow-sm">
+                <ParticipationIcon size={14} /> Participation +15
+              </span>
             </div>
             <div>
               <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Possible unlocks</p>
@@ -445,7 +475,9 @@ function SuggestionCard({
                 <div className="flex flex-wrap gap-2">
                   {unlocks.map((unlock) => (
                     <span className="rounded bg-white px-2.5 py-1 text-xs font-bold text-court-navy shadow-sm" key={unlock}>
-                      🏅 {unlock}
+                      <span className="inline-flex items-center gap-1.5">
+                        <BadgeIcon size={14} /> {unlock}
+                      </span>
                     </span>
                   ))}
                 </div>
@@ -483,13 +515,21 @@ function UpcomingMatchCard({ invite, ownProfileIds }: { invite: MatchInviteDetai
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap gap-2">
-            <span className="rounded bg-court-mist px-2.5 py-1 text-xs font-black uppercase tracking-wide text-court-teal">📩 {formatLabel(invite.status)}</span>
-            <span className="rounded bg-slate-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-slate-600">🎾 {formatLabel(invite.match_type)}</span>
+            <span className="inline-flex items-center gap-1.5 rounded bg-court-mist px-2.5 py-1 text-xs font-black uppercase tracking-wide text-court-teal">
+              <InviteIcon size={14} /> {formatLabel(invite.status)}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded bg-slate-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-slate-600">
+              <ClubIcon size={14} /> {formatLabel(invite.match_type)}
+            </span>
           </div>
           <h3 className="mt-1 font-black text-court-navy">vs {opponentName}</h3>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
-            <span className="rounded bg-slate-50 px-2.5 py-1">📅 {invite.booking_start_time ? formatDateTime(invite.booking_start_time) : "Time TBC"}</span>
-            <span className="rounded bg-slate-50 px-2.5 py-1">🏟️ {invite.booking_court_name ?? "Court TBC"}</span>
+            <span className="inline-flex items-center gap-1.5 rounded bg-slate-50 px-2.5 py-1">
+              <EventIcon size={14} /> {invite.booking_start_time ? formatDateTime(invite.booking_start_time) : "Time TBC"}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded bg-slate-50 px-2.5 py-1">
+              <BookingIcon size={14} /> {invite.booking_court_name ?? "Court TBC"}
+            </span>
           </div>
         </div>
         <Link className="inline-flex shrink-0 justify-center rounded bg-court-teal px-3 py-2 text-sm font-bold text-white" href={actionHref}>
@@ -837,12 +877,12 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
 
       <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <ActionCard action="Send Invite" description="Already booked? Invite someone to play." href="#new-invite" icon="📩" meta={countLabel(bookings.length, "booking")} title="New Invite" tone="teal" />
+        <ActionCard action="Send Invite" description="Already booked? Invite someone to play." href="#new-invite" icon={<InviteIcon size={22} />} meta={countLabel(bookings.length, "booking")} title="New Invite" tone="teal" />
         <ActionCard
           action="Start Match Request"
           description="Challenge first. Agree on time and court after they accept."
           href="#match-request"
-          icon="🏟️"
+          icon={<BookingIcon size={22} />}
           meta="Booking optional"
           title="Match Invite + Court Booking"
           tone="blue"
@@ -851,12 +891,12 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
           action="View Challenges"
           description="Find players near your level."
           href="#challenge-players"
-          icon="⚡"
+          icon={<ParticipationIcon size={22} />}
           meta={countLabel(closeSuggestions.length + strongerSuggestions.length, "suggestion")}
           title="Challenge Players"
           tone="green"
         />
-        <ActionCard action="View Matches" description="See pending and accepted matches." href="#upcoming-matches" icon="📅" meta={countLabel(upcomingMatchInvites.length, "match", "matches")} title="Upcoming Matches" tone="navy" />
+        <ActionCard action="View Matches" description="See pending and accepted matches." href="#upcoming-matches" icon={<EventIcon size={22} />} meta={countLabel(upcomingMatchInvites.length, "match", "matches")} title="Upcoming Matches" tone="navy" />
       </section>
 
       <section className="surface-card mb-6 p-5" id="challenge-players">
@@ -895,7 +935,9 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
                 <h3 className="text-lg font-black text-court-navy">Close Match</h3>
                 <p className="mt-1 text-sm text-slate-600">A balanced challenge near your level.</p>
               </div>
-              <span className="ui-chip ui-chip-success">🟢 Balanced</span>
+              <span className="ui-chip ui-chip-success">
+                <CloseMatchIcon size={14} /> Balanced
+              </span>
             </div>
             {closeSuggestions.length > 0 ? (
               <div className="mt-3 grid gap-3">
@@ -916,7 +958,9 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
                 <h3 className="text-lg font-black text-court-navy">Stronger Challenge</h3>
                 <p className="mt-1 text-sm text-slate-600">Test yourself against a stronger player.</p>
               </div>
-              <span className="ui-chip ui-chip-navy">🔵 Higher reward</span>
+              <span className="ui-chip ui-chip-navy">
+                <ChallengeIcon size={14} /> Higher reward
+              </span>
             </div>
             {strongerSuggestions.length > 0 ? (
               <div className="mt-3 grid gap-3">

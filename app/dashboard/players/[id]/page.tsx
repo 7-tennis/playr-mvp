@@ -2,6 +2,22 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
+import {
+  BadgeIcon,
+  BookingIcon,
+  ChallengeIcon,
+  ClubIcon,
+  ConfidenceIcon,
+  EventIcon,
+  InviteIcon,
+  LeaderboardIcon,
+  ParticipationIcon,
+  RatingIcon,
+  ResultIcon,
+  SchoolIcon,
+  StageIcon,
+  StatusIcon
+} from "@/components/playr-icons";
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
@@ -96,22 +112,20 @@ function plural(value: number, singular: string, pluralValue: string) {
   return value === 1 ? singular : pluralValue;
 }
 
-function InfoLine({ icon, value, muted = false }: { icon: string; value: string; muted?: boolean }) {
+function InfoLine({ icon, value, muted = false }: { icon: ReactNode; value: string; muted?: boolean }) {
   return (
     <p className={`flex min-w-0 items-center gap-2 text-sm ${muted ? "text-slate-500" : "text-slate-700"}`}>
-      <span aria-hidden="true" className="shrink-0 text-base">
-        {icon}
-      </span>
+      {icon}
       <span className="truncate">{value}</span>
     </p>
   );
 }
 
-function StatChip({ icon, value, label }: { icon: string; value: string | number; label: string }) {
+function StatChip({ icon, value, label }: { icon: ReactNode; value: string | number; label: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
       <p className="flex items-center gap-2 text-lg font-black text-court-navy">
-        <span aria-hidden="true">{icon}</span>
+        {icon}
         <span>{value}</span>
       </p>
       <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
@@ -132,11 +146,11 @@ function EmptyState({ text }: { text: string }) {
   return <p className="ui-empty-card">{text}</p>;
 }
 
-function ActivityItem({ icon, title, meta }: { icon: string; title: string; meta: string }) {
+function ActivityItem({ icon, title, meta }: { icon: ReactNode; title: string; meta: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <p className="flex items-center gap-2 font-black text-court-navy">
-        <span aria-hidden="true">{icon}</span>
+        {icon}
         <span>{title}</span>
       </p>
       <p className="mt-1 text-sm text-slate-600">{meta}</p>
@@ -144,10 +158,13 @@ function ActivityItem({ icon, title, meta }: { icon: string; title: string; meta
   );
 }
 
-function rankText(label: string) {
+function rankText(icon: ReactNode, label: string) {
   return (
     <div className="rounded-lg bg-slate-50 p-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+        {icon}
+        <span>{label}</span>
+      </p>
       <p className="mt-1 font-black text-court-navy">Not ranked yet</p>
     </div>
   );
@@ -369,19 +386,19 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
               <h2 className="text-3xl font-black text-court-navy">{playerName(player)}</h2>
               <span className={`mt-2 inline-flex rounded px-2.5 py-1 text-xs font-black uppercase tracking-wide ${accent.badge}`}>{playerType}</span>
               <div className="mt-4 grid gap-2">
-                <InfoLine icon="⭐" value={ratingText} />
-                <InfoLine icon="🏫" muted value="No school linked" />
-                <InfoLine icon="🎾" muted={!clubName} value={clubName ?? "No club linked"} />
+                <InfoLine icon={<RatingIcon size={16} />} value={ratingText} />
+                <InfoLine icon={<SchoolIcon size={16} />} muted value="No school linked" />
+                <InfoLine icon={<ClubIcon size={16} />} muted={!clubName} value={clubName ?? "No club linked"} />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2">
-            <StatChip icon="⚡" label="Participation" value={participationText} />
-            <StatChip icon="🛡️" label="Confidence" value={confidenceText} />
-            <StatChip icon="📩" label={plural(invites.length, "Invite", "Invites")} value={invites.length} />
-            <StatChip icon="📅" label={plural(upcomingEntries.length, "Event", "Events")} value={upcomingEntries.length} />
-            <StatChip icon="🏟️" label={plural(bookings.length, "Booking", "Bookings")} value={bookings.length} />
+            <StatChip icon={<ParticipationIcon size={18} />} label="Participation" value={participationText} />
+            <StatChip icon={<ConfidenceIcon size={18} />} label="Confidence" value={confidenceText} />
+            <StatChip icon={<InviteIcon size={18} />} label={plural(invites.length, "Invite", "Invites")} value={invites.length} />
+            <StatChip icon={<EventIcon size={18} />} label={plural(upcomingEntries.length, "Event", "Events")} value={upcomingEntries.length} />
+            <StatChip icon={<BookingIcon size={18} />} label={plural(bookings.length, "Booking", "Bookings")} value={bookings.length} />
           </div>
         </div>
       </section>
@@ -389,9 +406,9 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
       <div className="mt-6 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <SectionCard title="Leaderboard">
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            {rankText("🏫 School Rank")}
-            {rankText("🎾 Club Rank")}
-            {rankText("🏆 District Rank")}
+            {rankText(<SchoolIcon size={14} />, "School Rank")}
+            {rankText(<ClubIcon size={14} />, "Club Rank")}
+            {rankText(<LeaderboardIcon size={14} />, "District Rank")}
           </div>
         </SectionCard>
 
@@ -399,7 +416,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
           <div className="grid gap-3">
             {bookings.slice(0, 3).map((booking) => (
               <ActivityItem
-                icon="🏟️"
+                icon={<BookingIcon size={16} />}
                 key={booking.id}
                 meta={`${formatDateTime(booking.start_time)}${booking.courts?.venues?.name ? ` / ${booking.courts.venues.name}` : ""}`}
                 title={booking.courts?.name ?? "Court booking"}
@@ -408,7 +425,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
             {upcomingEntries.slice(0, 3).map((entry) =>
               entry.events ? (
                 <ActivityItem
-                  icon="📅"
+                  icon={<EventIcon size={16} />}
                   key={entry.id}
                   meta={`${formatDateTime(entry.events.start_datetime)}${entry.events.location ? ` / ${entry.events.location}` : ""}`}
                   title={entry.events.title}
@@ -420,7 +437,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
               const otherName = isIncoming ? `${invite.inviter_first_name} ${invite.inviter_last_name}` : `${invite.opponent_first_name} ${invite.opponent_last_name}`;
               return (
                 <ActivityItem
-                  icon="📩"
+                  icon={<InviteIcon size={16} />}
                   key={invite.id}
                   meta={`${formatLabel(invite.match_type)} match${invite.booking_start_time ? ` / ${formatDateTime(invite.booking_start_time)}` : ""}${invite.booking_court_name ? ` / ${invite.booking_court_name}` : ""}`}
                   title={isIncoming ? `Invite from ${otherName}` : `Invite sent to ${otherName}`}
@@ -472,19 +489,19 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
           <div className="grid gap-3 sm:grid-cols-2">
             {player.is_junior ? (
               <>
-                <StatChip icon="⚡" label="Participation" value={participationText} />
-                <StatChip icon="🧭" label="Stage readiness" value={`${player.stage_readiness_score}%`} />
-                <StatChip icon="🎾" label="Matches" value={player.matches_played} />
-                <StatChip icon="🏅" label="Record" value={`${player.wins}-${player.losses}`} />
-                <StatChip icon="📅" label="Events played" value={player.events_played} />
-                <StatChip icon="🤝" label="Close matches" value={player.close_matches} />
+                <StatChip icon={<ParticipationIcon size={18} />} label="Participation" value={participationText} />
+                <StatChip icon={<StageIcon size={18} />} label="Stage readiness" value={`${player.stage_readiness_score}%`} />
+                <StatChip icon={<ClubIcon size={18} />} label="Matches" value={player.matches_played} />
+                <StatChip icon={<ResultIcon size={18} />} label="Record" value={`${player.wins}-${player.losses}`} />
+                <StatChip icon={<EventIcon size={18} />} label="Events played" value={player.events_played} />
+                <StatChip icon={<ChallengeIcon size={18} />} label="Close matches" value={player.close_matches} />
               </>
             ) : (
               <>
-                <StatChip icon="⭐" label="Rating" value={ratingText} />
-                <StatChip icon="🛡️" label="Confidence" value={confidenceText} />
-                <StatChip icon="🎾" label="Rated matches" value={rating?.verified_match_count ?? 0} />
-                <StatChip icon="📈" label="Status" value={rating?.provisional === false ? "Verified" : "Provisional"} />
+                <StatChip icon={<RatingIcon size={18} />} label="Rating" value={ratingText} />
+                <StatChip icon={<ConfidenceIcon size={18} />} label="Confidence" value={confidenceText} />
+                <StatChip icon={<ClubIcon size={18} />} label="Rated matches" value={rating?.verified_match_count ?? 0} />
+                <StatChip icon={<StatusIcon size={18} />} label="Status" value={rating?.provisional === false ? "Verified" : "Provisional"} />
               </>
             )}
           </div>
@@ -526,7 +543,10 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
             <div className="grid gap-3 sm:grid-cols-2">
               {achievements.map((badge) => (
                 <div className={`rounded-lg border p-3 ${accent.border} ${accent.tint}`} key={badge.id}>
-                  <p className="font-black text-court-navy">🏅 {badge.badge_name}</p>
+                  <p className="flex items-center gap-2 font-black text-court-navy">
+                    <BadgeIcon size={16} />
+                    <span>{badge.badge_name}</span>
+                  </p>
                   <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">
                     {formatLabel(badge.category)} / {formatDate(badge.earned_at)}
                   </p>

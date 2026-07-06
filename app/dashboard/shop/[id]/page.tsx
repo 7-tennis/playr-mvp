@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
-import { formatShopPrice, getShopProduct, shopCategories, shopCategoryLabel, shopStatusLabel } from "@/lib/shop-catalog";
+import { CostIcon, LocationIcon, ShopIcon, StatusIcon, TagIcon } from "@/components/playr-icons";
+import { formatShopPrice, getShopProduct, shopCategoryLabel, shopStatusLabel } from "@/lib/shop-catalog";
 import type { ShopProduct } from "@/lib/shop-catalog";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
@@ -22,10 +24,13 @@ const accentStyles = {
   blue: "border-court-blue/30 bg-blue-50 text-court-blue"
 } as const;
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ icon, label, value }: { icon?: ReactNode; label: string; value: string }) {
   return (
     <div className="rounded bg-slate-50 p-3">
-      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+        {icon}
+        <span>{label}</span>
+      </p>
       <p className="mt-1 break-words font-black text-court-navy">{value}</p>
     </div>
   );
@@ -68,8 +73,6 @@ export default async function ShopProductPage({ params }: ShopProductPageProps) 
     notFound();
   }
 
-  const category = shopCategories.find((item) => item.slug === product.category);
-
   return (
     <PageShell eyebrow="Shop" subtitle="Catalogue item for club collection. No online checkout yet." title={product.name}>
       <div className="mb-5 flex flex-wrap gap-2">
@@ -85,25 +88,33 @@ export default async function ShopProductPage({ params }: ShopProductPageProps) 
         <div className={`grid min-h-72 place-items-center rounded-lg border shadow-sm ${accentStyles[product.accent]}`}>
           <div className="p-8 text-center">
             <p className="text-xs font-black uppercase tracking-wide opacity-80">{shopCategoryLabel(product.category)}</p>
-            <p className="mt-4 text-6xl font-black tracking-tight">{category?.icon ?? "SHOP"}</p>
+            <div className="mt-4 flex justify-center">
+              <ShopIcon size={64} />
+            </div>
             <p className="mt-4 text-sm font-bold opacity-80">Club collection item</p>
           </div>
         </div>
 
         <article className="surface-card p-5 sm:p-6">
           <div className="flex flex-wrap gap-2">
-            <span className="ui-chip ui-chip-brand">{shopCategoryLabel(product.category)}</span>
-            <span className={`ui-chip ${statusClass(product)}`}>{shopStatusLabel(product.status)}</span>
+            <span className="ui-chip ui-chip-brand">
+              <TagIcon size={14} /> {shopCategoryLabel(product.category)}
+            </span>
+            <span className={`ui-chip ${statusClass(product)}`}>
+              <StatusIcon size={14} /> {shopStatusLabel(product.status)}
+            </span>
           </div>
           <h2 className="mt-4 text-3xl font-black text-court-navy">{product.name}</h2>
-          <p className="mt-3 text-2xl font-black text-court-teal">{formatShopPrice(product.priceCents)}</p>
+          <p className="mt-3 flex items-center gap-2 text-2xl font-black text-court-teal">
+            <CostIcon size={24} /> {formatShopPrice(product.priceCents)}
+          </p>
           <p className="mt-4 text-sm leading-6 text-slate-700">{product.description}</p>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <DetailRow label="Condition" value={product.condition ?? "Condition to be confirmed"} />
-            <DetailRow label="Collect" value={product.collectionClub ?? "Collection club to be confirmed"} />
-            <DetailRow label="Availability" value={shopStatusLabel(product.status)} />
-            <DetailRow label="Seller / Source" value={product.source ?? "Source to be confirmed"} />
+            <DetailRow icon={<StatusIcon size={14} />} label="Condition" value={product.condition ?? "Condition to be confirmed"} />
+            <DetailRow icon={<LocationIcon size={14} />} label="Collect" value={product.collectionClub ?? "Collection club to be confirmed"} />
+            <DetailRow icon={<StatusIcon size={14} />} label="Availability" value={shopStatusLabel(product.status)} />
+            <DetailRow icon={<ShopIcon size={14} />} label="Seller / Source" value={product.source ?? "Source to be confirmed"} />
           </div>
         </article>
       </section>
@@ -117,14 +128,15 @@ export default async function ShopProductPage({ params }: ShopProductPageProps) 
               Shop V1 does not store reservations or take payment online yet. Ask the club desk to reserve this item and quote the item name.
             </p>
           </div>
-          <div className="rounded-lg border border-court-teal/25 bg-court-mist p-4 text-sm font-bold leading-6 text-court-navy">
-            Collection only. Payment and final availability are confirmed by the club.
+          <div className="flex items-start gap-2 rounded-lg border border-court-teal/25 bg-court-mist p-4 text-sm font-bold leading-6 text-court-navy">
+            <LocationIcon className="mt-1" size={16} />
+            <span>Collection only. Payment and final availability are confirmed by the club.</span>
           </div>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <DetailRow label="Item" value={product.name} />
-          <DetailRow label="Price" value={formatShopPrice(product.priceCents)} />
-          <DetailRow label="Club" value={product.collectionClub ?? "Collection club to be confirmed"} />
+          <DetailRow icon={<ShopIcon size={14} />} label="Item" value={product.name} />
+          <DetailRow icon={<CostIcon size={14} />} label="Price" value={formatShopPrice(product.priceCents)} />
+          <DetailRow icon={<LocationIcon size={14} />} label="Club" value={product.collectionClub ?? "Collection club to be confirmed"} />
         </div>
         <div className="ui-empty-card mt-5">Online enquiry capture is coming later. For now, reserve this item with the club desk.</div>
       </section>

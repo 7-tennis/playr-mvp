@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
+import { ArrowRightIcon, BookingIcon, ClubIcon, EventIcon, InviteIcon, RatingIcon, SchoolIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
@@ -73,21 +75,19 @@ function playerInitials(profile: Pick<Profile, "first_name" | "last_name"> | nul
   return `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase();
 }
 
-function InfoRow({ icon, value, muted = false }: { icon: string; value: string; muted?: boolean }) {
+function InfoRow({ icon, value, muted = false }: { icon: ReactNode; value: string; muted?: boolean }) {
   return (
     <p className={`flex min-w-0 items-center gap-2 text-sm ${muted ? "text-slate-500" : "text-slate-700"}`}>
-      <span aria-hidden="true" className="shrink-0 text-base">
-        {icon}
-      </span>
+      {icon}
       <span className="truncate">{value}</span>
     </p>
   );
 }
 
-function CounterPill({ icon, count, label }: { icon: string; count: number; label: string }) {
+function CounterPill({ icon, count, label }: { icon: ReactNode; count: number; label: string }) {
   return (
     <div className="ui-counter">
-      <span aria-hidden="true">{icon}</span>
+      {icon}
       <span>{count}</span>
       <span className="hidden truncate sm:inline">{label}</span>
     </div>
@@ -127,20 +127,20 @@ function MemberCard({
           </div>
 
           <div className={`mt-4 space-y-2 rounded ${accent.tint} p-3`}>
-            <InfoRow icon="⭐" value={ratingText} />
-            <InfoRow icon="🏫" muted value="No school linked" />
-            <InfoRow icon="🎾" muted={!clubName} value={clubName ?? "No club linked"} />
+            <InfoRow icon={<RatingIcon size={16} />} value={ratingText} />
+            <InfoRow icon={<SchoolIcon size={16} />} muted value="No school linked" />
+            <InfoRow icon={<ClubIcon size={16} />} muted={!clubName} value={clubName ?? "No club linked"} />
           </div>
 
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <CounterPill count={activity.invites} icon="📩" label={activity.invites === 1 ? "Invite" : "Invites"} />
-            <CounterPill count={activity.events} icon="📅" label={activity.events === 1 ? "Event" : "Events"} />
-            <CounterPill count={activity.bookings} icon="🏟️" label={activity.bookings === 1 ? "Booking" : "Bookings"} />
+            <CounterPill count={activity.invites} icon={<InviteIcon size={15} />} label={activity.invites === 1 ? "Invite" : "Invites"} />
+            <CounterPill count={activity.events} icon={<EventIcon size={15} />} label={activity.events === 1 ? "Event" : "Events"} />
+            <CounterPill count={activity.bookings} icon={<BookingIcon size={15} />} label={activity.bookings === 1 ? "Booking" : "Bookings"} />
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-black text-court-navy">
             <span>Open Card</span>
-            <span aria-hidden="true">→</span>
+            <ArrowRightIcon size={16} />
           </div>
         </div>
       </article>
@@ -167,20 +167,20 @@ function JuniorCard({ junior, activity, clubName }: { junior: JuniorCardProfile;
           </div>
 
           <div className={`mt-4 space-y-2 rounded ${accent.tint} p-3`}>
-            <InfoRow icon="⭐" value={`${formatJuniorRating(junior.junior_stage, junior.junior_rating)} / ${formatLabel(junior.junior_rating_confidence)}`} />
-            <InfoRow icon="🏫" muted value="No school linked" />
-            <InfoRow icon="🎾" muted={!clubName} value={clubName ?? "No club linked"} />
+            <InfoRow icon={<RatingIcon size={16} />} value={`${formatJuniorRating(junior.junior_stage, junior.junior_rating)} / ${formatLabel(junior.junior_rating_confidence)}`} />
+            <InfoRow icon={<SchoolIcon size={16} />} muted value="No school linked" />
+            <InfoRow icon={<ClubIcon size={16} />} muted={!clubName} value={clubName ?? "No club linked"} />
           </div>
 
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <CounterPill count={activity.invites} icon="📩" label={activity.invites === 1 ? "Invite" : "Invites"} />
-            <CounterPill count={activity.events} icon="📅" label={activity.events === 1 ? "Event" : "Events"} />
-            <CounterPill count={activity.bookings} icon="🏟️" label={activity.bookings === 1 ? "Booking" : "Bookings"} />
+            <CounterPill count={activity.invites} icon={<InviteIcon size={15} />} label={activity.invites === 1 ? "Invite" : "Invites"} />
+            <CounterPill count={activity.events} icon={<EventIcon size={15} />} label={activity.events === 1 ? "Event" : "Events"} />
+            <CounterPill count={activity.bookings} icon={<BookingIcon size={15} />} label={activity.bookings === 1 ? "Booking" : "Bookings"} />
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-black text-court-navy">
             <span>Open Card</span>
-            <span aria-hidden="true">→</span>
+            <ArrowRightIcon size={16} />
           </div>
         </div>
       </article>
@@ -384,15 +384,15 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/book-court">
-          <span aria-hidden="true">🏟️</span>
+          <BookingIcon size={18} />
           <span>Book Court</span>
         </Link>
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/play">
-          <span aria-hidden="true">📩</span>
+          <InviteIcon size={18} />
           <span>Send Invite</span>
         </Link>
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/events">
-          <span aria-hidden="true">📅</span>
+          <EventIcon size={18} />
           <span>Browse Events</span>
         </Link>
       </section>

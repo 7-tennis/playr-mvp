@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
 import { PlayerBottomNav, PlayerDesktopNav } from "@/components/player-nav";
+import { BellIcon } from "@/components/playr-icons";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
@@ -68,9 +69,7 @@ export async function SiteHeader() {
                   className="relative inline-flex h-10 w-10 items-center justify-center rounded border border-slate-200 bg-white text-court-navy shadow-sm transition hover:border-court-teal hover:bg-court-mist"
                   href="/dashboard/notifications"
                 >
-                  <span aria-hidden="true" className="text-base">
-                    🔔
-                  </span>
+                  <BellIcon size={18} />
                   {unreadNotifications > 0 ? (
                     <span className="absolute -right-1 -top-1 min-w-[1.25rem] rounded-full bg-court-teal px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white ring-2 ring-white">
                       {unreadNotifications > 9 ? "9+" : unreadNotifications}

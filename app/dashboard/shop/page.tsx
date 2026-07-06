@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
+import { CostIcon, LocationIcon, ShopIcon, StatusIcon, TagIcon } from "@/components/playr-icons";
 import { formatShopPrice, shopCategories, shopCategoryLabel, shopProducts, shopStatusLabel } from "@/lib/shop-catalog";
 import type { ShopCategorySlug, ShopProduct } from "@/lib/shop-catalog";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
@@ -41,19 +42,29 @@ function ProductCard({ product }: { product: ShopProduct }) {
       <div className={`grid aspect-[4/2.2] place-items-center border-b ${accentStyles[product.accent]}`}>
         <div className="text-center">
           <p className="text-xs font-black uppercase tracking-wide opacity-80">{shopCategoryLabel(product.category)}</p>
-          <p className="mt-2 text-3xl font-black tracking-tight">{shopCategories.find((category) => category.slug === product.category)?.icon}</p>
+          <div className="mt-2 flex justify-center">
+            <ShopIcon size={34} />
+          </div>
         </div>
       </div>
       <div className="p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="ui-chip ui-chip-muted">{shopCategoryLabel(product.category)}</span>
-          <span className={`ui-chip ${statusClass}`}>{shopStatusLabel(product.status)}</span>
+          <span className="ui-chip ui-chip-muted">
+            <TagIcon size={14} /> {shopCategoryLabel(product.category)}
+          </span>
+          <span className={`ui-chip ${statusClass}`}>
+            <StatusIcon size={14} /> {shopStatusLabel(product.status)}
+          </span>
         </div>
         <h2 className="mt-3 text-xl font-black text-court-navy">{product.name}</h2>
         <div className="mt-3 grid gap-2 text-sm text-slate-600">
-          <p className="font-black text-court-navy">{formatShopPrice(product.priceCents)}</p>
+          <p className="flex items-center gap-2 font-black text-court-navy">
+            <CostIcon size={16} /> {formatShopPrice(product.priceCents)}
+          </p>
           {product.condition ? <p>Condition: {product.condition}</p> : null}
-          <p>Collect: {product.collectionClub ?? "Collection club to be confirmed"}</p>
+          <p className="flex items-center gap-2">
+            <LocationIcon size={15} /> Collect: {product.collectionClub ?? "Collection club to be confirmed"}
+          </p>
         </div>
         <Link className="btn-primary mt-4 w-full" href={`/dashboard/shop/${product.id}`}>
           View
@@ -96,8 +107,9 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
               Shop V1 is a catalogue and enquiry experience. Online checkout, delivery and payment processing are not enabled yet.
             </p>
           </div>
-          <div className="rounded-lg bg-court-mist p-4 text-sm font-bold leading-6 text-court-navy">
-            Collect at club. Pay and confirm directly with the club desk for now.
+          <div className="flex items-start gap-2 rounded-lg bg-court-mist p-4 text-sm font-bold leading-6 text-court-navy">
+            <LocationIcon className="mt-1" size={16} />
+            <span>Collect at club. Pay and confirm directly with the club desk for now.</span>
           </div>
         </div>
       </section>
@@ -126,7 +138,7 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
                 href={`/dashboard/shop?category=${category.slug}`}
                 key={category.slug}
               >
-                <span className="mr-2 text-xs text-court-teal">{category.icon}</span>
+                <ShopIcon className="mr-2 text-court-teal" size={14} />
                 {category.label}
               </Link>
             );

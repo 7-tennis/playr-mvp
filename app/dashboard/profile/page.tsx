@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 import { saveOwnProfile } from "@/app/dashboard/profile/actions";
 import { PageShell } from "@/components/page-shell";
+import { BadgeIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, MembershipIcon, ParticipationIcon, RatingIcon, SchoolIcon, TagIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
 import { formatDate, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
@@ -93,9 +95,15 @@ function MemberSummaryCard({ profile, juniorCount }: { profile: Profile | null; 
             <h2 className="text-2xl font-black text-court-navy sm:text-3xl">{name}</h2>
             <span className={`ui-chip mt-2 ${playrAccents.member.badge}`}>{profile ? memberRole(profile, profile, juniorCount) : "Account Holder"}</span>
             <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
-              <span className="ui-chip ui-chip-muted">🎾 No club linked yet</span>
-              <span className="ui-chip ui-chip-muted">💳 {profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"}</span>
-              <span className="ui-chip ui-chip-muted">🔁 Renewal date to be confirmed</span>
+              <span className="ui-chip ui-chip-muted">
+                <ClubIcon size={14} /> No club linked yet
+              </span>
+              <span className="ui-chip ui-chip-muted">
+                <MembershipIcon size={14} /> {profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"}
+              </span>
+              <span className="ui-chip ui-chip-muted">
+                <TimeIcon size={14} /> Renewal date to be confirmed
+              </span>
               <span className={profile?.member_status === "member" ? "ui-chip ui-chip-success" : "ui-chip ui-chip-brand"}>
                 {profile ? formatLabel(profile.member_status) : "Profile setup needed"}
               </span>
@@ -124,10 +132,18 @@ function MembershipCard({ profile, juniorCount }: { profile: Profile | null; jun
           <span className="ui-chip ui-chip-brand">Private</span>
         </div>
         <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
-          <span className="ui-chip ui-chip-muted">💳 {profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"}</span>
-          <span className="ui-chip ui-chip-muted">🎾 No club linked yet</span>
-          <span className="ui-chip ui-chip-muted">🔁 Renewal date to be confirmed</span>
-          <span className="ui-chip ui-chip-muted">👥 {juniorCount + (profile ? 1 : 0)} linked</span>
+          <span className="ui-chip ui-chip-muted">
+            <MembershipIcon size={14} /> {profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"}
+          </span>
+          <span className="ui-chip ui-chip-muted">
+            <ClubIcon size={14} /> No club linked yet
+          </span>
+          <span className="ui-chip ui-chip-muted">
+            <TimeIcon size={14} /> Renewal date to be confirmed
+          </span>
+          <span className="ui-chip ui-chip-muted">
+            <EntriesIcon size={14} /> {juniorCount + (profile ? 1 : 0)} linked
+          </span>
         </div>
         <div className="ui-empty-card mt-4">Pricing, renewal rules and membership type will be confirmed by your club.</div>
       </div>
@@ -135,13 +151,11 @@ function MembershipCard({ profile, juniorCount }: { profile: Profile | null; jun
   );
 }
 
-function BenefitChip({ icon, label }: { icon: string; label: string }) {
+function BenefitChip({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <p className="font-black text-court-navy">
-        <span aria-hidden="true" className="mr-2">
-          {icon}
-        </span>
+      <p className="flex items-center gap-2 font-black text-court-navy">
+        {icon}
         {label}
       </p>
     </div>
@@ -164,9 +178,17 @@ function LinkedMemberCard({ member, parentProfile, juniorCount }: { member: Prof
             </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <span className={`ui-chip ${accent.badge}`}>{member.is_junior ? `🏷 ${playrJuniorStageLabel(member.junior_stage)}` : "💳 Main Member"}</span>
-            <span className="ui-chip ui-chip-muted">🎾 No club linked yet</span>
-            {member.is_junior ? <span className="ui-chip ui-chip-muted">🏫 School to be confirmed</span> : null}
+            <span className={`ui-chip ${accent.badge}`}>
+              {member.is_junior ? <TagIcon size={14} /> : <MembershipIcon size={14} />} {member.is_junior ? playrJuniorStageLabel(member.junior_stage) : "Main Member"}
+            </span>
+            <span className="ui-chip ui-chip-muted">
+              <ClubIcon size={14} /> No club linked yet
+            </span>
+            {member.is_junior ? (
+              <span className="ui-chip ui-chip-muted">
+                <SchoolIcon size={14} /> School to be confirmed
+              </span>
+            ) : null}
           </div>
         </div>
       </article>
@@ -389,12 +411,12 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
               <h3 className="mt-1 text-xl font-black text-court-navy">Membership benefits</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">Benefits may depend on your club membership setup. Your club can confirm exact inclusions, discounts and renewal rules.</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <BenefitChip icon="🏟" label="Court booking access" />
-                <BenefitChip icon="🎟" label="Club event access" />
-                <BenefitChip icon="⭐" label="PlayR rating access" />
-                <BenefitChip icon="⚡" label="Participation tracking" />
-                <BenefitChip icon="🏅" label="Badges and achievements" />
-                <BenefitChip icon="👥" label="Linked junior profiles" />
+                <BenefitChip icon={<BookingIcon size={16} />} label="Court booking access" />
+                <BenefitChip icon={<EventIcon size={16} />} label="Club event access" />
+                <BenefitChip icon={<RatingIcon size={16} />} label="PlayR rating access" />
+                <BenefitChip icon={<ParticipationIcon size={16} />} label="Participation tracking" />
+                <BenefitChip icon={<BadgeIcon size={16} />} label="Badges and achievements" />
+                <BenefitChip icon={<EntriesIcon size={16} />} label="Linked junior profiles" />
               </div>
             </section>
           </div>
