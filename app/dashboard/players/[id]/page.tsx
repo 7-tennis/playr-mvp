@@ -13,6 +13,7 @@ import type {
   EntryStatus,
   JuniorAchievement,
   JuniorRatingHistory,
+  MemberStatus,
   MatchInviteStatus,
   MatchInviteType,
   MatchVerificationStatus,
@@ -118,9 +119,9 @@ function StatChip({ icon, value, label }: { icon: string; value: string | number
   );
 }
 
-function SectionCard({ children, title }: { children: ReactNode; title: string }) {
+function SectionCard({ children, id, title }: { children: ReactNode; id?: string; title: string }) {
   return (
-    <section className="surface-card p-4 sm:p-5">
+    <section className="surface-card p-4 sm:p-5" id={id}>
       <h2 className="text-lg font-black text-court-navy">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
@@ -150,6 +151,42 @@ function rankText(label: string) {
       <p className="mt-1 font-black text-court-navy">Not ranked yet</p>
     </div>
   );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded bg-slate-50 p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 break-words font-black text-court-navy">{value}</p>
+    </div>
+  );
+}
+
+function memberStatusLabel(status: MemberStatus | null | undefined) {
+  switch (status) {
+    case "member":
+      return "Active member";
+    case "pending":
+      return "Membership pending";
+    case "inactive":
+      return "Inactive membership";
+    case "non_member":
+      return "Non-member";
+    default:
+      return "Membership details to be confirmed";
+  }
+}
+
+function familyRole(player: Profile, parentProfile: Profile) {
+  if (player.id === parentProfile.id) {
+    return "Main Member / Account Holder";
+  }
+
+  if (player.is_junior && player.parent_profile_id === parentProfile.id) {
+    return "Linked Junior";
+  }
+
+  return "Member";
 }
 
 function matchPlayerName(match: MatchHistoryRow, profileId: string) {
@@ -298,6 +335,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
   const ratingText = player.is_junior ? formatJuniorRating(player.junior_stage, player.junior_rating) : rating ? rating.rating_value.toFixed(1) : "No active rating yet";
   const confidenceText = player.is_junior ? formatLabel(player.junior_rating_confidence) : rating ? formatLabel(rating.confidence) : "No rating yet";
   const participationText = player.is_junior ? `${player.participation_score} pts` : `${player.participation_score ?? 0} pts`;
+  const profileHref = `/dashboard/profile?member=${player.id}#member-details`;
 
   return (
     <PageShell eyebrow="Player Detail" subtitle="Player profile, progress and upcoming tennis activity." title={playerName(player)}>
@@ -307,7 +345,22 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
         </Link>
       </div>
 
-      <section className={`overflow-hidden rounded-lg border bg-white shadow-court ${accent.border}`}>
+      <nav className="mb-5 flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 text-sm font-black shadow-sm" aria-label="Player detail sections">
+        <a className="whitespace-nowrap rounded bg-court-navy px-3 py-2 text-white" href="#overview">
+          Overview
+        </a>
+        <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#progress">
+          Progress
+        </a>
+        <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#membership">
+          Membership
+        </a>
+        <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#private-details">
+          Private Details
+        </a>
+      </nav>
+
+      <section className={`overflow-hidden rounded-lg border bg-white shadow-court ${accent.border}`} id="overview">
         <div className={`h-2 ${accent.strip}`} />
         <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
@@ -380,7 +433,42 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <SectionCard title="Progress">
+        <SectionCard id="membership" title="Membership">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DetailRow label="Membership Status" value={memberStatusLabel(player.member_status)} />
+            <DetailRow label="Membership Type" value="Membership details to be confirmed" />
+            <DetailRow label="Renewal Date" value="Renewal date to be confirmed" />
+            <DetailRow label="Club" value={clubName ?? "No club linked yet"} />
+            <DetailRow label="Pricing" value="Pricing to be confirmed" />
+            <DetailRow label="Benefits" value="Benefits depend on your club setup" />
+          </div>
+          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-court-teal/25 bg-court-mist p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-bold leading-6 text-court-navy">Membership and billing rules are managed in the private Profile hub.</p>
+            <Link className="btn-secondary shrink-0" href={profileHref}>
+              Open Profile
+            </Link>
+          </div>
+        </SectionCard>
+
+        <SectionCard id="private-details" title="Private Details">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DetailRow label="Family Role" value={familyRole(player, parentProfile)} />
+            <DetailRow label="Email" value={player.is_junior ? player.email ?? "No junior email linked" : player.email ?? user.email ?? "No email linked"} />
+            <DetailRow label="Phone" value={player.phone ?? "Phone number not set"} />
+            <DetailRow label="Date of Birth" value={player.date_of_birth ? formatDate(player.date_of_birth) : "Date of birth not set"} />
+            <DetailRow label="Primary Sport" value={formatLabel(player.primary_sport)} />
+            <DetailRow label="Player Level" value={formatLabel(player.player_level)} />
+            <DetailRow label="Consent Settings" value="Consent settings coming soon" />
+            <DetailRow label="Profile Privacy" value="Private dashboard only" />
+          </div>
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+            These private details are shown only inside the signed-in dashboard for the account holder or linked parent/guardian.
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <SectionCard id="progress" title="Progress">
           <div className="grid gap-3 sm:grid-cols-2">
             {player.is_junior ? (
               <>

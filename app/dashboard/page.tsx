@@ -137,6 +137,11 @@ function MemberCard({
             <CounterPill count={activity.events} icon="📅" label={activity.events === 1 ? "Event" : "Events"} />
             <CounterPill count={activity.bookings} icon="🏟️" label={activity.bookings === 1 ? "Booking" : "Bookings"} />
           </div>
+
+          <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-black text-court-navy">
+            <span>Open Card</span>
+            <span aria-hidden="true">→</span>
+          </div>
         </div>
       </article>
     </Link>
@@ -171,6 +176,11 @@ function JuniorCard({ junior, activity, clubName }: { junior: JuniorCardProfile;
             <CounterPill count={activity.invites} icon="📩" label={activity.invites === 1 ? "Invite" : "Invites"} />
             <CounterPill count={activity.events} icon="📅" label={activity.events === 1 ? "Event" : "Events"} />
             <CounterPill count={activity.bookings} icon="🏟️" label={activity.bookings === 1 ? "Booking" : "Bookings"} />
+          </div>
+
+          <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-black text-court-navy">
+            <span>Open Card</span>
+            <span aria-hidden="true">→</span>
           </div>
         </div>
       </article>

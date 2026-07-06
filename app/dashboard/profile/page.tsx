@@ -195,9 +195,14 @@ function PrivateMemberDetails({ member, parentProfile, juniorCount, loginEmail }
             <p className="mt-1 text-sm font-bold text-slate-600">{memberRole(member, parentProfile, juniorCount)}</p>
           </div>
         </div>
-        <Link className="btn-secondary" href={`/dashboard/players/${member.id}`}>
-          Open Player Card
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link className="btn-secondary" href={`/dashboard/players/${member.id}`}>
+            Open Card
+          </Link>
+          <Link className="btn-secondary" href="/dashboard">
+            MyPlayR Cards
+          </Link>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
