@@ -9,7 +9,7 @@ const playerLinks = [
   { href: "/dashboard/play", label: "Play", mobileLabel: "Play" },
   { href: "/dashboard", label: "MyPlayR", mobileLabel: "MyPlayR", isHub: true },
   { href: "/dashboard/events", label: "Events", mobileLabel: "Events" },
-  { href: "/dashboard/profile", label: "Profile", mobileLabel: "Profile" }
+  { href: "/dashboard/shop", label: "Shop", mobileLabel: "Shop" }
 ];
 
 function isActivePath(pathname: string, href: string) {
