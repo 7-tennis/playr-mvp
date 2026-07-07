@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { saveOwnProfile } from "@/app/dashboard/profile/actions";
+import { CollapsibleCard } from "@/components/collapsible-card";
 import { PageShell } from "@/components/page-shell";
 import { BadgeIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, MembershipIcon, ParticipationIcon, RatingIcon, SchoolIcon, TagIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
@@ -119,35 +120,32 @@ function MemberSummaryCard({ profile, juniorCount }: { profile: Profile | null; 
 }
 
 function MembershipCard({ profile, juniorCount }: { profile: Profile | null; juniorCount: number }) {
+  const linkedCount = juniorCount + (profile ? 1 : 0);
+
   return (
-    <article className="surface-card overflow-hidden">
-      <div className="h-1.5 bg-court-teal" />
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="section-kicker">Membership</p>
-            <h3 className="mt-1 text-xl font-black text-court-navy">Membership setup</h3>
-            <p className="mt-1 text-sm text-slate-600">{profile ? profileName(profile) : "Main member"}</p>
-          </div>
-          <span className="ui-chip ui-chip-brand">Private</span>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
-          <span className="ui-chip ui-chip-muted">
-            <MembershipIcon size={14} /> {profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"}
-          </span>
-          <span className="ui-chip ui-chip-muted">
-            <ClubIcon size={14} /> No club linked yet
-          </span>
-          <span className="ui-chip ui-chip-muted">
-            <TimeIcon size={14} /> Renewal date to be confirmed
-          </span>
-          <span className="ui-chip ui-chip-muted">
-            <EntriesIcon size={14} /> {juniorCount + (profile ? 1 : 0)} linked
-          </span>
-        </div>
-        <div className="ui-empty-card mt-4">Pricing, renewal rules and membership type will be confirmed by your club.</div>
+    <CollapsibleCard
+      badge={<span className="ui-chip ui-chip-brand">Private</span>}
+      eyebrow="Membership"
+      summary={`${profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"} · No club linked · Renewal to be confirmed`}
+      title="Membership Details"
+    >
+      <p className="text-sm font-bold text-slate-600">{profile ? profileName(profile) : "Main member"}</p>
+      <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
+        <span className="ui-chip ui-chip-muted">
+          <MembershipIcon size={14} /> {profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"}
+        </span>
+        <span className="ui-chip ui-chip-muted">
+          <ClubIcon size={14} /> No club linked yet
+        </span>
+        <span className="ui-chip ui-chip-muted">
+          <TimeIcon size={14} /> Renewal date to be confirmed
+        </span>
+        <span className="ui-chip ui-chip-muted">
+          <EntriesIcon size={14} /> {linkedCount} linked
+        </span>
       </div>
-    </article>
+      <div className="ui-empty-card mt-4">Pricing, renewal rules and membership type will be confirmed by your club.</div>
+    </CollapsibleCard>
   );
 }
 
@@ -199,15 +197,19 @@ function LinkedMemberCard({ member, parentProfile, juniorCount }: { member: Prof
 function PrivateMemberDetails({ member, parentProfile, juniorCount, loginEmail }: { member: Profile | null; parentProfile: Profile | null; juniorCount: number; loginEmail: string | null }) {
   if (!member) {
     return (
-      <section className="surface-card p-5" id="member-details">
-        <h2 className="section-title">Private Member Details</h2>
+      <CollapsibleCard eyebrow="Private Details" id="member-details" summary="Create your profile to view private member details." title="Private Member Details">
         <div className="ui-empty-card mt-4">Create your profile to view private member details.</div>
-      </section>
+      </CollapsibleCard>
     );
   }
 
   return (
-    <section className="surface-card p-5 sm:p-6" id="member-details">
+    <CollapsibleCard
+      eyebrow="Private Details"
+      id="member-details"
+      summary={`${memberRole(member, parentProfile, juniorCount)} · Contact, membership and profile information`}
+      title={profileName(member)}
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex gap-3">
           <MemberAvatar member={member} />
@@ -246,7 +248,7 @@ function PrivateMemberDetails({ member, parentProfile, juniorCount, loginEmail }
       <div className="mt-5 rounded-lg border border-court-teal/25 bg-court-mist p-4 text-sm leading-6 text-court-navy">
         Private profile information is only shown inside this signed-in dashboard. Public profile photos and junior consent settings are not enabled in this MVP.
       </div>
-    </section>
+    </CollapsibleCard>
   );
 }
 
@@ -262,71 +264,69 @@ function AccountDetailsForm({
   defaultMarketingConsent: boolean;
 }) {
   return (
-    <form action={saveOwnProfile} className="surface-card grid gap-4 p-5 sm:p-6 md:grid-cols-2" id="account-details">
-      <div className="md:col-span-2">
-        <p className="section-kicker">Account Details</p>
-        <h2 className="section-title mt-2">Private member details</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Keep your account holder details current for club communication, bookings and event entries.</p>
-      </div>
-      <label className="text-sm font-semibold text-slate-700">
-        First name <span className="font-normal text-slate-500">(required)</span>
-        <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.first_name ?? ""} name="first_name" required type="text" />
-      </label>
-      <label className="text-sm font-semibold text-slate-700">
-        Last name <span className="font-normal text-slate-500">(required)</span>
-        <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.last_name ?? ""} name="last_name" required type="text" />
-      </label>
-      <label className="text-sm font-semibold text-slate-700">
-        Login email
-        <input className="mt-2 w-full rounded border border-slate-300 bg-slate-50 px-3 py-2 text-slate-600" defaultValue={userEmail ?? profile?.email ?? ""} name="email" readOnly type="email" />
-      </label>
-      <label className="text-sm font-semibold text-slate-700">
-        Phone number <span className="font-normal text-slate-500">(optional)</span>
-        <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultPhone} name="phone" type="tel" />
-      </label>
-      <label className="text-sm font-semibold text-slate-700">
-        Date of birth <span className="font-normal text-slate-500">(optional)</span>
-        <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.date_of_birth ?? ""} name="date_of_birth" type="date" />
-      </label>
-      <label className="text-sm font-semibold text-slate-700">
-        Primary sport
-        <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.primary_sport ?? "tennis"} name="primary_sport">
-          {sports.map((sport) => (
-            <option key={sport} value={sport}>
-              {formatLabel(sport)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="text-sm font-semibold text-slate-700 md:col-span-2">
-        Player level
-        <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.player_level ?? "unknown"} name="player_level">
-          {playerLevels.map((level) => (
-            <option key={level} value={level}>
-              {formatLabel(level)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="text-sm font-semibold text-slate-700 md:col-span-2">
-        <span className="flex gap-3 text-sm leading-6 text-slate-700">
-          <input className="mt-1 h-4 w-4 rounded border-slate-300" defaultChecked={defaultMarketingConsent} name="marketing_consent" type="checkbox" />
-          <span>I agree to receive optional PlayR marketing updates. This is separate from important account and club communication.</span>
-        </span>
-      </label>
-      <label className="text-sm font-semibold text-slate-700 md:col-span-2">
-        Notes <span className="font-normal text-slate-500">(optional)</span>
-        <textarea
-          className="mt-2 min-h-24 w-full rounded border border-slate-300 px-3 py-2 focus-ring"
-          defaultValue={profile?.notes ?? ""}
-          name="notes"
-          placeholder="Optional profile notes, medical/payment context, or parent/guardian notes if relevant."
-        />
-      </label>
-      <SubmitButton className="rounded bg-court-blue px-4 py-3 font-bold text-white md:col-span-2" pendingText="Saving profile...">
-        Save Profile
-      </SubmitButton>
-    </form>
+    <CollapsibleCard eyebrow="Account Details" id="account-details" summary="Name, phone, sport, consent and notes" title="Edit Private Member Details">
+      <p className="mb-4 text-sm leading-6 text-slate-600">Keep your account holder details current for club communication, bookings and event entries.</p>
+      <form action={saveOwnProfile} className="grid gap-4 md:grid-cols-2">
+        <label className="text-sm font-semibold text-slate-700">
+          First name <span className="font-normal text-slate-500">(required)</span>
+          <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.first_name ?? ""} name="first_name" required type="text" />
+        </label>
+        <label className="text-sm font-semibold text-slate-700">
+          Last name <span className="font-normal text-slate-500">(required)</span>
+          <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.last_name ?? ""} name="last_name" required type="text" />
+        </label>
+        <label className="text-sm font-semibold text-slate-700">
+          Login email
+          <input className="mt-2 w-full rounded border border-slate-300 bg-slate-50 px-3 py-2 text-slate-600" defaultValue={userEmail ?? profile?.email ?? ""} name="email" readOnly type="email" />
+        </label>
+        <label className="text-sm font-semibold text-slate-700">
+          Phone number <span className="font-normal text-slate-500">(optional)</span>
+          <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultPhone} name="phone" type="tel" />
+        </label>
+        <label className="text-sm font-semibold text-slate-700">
+          Date of birth <span className="font-normal text-slate-500">(optional)</span>
+          <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.date_of_birth ?? ""} name="date_of_birth" type="date" />
+        </label>
+        <label className="text-sm font-semibold text-slate-700">
+          Primary sport
+          <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.primary_sport ?? "tennis"} name="primary_sport">
+            {sports.map((sport) => (
+              <option key={sport} value={sport}>
+                {formatLabel(sport)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+          Player level
+          <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={profile?.player_level ?? "unknown"} name="player_level">
+            {playerLevels.map((level) => (
+              <option key={level} value={level}>
+                {formatLabel(level)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+          <span className="flex gap-3 text-sm leading-6 text-slate-700">
+            <input className="mt-1 h-4 w-4 rounded border-slate-300" defaultChecked={defaultMarketingConsent} name="marketing_consent" type="checkbox" />
+            <span>I agree to receive optional PlayR marketing updates. This is separate from important account and club communication.</span>
+          </span>
+        </label>
+        <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+          Notes <span className="font-normal text-slate-500">(optional)</span>
+          <textarea
+            className="mt-2 min-h-24 w-full rounded border border-slate-300 px-3 py-2 focus-ring"
+            defaultValue={profile?.notes ?? ""}
+            name="notes"
+            placeholder="Optional profile notes, medical/payment context, or parent/guardian notes if relevant."
+          />
+        </label>
+        <SubmitButton className="rounded bg-court-blue px-4 py-3 font-bold text-white md:col-span-2" pendingText="Saving profile...">
+          Save Profile
+        </SubmitButton>
+      </form>
+    </CollapsibleCard>
   );
 }
 
@@ -406,10 +406,8 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
           </div>
           <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <MembershipCard juniorCount={juniors.length} profile={profile} />
-            <section className="surface-card p-5">
-              <p className="section-kicker">Benefits</p>
-              <h3 className="mt-1 text-xl font-black text-court-navy">Membership benefits</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Benefits may depend on your club membership setup. Your club can confirm exact inclusions, discounts and renewal rules.</p>
+            <CollapsibleCard eyebrow="Benefits" summary="Club inclusions, discounts and renewal rules to be confirmed." title="Membership Benefits">
+              <p className="text-sm leading-6 text-slate-600">Benefits may depend on your club membership setup. Your club can confirm exact inclusions, discounts and renewal rules.</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <BenefitChip icon={<BookingIcon size={16} />} label="Court booking access" />
                 <BenefitChip icon={<EventIcon size={16} />} label="Club event access" />
@@ -418,7 +416,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                 <BenefitChip icon={<BadgeIcon size={16} />} label="Badges and achievements" />
                 <BenefitChip icon={<EntriesIcon size={16} />} label="Linked junior profiles" />
               </div>
-            </section>
+            </CollapsibleCard>
           </div>
         </section>
 
@@ -446,15 +444,13 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
 
         <PrivateMemberDetails juniorCount={juniors.length} loginEmail={user.email ?? null} member={selectedMember} parentProfile={profile} />
 
-        <section className="surface-card p-5 sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="section-kicker">Account & Privacy</p>
-              <h2 className="section-title mt-2">Account settings</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Contact details and account preferences are private to your signed-in dashboard.</p>
-            </div>
-            <span className="ui-chip ui-chip-brand">Private</span>
-          </div>
+        <CollapsibleCard
+          badge={<span className="ui-chip ui-chip-brand">Private</span>}
+          eyebrow="Account & Privacy"
+          summary={`${user.email ?? "Login email unavailable"} · ${defaultMarketingConsent ? "Marketing updates on" : "Marketing updates off"}`}
+          title="Account Settings"
+        >
+          <p className="text-sm leading-6 text-slate-600">Contact details and account preferences are private to your signed-in dashboard.</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <DetailRow label="Login Email" value={user.email ?? "Login email unavailable"} />
             <DetailRow label="Phone" value={defaultPhone || "Phone number not set"} />
@@ -462,7 +458,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
             <DetailRow label="Junior Consent" value="Consent settings coming soon" />
           </div>
           <div className="ui-empty-card mt-4">More account, privacy, notification and photo-consent settings coming soon.</div>
-        </section>
+        </CollapsibleCard>
 
         <AccountDetailsForm defaultMarketingConsent={defaultMarketingConsent} defaultPhone={defaultPhone} profile={profile} userEmail={user.email ?? null} />
       </div>

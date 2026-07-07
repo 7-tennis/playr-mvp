@@ -321,3 +321,11 @@ export function ArrowRightIcon(props: PlayRIconProps) {
     </IconShell>
   );
 }
+
+export function ChevronDownIcon(props: PlayRIconProps) {
+  return (
+    <IconShell {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </IconShell>
+  );
+}

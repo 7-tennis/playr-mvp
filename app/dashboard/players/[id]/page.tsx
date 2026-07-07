@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { CollapsibleCard } from "@/components/collapsible-card";
 import { PageShell } from "@/components/page-shell";
 import {
   BadgeIcon,
@@ -450,7 +451,12 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <SectionCard id="membership" title="Membership">
+        <CollapsibleCard
+          eyebrow="Membership"
+          id="membership"
+          summary={`${memberStatusLabel(player.member_status)} · ${clubName ?? "No club linked"} · Renewal to be confirmed`}
+          title="Membership Details"
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <DetailRow label="Membership Status" value={memberStatusLabel(player.member_status)} />
             <DetailRow label="Membership Type" value="Membership details to be confirmed" />
@@ -465,9 +471,9 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
               Open Profile
             </Link>
           </div>
-        </SectionCard>
+        </CollapsibleCard>
 
-        <SectionCard id="private-details" title="Private Details">
+        <CollapsibleCard eyebrow="Private" id="private-details" summary={`${familyRole(player, parentProfile)} · Contact and account details`} title="Private Details">
           <div className="grid gap-3 sm:grid-cols-2">
             <DetailRow label="Family Role" value={familyRole(player, parentProfile)} />
             <DetailRow label="Email" value={player.is_junior ? player.email ?? "No junior email linked" : player.email ?? user.email ?? "No email linked"} />
@@ -481,7 +487,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
           <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
             These private details are shown only inside the signed-in dashboard for the account holder or linked parent/guardian.
           </div>
-        </SectionCard>
+        </CollapsibleCard>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
