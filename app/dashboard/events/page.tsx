@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { enterDashboardEvent, withdrawDashboardEventEntry } from "@/app/dashboard/events/actions";
+import { CollapsibleCard } from "@/components/collapsible-card";
 import { PageShell } from "@/components/page-shell";
 import {
   ClubIcon,
@@ -49,6 +50,7 @@ type DashboardEventsPageProps = {
     filter?: string;
     player?: string;
     profileId?: string;
+    view?: string;
     withdrawn?: string;
     error?: string;
   };
@@ -61,18 +63,29 @@ type EventVisual = {
   icon: string;
 };
 
-const EVENT_FILTERS = [
-  { id: "all", label: "All" },
+const EVENT_VIEWS = [
   { id: "recommended", label: "Recommended" },
-  { id: "next", label: "Next Upcoming" },
+  { id: "current", label: "Current" },
+  { id: "upcoming", label: "Upcoming" },
+  { id: "entries", label: "My Entries" }
+] as const;
+
+const PRIMARY_EVENT_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "competitive", label: "Competitive" },
+  { id: "rating", label: "Rating" },
   { id: "junior", label: "Junior" },
-  { id: "adult", label: "Adult" },
+  { id: "social", label: "Social" }
+] as const;
+
+const MORE_EVENT_FILTERS = [
+  { id: "adult", label: "Adult/Open" },
   { id: "club", label: "Club" },
   { id: "school", label: "School" },
-  { id: "district", label: "District" },
-  { id: "social", label: "Social" },
-  { id: "rating", label: "Rating Events" }
+  { id: "district", label: "District" }
 ] as const;
+
+const EVENT_FILTERS = [...PRIMARY_EVENT_FILTERS, ...MORE_EVENT_FILTERS] as const;
 
 const DEFAULT_VISUAL: EventVisual = {
   border: "border-court-teal/35",
@@ -339,6 +352,8 @@ function eventMatchesProfile(event: CourtSideEvent, profile: EntryProfileOption)
 
 function filterMatches(event: EventWithEntryCount, filter: string) {
   switch (filter) {
+    case "competitive":
+      return isRatingRelevant(event);
     case "junior":
       return isJuniorEvent(event);
     case "adult":
@@ -358,8 +373,20 @@ function filterMatches(event: EventWithEntryCount, filter: string) {
   }
 }
 
-function dashboardEventsHref(filter: string, profileId?: string) {
+function dashboardEventsHref({
+  filter = "all",
+  profileId,
+  view = "recommended"
+}: {
+  filter?: string;
+  profileId?: string;
+  view?: string;
+}) {
   const params = new URLSearchParams();
+
+  if (view !== "recommended") {
+    params.set("view", view);
+  }
 
   if (filter !== "all") {
     params.set("filter", filter);
@@ -406,51 +433,47 @@ function SpotlightEventCard({
   const host = hostLabel(event);
 
   return (
-    <section className={`mb-6 overflow-hidden rounded-lg border bg-white shadow-court ${visual.border}`}>
-      <div className={`h-1.5 ${visual.strip}`} />
-      <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center">
-        <div>
-          <p className="text-sm font-black text-court-teal">{label}</p>
-          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className={`grid h-14 w-14 shrink-0 place-items-center rounded ${visual.icon} text-xl font-black`}>
-              <EventIcon size={24} />
+    <section className={`mb-4 overflow-hidden rounded-lg border bg-white shadow-sm ${visual.border}`}>
+      <div className={`h-1 ${visual.strip}`} />
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="section-kicker">{label}</p>
+            <div className="mt-2 flex gap-3">
+              <div className={`grid h-11 w-11 shrink-0 place-items-center rounded ${visual.icon}`}>
+                <EventIcon size={20} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="truncate text-xl font-black text-court-navy">{event.title}</h2>
+                {profile ? <p className="mt-1 text-sm font-bold text-slate-600">Best fit for {profileName(profile)}</p> : null}
+              </div>
             </div>
-            <div className="min-w-0">
-              <h2 className="text-2xl font-black text-court-navy sm:text-3xl">{event.title}</h2>
-              {profile ? <p className="mt-1 text-sm font-bold text-slate-600">Best fit for {profileName(profile)}</p> : null}
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
-            <span className={`ui-chip ${visual.badge}`}>
-              <TagIcon size={14} /> {eventAudienceLabel(event)}
-            </span>
-            {host ? (
+            <div className="mt-3 flex flex-wrap gap-2 text-sm font-bold">
+              <span className={`ui-chip ${visual.badge}`}>
+                <TagIcon size={14} /> {eventAudienceLabel(event)}
+              </span>
+              {host ? (
+                <span className="ui-chip ui-chip-muted">
+                  {hostIcon(event)} {host}
+                </span>
+              ) : null}
               <span className="ui-chip ui-chip-muted">
-                {hostIcon(event)} {host}
+                <EventIcon size={14} /> {formatDate(event.start_datetime)}
               </span>
-            ) : null}
-            <span className="ui-chip ui-chip-muted">
-              <EventIcon size={14} /> {formatDate(event.start_datetime)}
-            </span>
-            <span className="ui-chip ui-chip-muted">
-              <EntriesIcon size={14} /> {event.entry_count ?? 0} entered
-            </span>
-            <span className="ui-chip ui-chip-muted">
-              <CostIcon size={14} /> {eventCostLabel(event)}
-            </span>
-            <span className="ui-chip ui-chip-muted">
-              <ParticipationIcon size={14} /> Rewards TBC
-            </span>
-            {isRatingRelevant(event) ? (
-              <span className="ui-chip ui-chip-navy">
-                <RatingIcon size={14} /> Rating relevant
+              <span className="ui-chip ui-chip-muted">
+                <LocationIcon size={14} /> {event.location ?? "Venue TBC"}
               </span>
-            ) : null}
+              {isRatingRelevant(event) ? (
+                <span className="ui-chip ui-chip-navy">
+                  <RatingIcon size={14} /> Rating
+                </span>
+              ) : null}
+            </div>
           </div>
+          <Link className="btn-primary shrink-0 justify-center px-4 py-2.5 text-sm" href={`/dashboard/events/${event.id}`}>
+            View Event
+          </Link>
         </div>
-        <Link className="inline-flex justify-center rounded bg-court-teal px-5 py-3 text-sm font-black text-white transition hover:bg-teal-500" href={`/dashboard/events/${event.id}`}>
-          View Event
-        </Link>
       </div>
     </section>
   );
@@ -658,6 +681,7 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
     }
   });
 
+  const activeView = EVENT_VIEWS.some((view) => view.id === searchParams?.view) ? searchParams?.view ?? "recommended" : "recommended";
   const activeFilter = EVENT_FILTERS.some((filter) => filter.id === searchParams?.filter) ? searchParams?.filter ?? "all" : "all";
   const activeProfile = profiles.find((profile) => profile.id === searchParams?.profileId) ?? null;
   const recommendedProfile =
@@ -669,19 +693,47 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
   const spotlightEvent = recommendedEvent ?? upcomingEvents[0] ?? null;
   const spotlightLabel = recommendedEvent && recommendedProfile ? `Recommended for ${recommendedProfile.first_name}` : "Next Upcoming Event";
   const baseEvents = activeProfile ? upcomingEvents.filter((event) => eventMatchesProfile(event, activeProfile)) : upcomingEvents;
+  const categoryEvents = baseEvents.filter((event) => filterMatches(event, activeFilter));
+  const visibleSpotlightEvent = spotlightEvent && categoryEvents.some((event) => event.id === spotlightEvent.id) ? spotlightEvent : null;
+  const visibleCurrentEntries = activeProfile ? currentEntries.filter((entry) => entry.profile_id === activeProfile.id) : currentEntries;
+  const activeEntryEventIds = new Set(visibleCurrentEntries.filter((entry) => entry.entry_status !== "cancelled").map((entry) => entry.event_id));
+  const entryEvents = categoryEvents.filter((event) => activeEntryEventIds.has(event.id));
   const filteredEvents = (() => {
-    if (activeFilter === "recommended") {
-      return spotlightEvent && baseEvents.some((event) => event.id === spotlightEvent.id) ? [spotlightEvent] : [];
+    if (activeView === "recommended") {
+      return visibleSpotlightEvent ? [visibleSpotlightEvent] : [];
     }
 
-    if (activeFilter === "next") {
-      return baseEvents.slice(0, 1);
+    if (activeView === "entries") {
+      return entryEvents;
     }
 
-    return baseEvents.filter((event) => filterMatches(event, activeFilter));
+    return categoryEvents;
   })();
-  const returnTo = dashboardEventsHref(activeFilter, activeProfile?.id);
+  const returnTo = dashboardEventsHref({ filter: activeFilter, profileId: activeProfile?.id, view: activeView });
   const message = errorMessage(searchParams?.error);
+  const listEyebrow = activeView === "recommended" ? "Recommended" : activeView === "entries" ? "My Entries" : activeView === "current" ? "Current" : "Upcoming";
+  const listTitle =
+    activeView === "recommended"
+      ? "Best fit now"
+      : activeView === "entries"
+        ? "Recent event entries"
+        : activeView === "current"
+          ? "Open events"
+          : "Upcoming events";
+  const emptyTitle =
+    activeView === "recommended"
+      ? "No recommended events yet"
+      : activeView === "entries"
+        ? "No entries yet"
+        : activeView === "current"
+          ? "No current events open"
+          : "No upcoming events yet";
+  const emptyText =
+    activeView === "recommended"
+      ? "Try Upcoming or switch player. New recommendations will appear when suitable events open."
+      : activeView === "entries"
+        ? "Choose an open event to enter yourself or a linked player."
+        : "Try another player or quick filter. New events will appear here when entries open.";
 
   return (
     <PageShell eyebrow="Events" subtitle="Find matchplay, competitions and events suited to your players." title="Events">
@@ -707,28 +759,26 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
         </section>
       ) : null}
 
-      {spotlightEvent ? <SpotlightEventCard event={spotlightEvent} label={spotlightLabel} profile={recommendedEvent ? recommendedProfile : null} /> : null}
-
-      <section className="surface-card mb-6 p-4 sm:p-5">
-        <div className="flex flex-col gap-4">
+      <section className="surface-card mb-4 p-4 sm:p-5">
+        <div className="grid gap-4">
           {profiles.length > 0 ? (
             <div>
-              <p className="text-sm font-black text-court-navy">Players</p>
+              <p className="section-kicker">Player</p>
               <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                 <Link
                   className={`shrink-0 rounded border px-3 py-2 text-sm font-black ${
                     activeProfile ? "border-slate-200 bg-white text-court-navy" : "border-court-teal bg-court-mist text-court-navy"
                   }`}
-                  href={dashboardEventsHref(activeFilter)}
+                  href={dashboardEventsHref({ filter: activeFilter, view: activeView })}
                 >
-                  All
+                  All players
                 </Link>
                 {profiles.map((profile) => (
                   <Link
                     className={`shrink-0 rounded border px-3 py-2 text-sm font-black ${
                       activeProfile?.id === profile.id ? "border-court-teal bg-court-mist text-court-navy" : "border-slate-200 bg-white text-court-navy"
                     }`}
-                    href={dashboardEventsHref(activeFilter, profile.id)}
+                    href={dashboardEventsHref({ filter: activeFilter, profileId: profile.id, view: activeView })}
                     key={profile.id}
                   >
                     {profileChipLabel(profile)}
@@ -738,95 +788,127 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
             </div>
           ) : null}
 
-          <div>
-            <p className="text-sm font-black text-court-navy">Filters</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {EVENT_FILTERS.map((filter) => (
-                <Link
-                  className={`rounded px-3 py-2 text-sm font-black ${
-                    activeFilter === filter.id ? "bg-court-navy text-white" : "bg-slate-100 text-court-navy hover:bg-court-mist"
-                  }`}
-                  href={dashboardEventsHref(filter.id, activeProfile?.id)}
-                  key={filter.id}
-                >
-                  {filter.label}
-                </Link>
-              ))}
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div>
+              <p className="section-kicker">View</p>
+              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                {EVENT_VIEWS.map((view) => (
+                  <Link
+                    className={`shrink-0 rounded px-3 py-2 text-sm font-black ${
+                      activeView === view.id ? "bg-court-navy text-white" : "bg-slate-100 text-court-navy hover:bg-court-mist"
+                    }`}
+                    href={dashboardEventsHref({ filter: activeFilter, profileId: activeProfile?.id, view: view.id })}
+                    key={view.id}
+                  >
+                    {view.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="section-kicker">Quick Filters</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {PRIMARY_EVENT_FILTERS.map((filter) => (
+                  <Link
+                    className={`rounded px-3 py-2 text-sm font-black ${
+                      activeFilter === filter.id ? "bg-court-teal text-white" : "bg-slate-100 text-court-navy hover:bg-court-mist"
+                    }`}
+                    href={dashboardEventsHref({ filter: filter.id, profileId: activeProfile?.id, view: activeView })}
+                    key={filter.id}
+                  >
+                    {filter.label}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="surface-card mb-6 p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-black text-court-teal">My Entries</p>
-            <h2 className="text-xl font-black text-court-navy">Recent event entries</h2>
+      <div className="mb-4">
+        <CollapsibleCard
+          defaultOpen={MORE_EVENT_FILTERS.some((filter) => filter.id === activeFilter)}
+          summary="Adult/open, club, school and district filters."
+          title="More Filters"
+        >
+          <div className="flex flex-wrap gap-2">
+            {MORE_EVENT_FILTERS.map((filter) => (
+              <Link
+                className={`rounded px-3 py-2 text-sm font-black ${
+                  activeFilter === filter.id ? "bg-court-teal text-white" : "bg-slate-100 text-court-navy hover:bg-court-mist"
+                }`}
+                href={dashboardEventsHref({ filter: filter.id, profileId: activeProfile?.id, view: activeView })}
+                key={filter.id}
+              >
+                {filter.label}
+              </Link>
+            ))}
           </div>
-          <Link className="font-bold text-court-blue" href="/dashboard/my-entries">
-            View history
-          </Link>
-        </div>
+        </CollapsibleCard>
+      </div>
 
-        {currentEntries.length > 0 ? (
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {currentEntries.slice(0, 6).map((entry) => {
-              const canWithdraw = entry.entry_status !== "cancelled" && entry.events?.start_datetime && new Date(entry.events.start_datetime).getTime() > Date.now();
-
-              return (
-                <article className="rounded-lg border border-slate-200 bg-slate-50 p-4" key={entry.id}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <Link className="font-black text-court-navy hover:text-court-blue" href={`/dashboard/events/${entry.event_id}`}>
-                        {entry.events?.title ?? "Event unavailable"}
-                      </Link>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-court-navy">
-                        <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1">
-                          <ClubIcon size={14} /> {entryPlayerLabel(entry)}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1">
-                          <EventIcon size={14} /> {entry.events?.start_datetime ? formatDate(entry.events.start_datetime) : "Date TBC"}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1">
-                          <CostIcon size={14} /> {formatLabel(entry.payment_status)}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 rounded bg-white px-2.5 py-1">
-                          <TicketIcon size={14} /> {formatLabel(entry.entry_status)}
-                        </span>
-                      </div>
-                      {entry.payment_notes ? <p className="mt-2 text-xs font-semibold text-slate-500">{entry.payment_notes}</p> : null}
-                    </div>
-                    {canWithdraw ? (
-                      <form action={withdrawDashboardEventEntry}>
-                        <input name="entryId" type="hidden" value={entry.id} />
-                        <input name="returnTo" type="hidden" value="/dashboard/events" />
-                        <button className="rounded border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-court-navy" type="submit">
-                          Withdraw
-                        </button>
-                      </form>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="ui-empty-card mt-5">No event entries yet. Choose an open event below to get started.</p>
-        )}
-      </section>
+      {activeView !== "entries" && visibleSpotlightEvent ? <SpotlightEventCard event={visibleSpotlightEvent} label={spotlightLabel} profile={recommendedEvent ? recommendedProfile : null} /> : null}
 
       {eventsError ? <p className="mb-5 rounded bg-amber-50 p-4 text-sm text-amber-900">Events could not be loaded right now.</p> : null}
 
       <section>
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-black text-court-teal">Upcoming</p>
-            <h2 className="text-2xl font-black text-court-navy">Open events</h2>
+            <p className="section-kicker">{listEyebrow}</p>
+            <h2 className="text-2xl font-black text-court-navy">{listTitle}</h2>
           </div>
-          <p className="text-sm font-bold text-slate-600">{filteredEvents.length} showing</p>
+          <p className="text-sm font-bold text-slate-600">{activeView === "entries" ? visibleCurrentEntries.length : filteredEvents.length} showing</p>
         </div>
 
-        {filteredEvents.length > 0 ? (
+        {activeView === "entries" && visibleCurrentEntries.length > 0 ? (
+          <>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {visibleCurrentEntries.slice(0, 6).map((entry) => {
+                const canWithdraw = entry.entry_status !== "cancelled" && entry.events?.start_datetime && new Date(entry.events.start_datetime).getTime() > Date.now();
+
+                return (
+                  <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={entry.id}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <Link className="font-black text-court-navy hover:text-court-blue" href={`/dashboard/events/${entry.event_id}`}>
+                          {entry.events?.title ?? "Event unavailable"}
+                        </Link>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-court-navy">
+                          <span className="inline-flex items-center gap-1.5 rounded bg-court-mist px-2.5 py-1">
+                            <ClubIcon size={14} /> {entryPlayerLabel(entry)}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded bg-slate-100 px-2.5 py-1">
+                            <EventIcon size={14} /> {entry.events?.start_datetime ? formatDate(entry.events.start_datetime) : "Date TBC"}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded bg-slate-100 px-2.5 py-1">
+                            <CostIcon size={14} /> {formatLabel(entry.payment_status)}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded bg-slate-100 px-2.5 py-1">
+                            <TicketIcon size={14} /> {formatLabel(entry.entry_status)}
+                          </span>
+                        </div>
+                        {entry.payment_notes ? <p className="mt-2 text-xs font-semibold text-slate-500">{entry.payment_notes}</p> : null}
+                      </div>
+                      {canWithdraw ? (
+                        <form action={withdrawDashboardEventEntry}>
+                          <input name="entryId" type="hidden" value={entry.id} />
+                          <input name="returnTo" type="hidden" value={returnTo} />
+                          <button className="rounded border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-court-navy" type="submit">
+                            Withdraw
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            <Link className="mt-4 inline-flex font-bold text-court-blue" href="/dashboard/my-entries">
+              View full history
+            </Link>
+          </>
+        ) : activeView !== "entries" && filteredEvents.length > 0 ? (
           <div className="mt-5 grid gap-4">
             {filteredEvents.map((event) => (
               <EventCard activeEntries={activeEntriesByEvent.get(event.id) ?? []} event={event} key={event.id} profiles={profiles} returnTo={returnTo} />
@@ -834,8 +916,8 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
           </div>
         ) : (
           <div className="empty-state mt-5">
-            <h3 className="text-lg font-black text-court-navy">No events match this view</h3>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">Try another player or filter. New events will appear here when entries open.</p>
+            <h3 className="text-lg font-black text-court-navy">{emptyTitle}</h3>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">{emptyText}</p>
           </div>
         )}
       </section>
