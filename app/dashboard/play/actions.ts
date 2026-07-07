@@ -30,9 +30,25 @@ function isWithinUserBookingWindow(start: Date) {
   return start.getTime() >= now && start.getTime() < max;
 }
 
-function playRedirect(params: Record<string, string>): never {
+const playReturnPaths = new Set(["/dashboard/play", "/dashboard/play/invite", "/dashboard/play/plan-match", "/dashboard/play/challenges", "/dashboard/play/matches"]);
+
+function playReturnPath(formData: FormData) {
+  const returnTo = text(formData, "return_to");
+  return playReturnPaths.has(returnTo) ? returnTo : "/dashboard/play";
+}
+
+function revalidatePlayRoutes(path: string) {
+  revalidatePath("/dashboard/play");
+  revalidatePath("/dashboard/play/invite");
+  revalidatePath("/dashboard/play/plan-match");
+  revalidatePath("/dashboard/play/challenges");
+  revalidatePath("/dashboard/play/matches");
+  revalidatePath(path);
+}
+
+function playRedirect(path: string, params: Record<string, string>): never {
   const searchParams = new URLSearchParams(params);
-  redirect(`/dashboard/play?${searchParams.toString()}`);
+  redirect(`${path}?${searchParams.toString()}`);
 }
 
 async function applyRatingForVerifiedMatch(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, matchId: string, userId: string) {
@@ -79,6 +95,7 @@ async function getPlayContext() {
 }
 
 export async function createMatchInvite(formData: FormData) {
+  const returnTo = playReturnPath(formData);
   const { supabase, user, profileIds } = await getPlayContext();
   const inviterProfileId = text(formData, "inviter_profile_id");
   const opponentProfileId = text(formData, "opponent_profile_id");
@@ -86,15 +103,15 @@ export async function createMatchInvite(formData: FormData) {
   const bookingId = text(formData, "booking_id");
 
   if (!inviterProfileId || !opponentProfileId) {
-    playRedirect({ error: "missing_fields" });
+    playRedirect(returnTo, { error: "missing_fields" });
   }
 
   if (!profileIds.includes(inviterProfileId)) {
-    playRedirect({ error: "profile_not_allowed" });
+    playRedirect(returnTo, { error: "profile_not_allowed" });
   }
 
   if (profileIds.includes(opponentProfileId) || inviterProfileId === opponentProfileId) {
-    playRedirect({ error: "opponent_not_allowed" });
+    playRedirect(returnTo, { error: "opponent_not_allowed" });
   }
 
   let resolvedBookingId: string | null = null;
@@ -103,14 +120,14 @@ export async function createMatchInvite(formData: FormData) {
     const startValue = text(formData, "new_start_time");
 
     if (!courtId || !startValue) {
-      playRedirect({ error: "missing_booking_slot" });
+      playRedirect(returnTo, { error: "missing_booking_slot" });
     }
 
     const startTime = new Date(startValue);
     const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
 
     if (!Number.isFinite(startTime.getTime()) || !isWithinUserBookingWindow(startTime)) {
-      playRedirect({ error: "booking_window" });
+      playRedirect(returnTo, { error: "booking_window" });
     }
 
     const { data: courtData, error: courtError } = await supabase
@@ -121,7 +138,7 @@ export async function createMatchInvite(formData: FormData) {
       .single();
 
     if (courtError || !courtData) {
-      playRedirect({ error: "court_unavailable" });
+      playRedirect(returnTo, { error: "court_unavailable" });
     }
 
     const { data: createdBooking, error: bookingCreateError } = await supabase
@@ -143,10 +160,10 @@ export async function createMatchInvite(formData: FormData) {
     if (bookingCreateError || !createdBooking) {
       console.error("CourtSide match invite booking create failed", { userId: user.id, courtId, inviterProfileId, startValue, error: bookingCreateError });
       if (bookingCreateError?.code === "23P01") {
-        playRedirect({ error: "slot_unavailable" });
+        playRedirect(returnTo, { error: "slot_unavailable" });
       }
 
-      playRedirect({ error: "booking_create_failed" });
+      playRedirect(returnTo, { error: "booking_create_failed" });
     }
 
     resolvedBookingId = createdBooking.id as string;
@@ -176,11 +193,15 @@ export async function createMatchInvite(formData: FormData) {
       .maybeSingle();
 
     if (!booking || !profileIds.includes(String(booking.player_profile_id))) {
-      playRedirect({ error: "booking_not_allowed" });
+      playRedirect(returnTo, { error: "booking_not_allowed" });
     }
 
     resolvedBookingId = booking.id as string;
   }
+
+  const preferredSummary = nullableText(formData, "preferred_summary");
+  const baseMessage = nullableText(formData, "message");
+  const message = preferredSummary && !resolvedBookingId ? [baseMessage, `Preferred court window: ${preferredSummary}`].filter(Boolean).join("\n\n") : baseMessage;
 
   const { error } = await supabase.from("match_invites").insert({
     booking_id: resolvedBookingId,
@@ -189,27 +210,28 @@ export async function createMatchInvite(formData: FormData) {
     opponent_profile_id: opponentProfileId,
     match_type: allowed<MatchInviteType>(text(formData, "match_type"), matchTypes, "casual"),
     status: "pending",
-    message: nullableText(formData, "message")
+    message
   });
 
   if (error) {
     console.error("CourtSide match invite create failed", { userId: user.id, inviterProfileId, opponentProfileId, bookingId: resolvedBookingId, error });
-    playRedirect({ error: "invite_failed" });
+    playRedirect(returnTo, { error: "invite_failed" });
   }
 
-  revalidatePath("/dashboard/play");
+  revalidatePlayRoutes(returnTo);
   revalidatePath("/dashboard/book-court");
   revalidatePath("/dashboard/my-bookings");
-  playRedirect({ invite: "created" });
+  playRedirect(returnTo, { invite: "created" });
 }
 
 export async function respondToMatchInvite(formData: FormData) {
+  const returnTo = playReturnPath(formData);
   const { supabase, user } = await getPlayContext();
   const inviteId = text(formData, "invite_id");
   const status = allowed<MatchInviteStatus>(text(formData, "status"), responseStatuses, "declined");
 
   if (!inviteId) {
-    playRedirect({ error: "invalid_invite" });
+    playRedirect(returnTo, { error: "invalid_invite" });
   }
 
   const { error } = await supabase
@@ -223,19 +245,20 @@ export async function respondToMatchInvite(formData: FormData) {
 
   if (error) {
     console.error("CourtSide match invite response failed", { userId: user.id, inviteId, status, error });
-    playRedirect({ error: "invite_update_failed" });
+    playRedirect(returnTo, { error: "invite_update_failed" });
   }
 
-  revalidatePath("/dashboard/play");
-  playRedirect({ invite: status });
+  revalidatePlayRoutes(returnTo);
+  playRedirect(returnTo, { invite: status });
 }
 
 export async function cancelMatchInvite(formData: FormData) {
+  const returnTo = playReturnPath(formData);
   const { supabase, user } = await getPlayContext();
   const inviteId = text(formData, "invite_id");
 
   if (!inviteId) {
-    playRedirect({ error: "invalid_invite" });
+    playRedirect(returnTo, { error: "invalid_invite" });
   }
 
   const { error } = await supabase
@@ -249,21 +272,22 @@ export async function cancelMatchInvite(formData: FormData) {
 
   if (error) {
     console.error("CourtSide match invite cancel failed", { userId: user.id, inviteId, error });
-    playRedirect({ error: "invite_update_failed" });
+    playRedirect(returnTo, { error: "invite_update_failed" });
   }
 
-  revalidatePath("/dashboard/play");
-  playRedirect({ invite: "cancelled" });
+  revalidatePlayRoutes(returnTo);
+  playRedirect(returnTo, { invite: "cancelled" });
 }
 
 export async function submitMatchResult(formData: FormData) {
+  const returnTo = playReturnPath(formData);
   const { supabase, user, profileIds } = await getPlayContext();
   const inviteId = text(formData, "match_invite_id");
   const winnerProfileId = text(formData, "winner_profile_id");
   const scoreText = text(formData, "score_text");
 
   if (!inviteId || !winnerProfileId || !scoreText) {
-    playRedirect({ error: "missing_result_fields" });
+    playRedirect(returnTo, { error: "missing_result_fields" });
   }
 
   const { data: inviteData, error: inviteError } = await supabase
@@ -274,7 +298,7 @@ export async function submitMatchResult(formData: FormData) {
     .maybeSingle();
 
   if (inviteError || !inviteData) {
-    playRedirect({ error: "result_invite_unavailable" });
+    playRedirect(returnTo, { error: "result_invite_unavailable" });
   }
 
   const invite = inviteData as {
@@ -286,11 +310,11 @@ export async function submitMatchResult(formData: FormData) {
   };
 
   if (!profileIds.includes(invite.inviter_profile_id) && !profileIds.includes(invite.opponent_profile_id)) {
-    playRedirect({ error: "profile_not_allowed" });
+    playRedirect(returnTo, { error: "profile_not_allowed" });
   }
 
   if (![invite.inviter_profile_id, invite.opponent_profile_id].includes(winnerProfileId)) {
-    playRedirect({ error: "winner_not_allowed" });
+    playRedirect(returnTo, { error: "winner_not_allowed" });
   }
 
   const { error } = await supabase.from("matches").insert({
@@ -304,21 +328,22 @@ export async function submitMatchResult(formData: FormData) {
 
   if (error) {
     console.error("CourtSide match result submit failed", { userId: user.id, inviteId: invite.id, winnerProfileId, error });
-    playRedirect({ error: error.code === "23505" ? "result_exists" : "result_failed" });
+    playRedirect(returnTo, { error: error.code === "23505" ? "result_exists" : "result_failed" });
   }
 
-  revalidatePath("/dashboard/play");
+  revalidatePlayRoutes(returnTo);
   revalidatePath("/dashboard/profile");
-  playRedirect({ result: "submitted" });
+  playRedirect(returnTo, { result: "submitted" });
 }
 
 export async function respondToMatchResult(formData: FormData) {
+  const returnTo = playReturnPath(formData);
   const { supabase, user } = await getPlayContext();
   const matchId = text(formData, "match_id");
   const status = allowed<MatchVerificationStatus>(text(formData, "verification_status"), resultResponseStatuses, "disputed");
 
   if (!matchId) {
-    playRedirect({ error: "invalid_result" });
+    playRedirect(returnTo, { error: "invalid_result" });
   }
 
   const { error } = await supabase
@@ -333,15 +358,15 @@ export async function respondToMatchResult(formData: FormData) {
 
   if (error) {
     console.error("CourtSide match result response failed", { userId: user.id, matchId, status, error });
-    playRedirect({ error: "result_update_failed" });
+    playRedirect(returnTo, { error: "result_update_failed" });
   }
 
   if (status === "verified") {
     await applyRatingForVerifiedMatch(supabase, matchId, user.id);
   }
 
-  revalidatePath("/dashboard/play");
+  revalidatePlayRoutes(returnTo);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/profile");
-  playRedirect({ result: status });
+  playRedirect(returnTo, { result: status });
 }
