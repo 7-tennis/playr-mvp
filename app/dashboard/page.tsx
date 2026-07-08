@@ -127,7 +127,7 @@ function MemberCard({
           </div>
 
           <div className={`mt-4 space-y-2 rounded ${accent.tint} p-3`}>
-            <InfoRow icon={<RatingIcon size={16} />} value={ratingText} />
+            <InfoRow icon={<RatingIcon rating={rating?.rating_value ?? null} size={16} stage="member" />} value={ratingText} />
             <InfoRow icon={<SchoolIcon size={16} />} muted value="No school linked" />
             <InfoRow icon={<ClubIcon size={16} />} muted={!clubName} value={clubName ?? "No club linked"} />
           </div>
@@ -167,7 +167,10 @@ function JuniorCard({ junior, activity, clubName }: { junior: JuniorCardProfile;
           </div>
 
           <div className={`mt-4 space-y-2 rounded ${accent.tint} p-3`}>
-            <InfoRow icon={<RatingIcon size={16} />} value={`${formatJuniorRating(junior.junior_stage, junior.junior_rating)} / ${formatLabel(junior.junior_rating_confidence)}`} />
+            <InfoRow
+              icon={<RatingIcon rating={junior.junior_rating} size={16} stage={junior.junior_stage} />}
+              value={`${formatJuniorRating(junior.junior_stage, junior.junior_rating)} / ${formatLabel(junior.junior_rating_confidence)}`}
+            />
             <InfoRow icon={<SchoolIcon size={16} />} muted value="No school linked" />
             <InfoRow icon={<ClubIcon size={16} />} muted={!clubName} value={clubName ?? "No club linked"} />
           </div>

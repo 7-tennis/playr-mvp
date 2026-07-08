@@ -7,11 +7,11 @@ import {
   BadgeIcon,
   ClubIcon,
   CostIcon,
+  DistrictIcon,
   EntriesIcon,
   EventIcon,
   FormatIcon,
   InfoIcon,
-  LeaderboardIcon,
   LocationIcon,
   ParticipationIcon,
   RatingIcon,
@@ -235,7 +235,7 @@ function hostIcon(event: CourtSideEvent) {
   }
 
   if (text.includes("district")) {
-    return <LeaderboardIcon size={14} />;
+    return <DistrictIcon size={14} />;
   }
 
   return <ClubIcon size={14} />;

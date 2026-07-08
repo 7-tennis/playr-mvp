@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { markAllNotificationsRead, markNotificationRead } from "@/app/dashboard/notifications/actions";
 import { PageShell } from "@/components/page-shell";
+import { BadgeIcon, BookingIcon, EventIcon, InviteIcon, LeaderboardIcon, MembershipIcon, NotificationIcon, RatingIcon, ShopIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
@@ -17,21 +18,50 @@ type NotificationsPageProps = {
   };
 };
 
-const notificationVisuals: Record<NotificationType, { label: string; className: string }> = {
-  match_invite_received: { label: "INV", className: "bg-court-mist text-court-teal" },
-  match_invite_accepted: { label: "OK", className: "bg-emerald-50 text-emerald-700" },
-  match_invite_declined: { label: "NO", className: "bg-slate-100 text-slate-700" },
-  match_invite_reminder: { label: "REM", className: "bg-amber-50 text-amber-800" },
-  court_booking_confirmed: { label: "BOOK", className: "bg-court-navy text-white" },
-  upcoming_booking_reminder: { label: "TIME", className: "bg-amber-50 text-amber-800" },
-  event_entry_confirmed: { label: "EVT", className: "bg-court-mist text-court-teal" },
-  event_reminder: { label: "EVT", className: "bg-amber-50 text-amber-800" },
-  rating_updated: { label: "RATE", className: "bg-court-blue text-white" },
-  badge_unlocked: { label: "BADGE", className: "bg-emerald-50 text-emerald-700" },
-  leaderboard_changed: { label: "RANK", className: "bg-court-navy text-white" },
-  membership_renewal: { label: "MEM", className: "bg-court-mist text-court-teal" },
-  shop_reservation_update: { label: "SHOP", className: "bg-slate-100 text-slate-700" }
+const notificationVisuals: Record<NotificationType, { className: string }> = {
+  match_invite_received: { className: "bg-court-mist text-court-teal" },
+  match_invite_accepted: { className: "bg-emerald-50 text-emerald-700" },
+  match_invite_declined: { className: "bg-slate-100 text-slate-700" },
+  match_invite_reminder: { className: "bg-amber-50 text-amber-800" },
+  court_booking_confirmed: { className: "bg-court-navy text-white" },
+  upcoming_booking_reminder: { className: "bg-amber-50 text-amber-800" },
+  event_entry_confirmed: { className: "bg-court-mist text-court-teal" },
+  event_reminder: { className: "bg-amber-50 text-amber-800" },
+  rating_updated: { className: "bg-court-blue text-white" },
+  badge_unlocked: { className: "bg-emerald-50 text-emerald-700" },
+  leaderboard_changed: { className: "bg-court-navy text-white" },
+  membership_renewal: { className: "bg-court-mist text-court-teal" },
+  shop_reservation_update: { className: "bg-slate-100 text-slate-700" }
 };
+
+function notificationIcon(type: NotificationType) {
+  switch (type) {
+    case "match_invite_received":
+    case "match_invite_accepted":
+    case "match_invite_declined":
+      return <InviteIcon size={20} />;
+    case "court_booking_confirmed":
+      return <BookingIcon size={20} />;
+    case "upcoming_booking_reminder":
+    case "match_invite_reminder":
+      return <TimeIcon size={20} />;
+    case "event_entry_confirmed":
+    case "event_reminder":
+      return <EventIcon size={20} />;
+    case "rating_updated":
+      return <RatingIcon size={20} />;
+    case "badge_unlocked":
+      return <BadgeIcon size={20} />;
+    case "leaderboard_changed":
+      return <LeaderboardIcon size={20} />;
+    case "membership_renewal":
+      return <MembershipIcon size={20} />;
+    case "shop_reservation_update":
+      return <ShopIcon size={20} />;
+    default:
+      return <NotificationIcon size={20} />;
+  }
+}
 
 function statusMessage(marked?: string) {
   switch (marked) {
@@ -78,7 +108,7 @@ function NotificationCard({ notification }: { notification: Notification }) {
     <article className={`rounded-lg border bg-white p-4 shadow-sm sm:p-5 ${unread ? "border-court-teal/40 ring-2 ring-court-mist" : "border-slate-200"}`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 gap-3">
-          <div className={`grid h-11 w-11 shrink-0 place-items-center rounded text-[11px] font-black ${visual.className}`}>{visual.label}</div>
+          <div className={`grid h-11 w-11 shrink-0 place-items-center rounded ${visual.className}`}>{notificationIcon(notification.type)}</div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-black text-court-navy">{notification.title}</h2>

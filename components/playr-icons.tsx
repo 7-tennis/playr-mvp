@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { playrAccents, playrStageKey, type PlayRAccentKey } from "@/lib/playr-ui";
+import type { JuniorStage } from "@/types/courtside";
 
 type PlayRIconProps = {
   className?: string;
@@ -6,9 +8,41 @@ type PlayRIconProps = {
   title?: string;
 };
 
+type RatingStage = JuniorStage | "red" | "orange" | "green" | "yellow" | "member" | "adult" | "open" | null | undefined;
+
+type RatingIconProps = PlayRIconProps & {
+  maxRating?: number | null;
+  rating?: number | null;
+  stage?: RatingStage;
+};
+
 type IconShellProps = PlayRIconProps & {
   children: ReactNode;
 };
+
+const RATING_RING_RADIUS = 10;
+const RATING_RING_CIRCUMFERENCE = 2 * Math.PI * RATING_RING_RADIUS;
+
+function clampProgress(value: number) {
+  return Math.min(Math.max(value, 0), 1);
+}
+
+function ratingAccentKey(stage: RatingStage): PlayRAccentKey {
+  if (!stage || stage === "member" || stage === "adult" || stage === "open") {
+    return "member";
+  }
+
+  return playrStageKey(stage);
+}
+
+function ratingScaleMax(stage: RatingStage, maxRating?: number | null) {
+  if (typeof maxRating === "number" && maxRating > 0) {
+    return maxRating;
+  }
+
+  const accentKey = ratingAccentKey(stage);
+  return accentKey === "red" || accentKey === "orange" || accentKey === "green" ? 5 : 10;
+}
 
 function IconShell({ children, className = "", size = 16, title }: IconShellProps) {
   return (
@@ -32,13 +66,31 @@ function IconShell({ children, className = "", size = 16, title }: IconShellProp
   );
 }
 
-export function RatingIcon(props: PlayRIconProps) {
+export function RatingIcon({ maxRating, rating, stage, ...props }: RatingIconProps) {
+  const hasRating = typeof rating === "number" && Number.isFinite(rating);
+  const progress = hasRating ? clampProgress(rating / ratingScaleMax(stage, maxRating)) : 0;
+  const progressOffset = RATING_RING_CIRCUMFERENCE * (1 - progress);
+  const progressClass = hasRating ? playrAccents[ratingAccentKey(stage)].icon : "text-slate-300";
+
   return (
     <IconShell {...props}>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 8v4l3 2" />
-      <path d="M4 12h3" />
-      <path d="M17 12h3" />
+      <circle className="text-slate-200" cx="12" cy="12" r={RATING_RING_RADIUS} stroke="currentColor" />
+      {hasRating ? (
+        <circle
+          className={progressClass}
+          cx="12"
+          cy="12"
+          r={RATING_RING_RADIUS}
+          stroke="currentColor"
+          strokeDasharray={RATING_RING_CIRCUMFERENCE}
+          strokeDashoffset={progressOffset}
+          strokeWidth="2.4"
+          transform="rotate(-90 12 12)"
+        />
+      ) : null}
+      <circle cx="12" cy="12" r="5.8" />
+      <path d="M8.7 7.8c1.7 2 1.7 6.4 0 8.4" />
+      <path d="M15.3 7.8c-1.7 2-1.7 6.4 0 8.4" />
     </IconShell>
   );
 }
@@ -46,7 +98,9 @@ export function RatingIcon(props: PlayRIconProps) {
 export function ParticipationIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
-      <path d="M13 2 4 14h7l-1 8 10-13h-7l1-7Z" />
+      <path d="m12 3.5 2.5 5.1 5.6.8-4.1 4 1 5.6-5-2.7-5 2.7 1-5.6-4.1-4 5.6-.8L12 3.5Z" />
+      <path d="M19.5 3.5v3" />
+      <path d="M21 5h-3" />
     </IconShell>
   );
 }
@@ -63,10 +117,9 @@ export function ConfidenceIcon(props: PlayRIconProps) {
 export function InviteIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
-      <path d="M4 5h16v12H4z" />
-      <path d="m4 7 8 6 8-6" />
-      <path d="M17 19h4" />
-      <path d="M19 17v4" />
+      <path d="M4 12 20 4l-4 16-4-6-8-2Z" />
+      <path d="m12 14 4-10" />
+      <path d="M5 19h5" />
     </IconShell>
   );
 }
@@ -78,9 +131,11 @@ export function EventIcon(props: PlayRIconProps) {
       <path d="M18 3v4" />
       <path d="M4 8h16" />
       <rect height="17" rx="2" width="16" x="4" y="5" />
-      <path d="M9 13h.01" />
-      <path d="M15 13h.01" />
-      <path d="M12 17h.01" />
+      <path d="M9 12h6" />
+      <path d="M10 12v2a2 2 0 0 0 4 0v-2" />
+      <path d="M9 12v-1h6v1" />
+      <path d="M12 16v2" />
+      <path d="M10.5 18h3" />
     </IconShell>
   );
 }
@@ -88,12 +143,15 @@ export function EventIcon(props: PlayRIconProps) {
 export function BookingIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
-      <rect height="14" rx="2" width="18" x="3" y="5" />
-      <path d="M7 9h10" />
-      <path d="M7 13h4" />
-      <path d="M15 13h2" />
-      <path d="M8 19v2" />
-      <path d="M16 19v2" />
+      <rect height="16" rx="2" width="18" x="3" y="5" />
+      <path d="M7 3v4" />
+      <path d="M17 3v4" />
+      <path d="M3 9h18" />
+      <rect height="7" rx="1" width="10" x="7" y="12" />
+      <path d="M12 12v7" />
+      <path d="M7 15.5h10" />
+      <circle cx="17" cy="17" r="2.2" />
+      <path d="M17 15.8v1.3l.9.6" />
     </IconShell>
   );
 }
@@ -101,9 +159,12 @@ export function BookingIcon(props: PlayRIconProps) {
 export function SchoolIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
-      <path d="m3 9 9-5 9 5-9 5-9-5Z" />
-      <path d="M7 12v4c3 2 7 2 10 0v-4" />
-      <path d="M21 9v6" />
+      <path d="M4 21V9l8-5 8 5v12" />
+      <path d="M8 21v-6h8v6" />
+      <path d="M8 11h.01" />
+      <path d="M12 11h.01" />
+      <path d="M16 11h.01" />
+      <path d="M3 21h18" />
     </IconShell>
   );
 }
@@ -111,11 +172,12 @@ export function SchoolIcon(props: PlayRIconProps) {
 export function ClubIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
-      <circle cx="7" cy="17" r="2" />
-      <path d="M9 15 19 5" />
-      <path d="m16 5 3 3" />
-      <path d="m14 7 3 3" />
-      <path d="M5 19h6" />
+      <path d="M4 20V9l8-5 8 5v11" />
+      <path d="M3 20h18" />
+      <path d="M8 20v-6h8v6" />
+      <path d="M9 10h6" />
+      <path d="M9 14h6" />
+      <path d="M17 6.8V4h3" />
     </IconShell>
   );
 }
@@ -123,11 +185,11 @@ export function ClubIcon(props: PlayRIconProps) {
 export function LeaderboardIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
-      <path d="M5 21v-7h4v7" />
-      <path d="M10 21V9h4v12" />
-      <path d="M15 21v-5h4v5" />
-      <path d="M8 10V7" />
-      <path d="m6.5 8.5 1.5-3 1.5 3" />
+      <path d="M4 21v-6h5v6" />
+      <path d="M9.5 21V9h5v12" />
+      <path d="M15 21v-8h5v8" />
+      <circle cx="12" cy="5" r="2" />
+      <path d="M10 7.5h4" />
     </IconShell>
   );
 }
@@ -150,6 +212,16 @@ export function MembershipIcon(props: PlayRIconProps) {
       <path d="M14 10h4" />
       <path d="M14 14h3" />
       <path d="M6.5 16c1.3-1.3 3.7-1.3 5 0" />
+    </IconShell>
+  );
+}
+
+export function PrivateIcon(props: PlayRIconProps) {
+  return (
+    <IconShell {...props}>
+      <rect height="10" rx="2" width="16" x="4" y="11" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+      <path d="M12 15v2" />
     </IconShell>
   );
 }
@@ -193,10 +265,10 @@ export function StatusIcon(props: PlayRIconProps) {
 export function CostIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
-      <rect height="12" rx="2" width="18" x="3" y="6" />
-      <circle cx="12" cy="12" r="2.5" />
-      <path d="M6 10v4" />
-      <path d="M18 10v4" />
+      <rect height="13" rx="2" width="18" x="3" y="6" />
+      <path d="M3 10h18" />
+      <path d="M7 15h4" />
+      <path d="M15 15h2" />
     </IconShell>
   );
 }
@@ -267,10 +339,10 @@ export function FormatIcon(props: PlayRIconProps) {
 export function StageIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
-      <path d="M4 19h16" />
-      <path d="M6 19v-4h4v4" />
-      <path d="M10 19v-8h4v8" />
-      <path d="M14 19V7h4v12" />
+      <circle cx="7" cy="14" r="3" />
+      <circle cx="14" cy="9" r="4" />
+      <path d="M4 20h16" />
+      <path d="M17 16h3" />
     </IconShell>
   );
 }
@@ -304,11 +376,39 @@ export function ChallengeIcon(props: PlayRIconProps) {
   );
 }
 
+export function MatchIcon(props: PlayRIconProps) {
+  return (
+    <IconShell {...props}>
+      <ellipse cx="8" cy="7.5" rx="2.6" ry="3.5" transform="rotate(-35 8 7.5)" />
+      <ellipse cx="16" cy="7.5" rx="2.6" ry="3.5" transform="rotate(35 16 7.5)" />
+      <path d="m9.8 10.2 7.5 9" />
+      <path d="m14.2 10.2-7.5 9" />
+      <path d="M6 20h3" />
+      <path d="M15 20h3" />
+    </IconShell>
+  );
+}
+
 export function BellIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>
       <path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
       <path d="M10 21h4" />
+    </IconShell>
+  );
+}
+
+export function NotificationIcon(props: PlayRIconProps) {
+  return <BellIcon {...props} />;
+}
+
+export function DistrictIcon(props: PlayRIconProps) {
+  return (
+    <IconShell {...props}>
+      <path d="M5 19V7l5-3 4 3 5-3v12l-5 3-4-3-5 3Z" />
+      <path d="M10 4v12" />
+      <path d="M14 7v12" />
+      <circle cx="12" cy="11" r="2" />
     </IconShell>
   );
 }

@@ -9,6 +9,7 @@ export type PlayRAccent = {
   badge: string;
   avatar: string;
   ring: string;
+  icon: string;
 };
 
 export const playrAccents: Record<PlayRAccentKey, PlayRAccent> = {
@@ -18,7 +19,8 @@ export const playrAccents: Record<PlayRAccentKey, PlayRAccent> = {
     tint: "bg-court-mist",
     badge: "bg-court-mist text-court-teal",
     avatar: "bg-court-teal text-white",
-    ring: "group-hover:ring-court-teal/25"
+    ring: "group-hover:ring-court-teal/25",
+    icon: "text-court-teal"
   },
   red: {
     border: "border-red-300",
@@ -26,7 +28,8 @@ export const playrAccents: Record<PlayRAccentKey, PlayRAccent> = {
     tint: "bg-red-50",
     badge: "bg-red-50 text-red-700",
     avatar: "bg-red-500 text-white",
-    ring: "group-hover:ring-red-200"
+    ring: "group-hover:ring-red-200",
+    icon: "text-red-500"
   },
   orange: {
     border: "border-orange-300",
@@ -34,7 +37,8 @@ export const playrAccents: Record<PlayRAccentKey, PlayRAccent> = {
     tint: "bg-orange-50",
     badge: "bg-orange-50 text-orange-700",
     avatar: "bg-orange-500 text-white",
-    ring: "group-hover:ring-orange-200"
+    ring: "group-hover:ring-orange-200",
+    icon: "text-orange-500"
   },
   green: {
     border: "border-emerald-300",
@@ -42,7 +46,8 @@ export const playrAccents: Record<PlayRAccentKey, PlayRAccent> = {
     tint: "bg-emerald-50",
     badge: "bg-emerald-50 text-emerald-700",
     avatar: "bg-emerald-500 text-white",
-    ring: "group-hover:ring-emerald-200"
+    ring: "group-hover:ring-emerald-200",
+    icon: "text-emerald-500"
   },
   yellow: {
     border: "border-amber-300",
@@ -50,7 +55,8 @@ export const playrAccents: Record<PlayRAccentKey, PlayRAccent> = {
     tint: "bg-amber-50",
     badge: "bg-amber-50 text-amber-700",
     avatar: "bg-amber-400 text-court-navy",
-    ring: "group-hover:ring-amber-200"
+    ring: "group-hover:ring-amber-200",
+    icon: "text-amber-500"
   }
 };
 

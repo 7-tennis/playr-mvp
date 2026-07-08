@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageShell } from "@/components/page-shell";
-import { BookingIcon, ChallengeIcon, EventIcon, InviteIcon, ParticipationIcon } from "@/components/playr-icons";
+import { BookingIcon, ChallengeIcon, InviteIcon, MatchIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { ActionCard, countLabel, errorMessage, inviteMessage, loadPlayData, resultMessage } from "@/app/dashboard/play/play-shared";
 
@@ -72,7 +72,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
           action="View Challenges"
           description="Find balanced matches and stronger tests."
           href="/dashboard/play/challenges"
-          icon={<ParticipationIcon size={22} />}
+          icon={<ChallengeIcon size={22} />}
           meta={countLabel(challengeCount, "suggestion")}
           title="Challenge Players"
           tone="green"
@@ -81,7 +81,7 @@ export default async function DashboardPlayPage({ searchParams }: DashboardPlayP
           action="View Matches"
           description="See pending, accepted and result-ready matches."
           href="/dashboard/play/matches"
-          icon={<EventIcon size={22} />}
+          icon={<MatchIcon size={22} />}
           meta={countLabel(upcomingMatchInvites.length, "match", "matches")}
           title="Upcoming Matches"
           tone="navy"

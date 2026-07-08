@@ -9,10 +9,13 @@ import {
   ChallengeIcon,
   ClubIcon,
   ConfidenceIcon,
+  DistrictIcon,
   EventIcon,
   InviteIcon,
-  LeaderboardIcon,
+  MembershipIcon,
+  MatchIcon,
   ParticipationIcon,
+  PrivateIcon,
   RatingIcon,
   ResultIcon,
   SchoolIcon,
@@ -387,7 +390,10 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
               <h2 className="text-3xl font-black text-court-navy">{playerName(player)}</h2>
               <span className={`mt-2 inline-flex rounded px-2.5 py-1 text-xs font-black uppercase tracking-wide ${accent.badge}`}>{playerType}</span>
               <div className="mt-4 grid gap-2">
-                <InfoLine icon={<RatingIcon size={16} />} value={ratingText} />
+                <InfoLine
+                  icon={<RatingIcon rating={player.is_junior ? player.junior_rating : rating?.rating_value ?? null} size={16} stage={player.is_junior ? player.junior_stage : "member"} />}
+                  value={ratingText}
+                />
                 <InfoLine icon={<SchoolIcon size={16} />} muted value="No school linked" />
                 <InfoLine icon={<ClubIcon size={16} />} muted={!clubName} value={clubName ?? "No club linked"} />
               </div>
@@ -409,7 +415,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
             {rankText(<SchoolIcon size={14} />, "School Rank")}
             {rankText(<ClubIcon size={14} />, "Club Rank")}
-            {rankText(<LeaderboardIcon size={14} />, "District Rank")}
+            {rankText(<DistrictIcon size={14} />, "District Rank")}
           </div>
         </SectionCard>
 
@@ -452,6 +458,11 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <CollapsibleCard
+          badge={
+            <span className="ui-chip ui-chip-brand">
+              <MembershipIcon size={14} /> Private
+            </span>
+          }
           eyebrow="Membership"
           id="membership"
           summary={`${memberStatusLabel(player.member_status)} · ${clubName ?? "No club linked"} · Renewal to be confirmed`}
@@ -473,7 +484,17 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
           </div>
         </CollapsibleCard>
 
-        <CollapsibleCard eyebrow="Private" id="private-details" summary={`${familyRole(player, parentProfile)} · Contact and account details`} title="Private Details">
+        <CollapsibleCard
+          badge={
+            <span className="ui-chip ui-chip-brand">
+              <PrivateIcon size={14} /> Private
+            </span>
+          }
+          eyebrow="Private"
+          id="private-details"
+          summary={`${familyRole(player, parentProfile)} · Contact and account details`}
+          title="Private Details"
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <DetailRow label="Family Role" value={familyRole(player, parentProfile)} />
             <DetailRow label="Email" value={player.is_junior ? player.email ?? "No junior email linked" : player.email ?? user.email ?? "No email linked"} />
@@ -497,16 +518,16 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
               <>
                 <StatChip icon={<ParticipationIcon size={18} />} label="Participation" value={participationText} />
                 <StatChip icon={<StageIcon size={18} />} label="Stage readiness" value={`${player.stage_readiness_score}%`} />
-                <StatChip icon={<ClubIcon size={18} />} label="Matches" value={player.matches_played} />
+                <StatChip icon={<MatchIcon size={18} />} label="Matches" value={player.matches_played} />
                 <StatChip icon={<ResultIcon size={18} />} label="Record" value={`${player.wins}-${player.losses}`} />
                 <StatChip icon={<EventIcon size={18} />} label="Events played" value={player.events_played} />
                 <StatChip icon={<ChallengeIcon size={18} />} label="Close matches" value={player.close_matches} />
               </>
             ) : (
               <>
-                <StatChip icon={<RatingIcon size={18} />} label="Rating" value={ratingText} />
+                <StatChip icon={<RatingIcon rating={rating?.rating_value ?? null} size={18} stage="member" />} label="Rating" value={ratingText} />
                 <StatChip icon={<ConfidenceIcon size={18} />} label="Confidence" value={confidenceText} />
-                <StatChip icon={<ClubIcon size={18} />} label="Rated matches" value={rating?.verified_match_count ?? 0} />
+                <StatChip icon={<MatchIcon size={18} />} label="Rated matches" value={rating?.verified_match_count ?? 0} />
                 <StatChip icon={<StatusIcon size={18} />} label="Status" value={rating?.provisional === false ? "Verified" : "Provisional"} />
               </>
             )}

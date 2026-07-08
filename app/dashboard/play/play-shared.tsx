@@ -8,13 +8,13 @@ import {
   BookingIcon,
   ChallengeIcon,
   CloseMatchIcon,
-  ClubIcon,
   ConfidenceIcon,
-  EventIcon,
   InviteIcon,
+  MatchIcon,
   ParticipationIcon,
   RatingIcon,
-  ResultIcon
+  ResultIcon,
+  TimeIcon
 } from "@/components/playr-icons";
 import { SubmitButton } from "@/components/submit-button";
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
@@ -542,7 +542,7 @@ export function SuggestionCard({
           ) : null}
           {typeof matchCount === "number" ? (
             <span className="ui-chip ui-chip-muted">
-              <ClubIcon size={14} /> {countLabel(matchCount, "match", "matches")}
+              <MatchIcon size={14} /> {countLabel(matchCount, "match", "matches")}
             </span>
           ) : null}
         </div>
@@ -616,13 +616,13 @@ export function UpcomingMatchCard({ invite, ownProfileIds }: { invite: MatchInvi
               <InviteIcon size={14} /> {formatLabel(invite.status)}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded bg-slate-100 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-slate-600">
-              <ClubIcon size={14} /> {formatLabel(invite.match_type)}
+              <MatchIcon size={14} /> {formatLabel(invite.match_type)}
             </span>
           </div>
           <h3 className="mt-1 font-black text-court-navy">vs {opponentName}</h3>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
             <span className="inline-flex items-center gap-1.5 rounded bg-slate-50 px-2.5 py-1">
-              <EventIcon size={14} /> {invite.booking_start_time ? formatDateTime(invite.booking_start_time) : "Time TBC"}
+              <TimeIcon size={14} /> {invite.booking_start_time ? formatDateTime(invite.booking_start_time) : "Time TBC"}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded bg-slate-50 px-2.5 py-1">
               <BookingIcon size={14} /> {invite.booking_court_name ?? "Court TBC"}

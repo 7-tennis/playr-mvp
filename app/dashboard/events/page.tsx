@@ -6,9 +6,9 @@ import { PageShell } from "@/components/page-shell";
 import {
   ClubIcon,
   CostIcon,
+  DistrictIcon,
   EntriesIcon,
   EventIcon,
-  LeaderboardIcon,
   LocationIcon,
   ParticipationIcon,
   RatingIcon,
@@ -265,7 +265,7 @@ function hostIcon(event: CourtSideEvent) {
   }
 
   if (text.includes("district")) {
-    return <LeaderboardIcon size={14} />;
+    return <DistrictIcon size={14} />;
   }
 
   return <ClubIcon size={14} />;
@@ -876,7 +876,7 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
                         </Link>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-court-navy">
                           <span className="inline-flex items-center gap-1.5 rounded bg-court-mist px-2.5 py-1">
-                            <ClubIcon size={14} /> {entryPlayerLabel(entry)}
+                            <EntriesIcon size={14} /> {entryPlayerLabel(entry)}
                           </span>
                           <span className="inline-flex items-center gap-1.5 rounded bg-slate-100 px-2.5 py-1">
                             <EventIcon size={14} /> {entry.events?.start_datetime ? formatDate(entry.events.start_datetime) : "Date TBC"}

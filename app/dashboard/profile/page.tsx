@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { saveOwnProfile } from "@/app/dashboard/profile/actions";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { PageShell } from "@/components/page-shell";
-import { BadgeIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, MembershipIcon, ParticipationIcon, RatingIcon, SchoolIcon, TagIcon, TimeIcon } from "@/components/playr-icons";
+import { BadgeIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, MembershipIcon, ParticipationIcon, PrivateIcon, RatingIcon, SchoolIcon, TagIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
 import { formatDate, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
@@ -124,7 +124,11 @@ function MembershipCard({ profile, juniorCount }: { profile: Profile | null; jun
 
   return (
     <CollapsibleCard
-      badge={<span className="ui-chip ui-chip-brand">Private</span>}
+      badge={
+        <span className="ui-chip ui-chip-brand">
+          <PrivateIcon size={14} /> Private
+        </span>
+      }
       eyebrow="Membership"
       summary={`${profile ? memberStatusLabel(profile.member_status) : "Membership details to be confirmed"} · No club linked · Renewal to be confirmed`}
       title="Membership Details"
@@ -197,7 +201,17 @@ function LinkedMemberCard({ member, parentProfile, juniorCount }: { member: Prof
 function PrivateMemberDetails({ member, parentProfile, juniorCount, loginEmail }: { member: Profile | null; parentProfile: Profile | null; juniorCount: number; loginEmail: string | null }) {
   if (!member) {
     return (
-      <CollapsibleCard eyebrow="Private Details" id="member-details" summary="Create your profile to view private member details." title="Private Member Details">
+      <CollapsibleCard
+        badge={
+          <span className="ui-chip ui-chip-brand">
+            <PrivateIcon size={14} /> Private
+          </span>
+        }
+        eyebrow="Private Details"
+        id="member-details"
+        summary="Create your profile to view private member details."
+        title="Private Member Details"
+      >
         <div className="ui-empty-card mt-4">Create your profile to view private member details.</div>
       </CollapsibleCard>
     );
@@ -205,6 +219,11 @@ function PrivateMemberDetails({ member, parentProfile, juniorCount, loginEmail }
 
   return (
     <CollapsibleCard
+      badge={
+        <span className="ui-chip ui-chip-brand">
+          <PrivateIcon size={14} /> Private
+        </span>
+      }
       eyebrow="Private Details"
       id="member-details"
       summary={`${memberRole(member, parentProfile, juniorCount)} · Contact, membership and profile information`}
@@ -264,7 +283,17 @@ function AccountDetailsForm({
   defaultMarketingConsent: boolean;
 }) {
   return (
-    <CollapsibleCard eyebrow="Account Details" id="account-details" summary="Name, phone, sport, consent and notes" title="Edit Private Member Details">
+    <CollapsibleCard
+      badge={
+        <span className="ui-chip ui-chip-brand">
+          <PrivateIcon size={14} /> Private
+        </span>
+      }
+      eyebrow="Account Details"
+      id="account-details"
+      summary="Name, phone, sport, consent and notes"
+      title="Edit Private Member Details"
+    >
       <p className="mb-4 text-sm leading-6 text-slate-600">Keep your account holder details current for club communication, bookings and event entries.</p>
       <form action={saveOwnProfile} className="grid gap-4 md:grid-cols-2">
         <label className="text-sm font-semibold text-slate-700">
@@ -445,7 +474,11 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
         <PrivateMemberDetails juniorCount={juniors.length} loginEmail={user.email ?? null} member={selectedMember} parentProfile={profile} />
 
         <CollapsibleCard
-          badge={<span className="ui-chip ui-chip-brand">Private</span>}
+          badge={
+            <span className="ui-chip ui-chip-brand">
+              <PrivateIcon size={14} /> Private
+            </span>
+          }
           eyebrow="Account & Privacy"
           summary={`${user.email ?? "Login email unavailable"} · ${defaultMarketingConsent ? "Marketing updates on" : "Marketing updates off"}`}
           title="Account Settings"
