@@ -1,22 +1,18 @@
 import { redirect } from "next/navigation";
-import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { canAccessClubAdmin, getPermissionContext } from "@/lib/permissions";
 
 export async function getAdminContext() {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const context = await getPermissionContext();
 
-  if (!user) {
+  if (context.kind === "no-config") {
     redirect("/login");
   }
 
-  const { data: adminUser } = await supabase.from("admin_users").select("id,role").eq("user_id", user.id).maybeSingle();
-
   return {
-    supabase,
-    user,
-    isAdmin: Boolean(adminUser),
-    adminRole: adminUser?.role ?? null
+    supabase: context.supabase,
+    user: context.user,
+    isAdmin: canAccessClubAdmin(context.role),
+    adminRole: context.role,
+    venueId: context.venueId
   };
 }

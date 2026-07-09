@@ -24,9 +24,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     return (
       <main className="mx-auto min-h-[70vh] max-w-3xl px-4 py-10">
         <p className="text-sm font-black uppercase tracking-wide text-court-teal">ClubR Admin</p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight text-court-navy md:text-5xl">Access denied.</h1>
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-court-navy md:text-5xl">Access restricted.</h1>
         <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6">
-          <p className="text-slate-700">Your account is signed in, but it is not listed in ClubR admin users.</p>
+          <p className="text-slate-700">Your account is signed in, but it does not have ClubR admin permission.</p>
           <Link className="mt-5 inline-flex rounded bg-court-blue px-4 py-3 font-bold text-white" href="/dashboard">
             Go to dashboard
           </Link>

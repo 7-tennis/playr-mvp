@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { canAccessClubAdmin, canAccessCoachR, normalizeStoredRole, type StoredUserRole } from "@/lib/permissions";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 function formText(formData: FormData, key: string) {
@@ -14,8 +15,18 @@ function encoded(message: string) {
 
 async function getPostLoginPath(userId: string) {
   const supabase = await createServerSupabaseClient();
-  const { data: adminUser } = await supabase.from("admin_users").select("id").eq("user_id", userId).maybeSingle();
-  return adminUser ? "/admin" : "/dashboard";
+  const { data: adminUser } = await supabase.from("admin_users").select("role").eq("user_id", userId).maybeSingle();
+  const role = normalizeStoredRole((adminUser?.role as StoredUserRole | null) ?? null);
+
+  if (canAccessClubAdmin(role)) {
+    return "/admin";
+  }
+
+  if (canAccessCoachR(role)) {
+    return "/dashboard/coachr";
+  }
+
+  return "/dashboard";
 }
 
 export async function signInWithPassword(formData: FormData) {

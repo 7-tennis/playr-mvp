@@ -9,7 +9,8 @@ export type Sport = "tennis" | "pickleball" | "futsal" | "multi_sport";
 export type EventStatus = "draft" | "published" | "cancelled" | "completed";
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "refunded" | "cancelled";
 export type EntryStatus = "active" | "cancelled" | "checked_in" | "no_show";
-export type AdminRole = "admin" | "staff";
+export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "platform_admin";
+export type AdminRole = UserRole | "admin" | "staff";
 export type CourtStatus = "active" | "inactive";
 export type CourtBookingStatus = "confirmed" | "cancelled";
 export type CourtBookingType = "player_booking" | "lesson" | "maintenance" | "club_programme" | "competition" | "americano";
@@ -17,6 +18,10 @@ export type MatchInviteType = "casual" | "verified";
 export type MatchInviteStatus = "pending" | "accepted" | "declined" | "cancelled";
 export type MatchVerificationStatus = "pending_confirmation" | "verified" | "disputed" | "admin_verified" | "cancelled";
 export type RatingConfidence = "low" | "medium" | "high";
+export type CoachLessonType = "private" | "group" | "squad" | "matchplay" | "assessment" | "other";
+export type CoachLessonStatus = "scheduled" | "completed" | "missed" | "cancelled" | "rain" | "sick";
+export type CoachLessonAttendanceStatus = "not_marked" | "attended" | "partial" | "missed" | "excused";
+export type CoachLessonFeedbackStatus = "not_started" | "draft" | "shared" | "completed";
 export type NotificationType =
   | "match_invite_received"
   | "match_invite_accepted"
@@ -123,6 +128,7 @@ export interface AdminUser {
   id: string;
   user_id: string;
   role: AdminRole;
+  venue_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -189,6 +195,33 @@ export interface Match {
   confirmed_by_user_id: string | null;
   submitted_at: string;
   confirmed_at: string | null;
+  updated_at: string;
+}
+
+export interface CoachLesson {
+  id: string;
+  venue_id: string;
+  coach_id: string;
+  player_id: string;
+  junior_profile_id: string | null;
+  parent_id: string | null;
+  court_id: string | null;
+  court_booking_id: string | null;
+  lesson_type: CoachLessonType;
+  title: string;
+  start_time: string;
+  end_time: string;
+  repeat_rule: string | null;
+  recurring_group_id: string | null;
+  status: CoachLessonStatus;
+  attendance_status: CoachLessonAttendanceStatus;
+  feedback_status: CoachLessonFeedbackStatus;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  cancelled_at: string | null;
+  cancelled_by_user_id: string | null;
+  created_at: string;
   updated_at: string;
 }
 

@@ -20,7 +20,7 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function PlayerDesktopNav({ showAdmin }: { showAdmin: boolean }) {
+export function PlayerDesktopNav({ showAdmin, showCoach }: { showAdmin: boolean; showCoach: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -48,6 +48,19 @@ export function PlayerDesktopNav({ showAdmin }: { showAdmin: boolean }) {
           </Link>
         );
       })}
+      {showCoach ? (
+        <Link
+          className={clsx(
+            "ml-2 rounded border px-3 py-2 transition",
+            pathname.startsWith("/dashboard/coachr")
+              ? "border-court-teal bg-court-mist text-court-navy"
+              : "border-slate-200 text-court-navy hover:border-court-teal"
+          )}
+          href="/dashboard/coachr"
+        >
+          CoachR
+        </Link>
+      ) : null}
       {showAdmin ? (
         <Link
           className={clsx(
@@ -65,7 +78,7 @@ export function PlayerDesktopNav({ showAdmin }: { showAdmin: boolean }) {
   );
 }
 
-export function PlayerBottomNav({ showAdmin }: { showAdmin: boolean }) {
+export function PlayerBottomNav({ showAdmin, showCoach }: { showAdmin: boolean; showCoach: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -96,6 +109,13 @@ export function PlayerBottomNav({ showAdmin }: { showAdmin: boolean }) {
           );
         })}
       </div>
+      {showCoach ? (
+        <div className="mx-auto mt-2 max-w-md">
+          <Link className="block rounded bg-court-mist px-3 py-2 text-center text-xs font-black text-court-navy" href="/dashboard/coachr">
+            CoachR
+          </Link>
+        </div>
+      ) : null}
       {showAdmin ? (
         <div className="mx-auto mt-2 max-w-md">
           <Link className="block rounded bg-court-mist px-3 py-2 text-center text-xs font-black text-court-navy" href="/admin">
