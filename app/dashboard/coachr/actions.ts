@@ -19,6 +19,12 @@ type LessonScopeRow = {
   coach_id: string;
 };
 
+type LessonPlayerRow = {
+  id: string;
+  is_junior: boolean;
+  parent_profile_id: string | null;
+};
+
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
@@ -82,6 +88,24 @@ async function coachCanTeachAtVenue(
   }
 
   return data === true;
+}
+
+async function visibleLessonPlayer(
+  context: Extract<Awaited<ReturnType<typeof assertCoachRAccess>>, { kind: "authenticated" }>,
+  playerId: string
+) {
+  const { data, error } = await context.supabase
+    .from("profiles")
+    .select("id,is_junior,parent_profile_id")
+    .eq("id", playerId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("CoachR lesson player validation failed", { error, role: context.role, playerId });
+    return null;
+  }
+
+  return (data as LessonPlayerRow | null) ?? null;
 }
 
 export async function createCoachLesson(formData: FormData) {
@@ -181,28 +205,70 @@ export async function updateCoachLesson(formData: FormData) {
   const startTime = datetimeValue(formData, "startTime");
   const endTime = datetimeValue(formData, "endTime");
   const lessonType = allowedValue<CoachLessonType>(text(formData, "lessonType"), coachLessonTypes, "private");
+  const playerId = optionalUuid(formData, "playerId");
+  const courtId = optionalUuid(formData, "courtId");
 
-  if (startTime && endTime && new Date(endTime).getTime() <= new Date(startTime).getTime()) {
-    redirectWithParam(returnTo, "lesson_error", "time_order");
+  if ((formData.has("startTime") || formData.has("endTime")) && (!startTime || !endTime)) {
+    redirectWithParam(returnTo, "lesson_error", "missing_fields");
   }
 
   const update: Record<string, string | null> = {
-    status,
-    attendance_status: attendanceStatus,
-    feedback_status: feedbackStatus,
-    lesson_type: lessonType,
-    notes: nullableText(formData, "notes"),
     updated_by_user_id: context.user.id
   };
 
+  if (formData.has("status")) {
+    update.status = status;
+  }
+  if (formData.has("attendanceStatus")) {
+    update.attendance_status = attendanceStatus;
+  }
+  if (formData.has("feedbackStatus")) {
+    update.feedback_status = feedbackStatus;
+  }
+  if (formData.has("lessonType")) {
+    update.lesson_type = lessonType;
+  }
+  if (formData.has("notes")) {
+    update.notes = nullableText(formData, "notes");
+  }
   if (title) {
     update.title = title;
   }
-  if (startTime) {
+
+  if (startTime && endTime) {
+    if (new Date(endTime).getTime() <= new Date(startTime).getTime()) {
+      redirectWithParam(returnTo, "lesson_error", "time_order");
+    }
+
     update.start_time = startTime;
-  }
-  if (endTime) {
     update.end_time = endTime;
+  }
+
+  if (formData.has("playerId")) {
+    if (!playerId) {
+      redirectWithParam(returnTo, "lesson_error", "missing_fields");
+    }
+
+    const player = await visibleLessonPlayer(context, playerId);
+
+    if (!player) {
+      redirectWithParam(returnTo, "lesson_error", "player_profile");
+    }
+
+    update.player_id = player.id;
+    update.junior_profile_id = player.is_junior ? player.id : null;
+    update.parent_id = player.parent_profile_id;
+  }
+
+  if (formData.has("courtId")) {
+    if (courtId) {
+      const { data: court } = await context.supabase.from("courts").select("id,venue_id").eq("id", courtId).maybeSingle();
+      if (!court || (court as { venue_id: string | null }).venue_id !== lesson.venue_id) {
+        redirectWithParam(returnTo, "lesson_error", "court_venue");
+      }
+    }
+
+    update.court_id = courtId;
   }
 
   const { error } = await context.supabase.from("coach_lessons").update(update).eq("id", lessonId);
@@ -233,16 +299,18 @@ export async function cancelCoachLesson(formData: FormData) {
     redirectWithParam(returnTo, "lesson_error", "access");
   }
 
-  const { error } = await context.supabase
-    .from("coach_lessons")
-    .update({
-      status: cancelStatus,
-      cancelled_at: new Date().toISOString(),
-      cancelled_by_user_id: context.user.id,
-      updated_by_user_id: context.user.id,
-      notes: nullableText(formData, "notes")
-    })
-    .eq("id", lessonId);
+  const update: Record<string, string | null> = {
+    status: cancelStatus,
+    cancelled_at: new Date().toISOString(),
+    cancelled_by_user_id: context.user.id,
+    updated_by_user_id: context.user.id
+  };
+
+  if (formData.has("notes")) {
+    update.notes = nullableText(formData, "notes");
+  }
+
+  const { error } = await context.supabase.from("coach_lessons").update(update).eq("id", lessonId);
 
   if (error) {
     console.error("CoachR lesson cancel failed", { error, role: context.role, lessonId });

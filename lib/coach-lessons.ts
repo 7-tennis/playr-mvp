@@ -124,6 +124,38 @@ export async function loadCoachLessons(context: AuthenticatedContext, limit = 40
   return (data ?? []) as unknown as CoachLessonWithRelations[];
 }
 
+export async function loadCoachLessonsForRange(context: AuthenticatedContext, startTime: string, endTime: string, limit = 160) {
+  if (context.role !== "platform_admin" && !context.venueId) {
+    return [] as CoachLessonWithRelations[];
+  }
+
+  let query = context.supabase
+    .from("coach_lessons")
+    .select(coachLessonSelect)
+    .gte("start_time", startTime)
+    .lt("start_time", endTime)
+    .order("start_time", { ascending: true })
+    .limit(limit);
+
+  if (context.role === "coach") {
+    if (!context.adultProfileId) {
+      return [] as CoachLessonWithRelations[];
+    }
+    query = query.eq("coach_id", context.adultProfileId);
+  } else if (context.role !== "platform_admin" && context.venueId) {
+    query = query.eq("venue_id", context.venueId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("CoachR lessons could not be loaded for range", { error, role: context.role, venueId: context.venueId });
+    return [] as CoachLessonWithRelations[];
+  }
+
+  return (data ?? []) as unknown as CoachLessonWithRelations[];
+}
+
 export async function loadCoachLessonOptions(context: AuthenticatedContext): Promise<CoachLessonOptionData> {
   const [coachProfilesResult, playerProfilesResult, courtsResult, venuesResult] = await Promise.all([
     context.supabase
