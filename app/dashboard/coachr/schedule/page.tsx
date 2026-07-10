@@ -38,10 +38,16 @@ function statusMessage(value?: string) {
   switch (value) {
     case "created":
       return "Lesson created.";
+    case "series_created":
+      return "Weekly lesson series created.";
     case "updated":
       return "Lesson updated.";
+    case "series_updated":
+      return "Recurring lesson series updated.";
     case "cancelled":
       return "Lesson cancelled.";
+    case "series_cancelled":
+      return "Recurring lesson series cancelled.";
     default:
       return null;
   }
@@ -51,6 +57,10 @@ function errorMessage(value?: string) {
   if (value?.startsWith("court_conflict:")) {
     const courtName = value.split(":").slice(1).join(":") || "Selected court";
     return `${courtName} is already booked at this time.`;
+  }
+  if (value?.startsWith("recurrence_conflicts:")) {
+    const details = value.split(":").slice(1).join(":").replaceAll("; ", " | ");
+    return `Some lessons could not be scheduled: ${details}`;
   }
 
   switch (value) {
@@ -64,6 +74,8 @@ function errorMessage(value?: string) {
       return "The selected court is already booked at this time.";
     case "coach_conflict":
       return "This coach already has another lesson at this time.";
+    case "recurrence_range":
+      return "Choose a weekly recurrence range with at least one matching day and no more than 12 months.";
     case "court_venue":
       return "That court is not linked to the selected venue.";
     case "coach_venue":
@@ -184,6 +196,31 @@ function dateTimeLocalFromSerial(serial: number, hour: number) {
   return `${serialDateInput(serial)}T${String(hour).padStart(2, "0")}:00`;
 }
 
+function isoDayOfWeek(serial: number) {
+  const day = new Date(serial).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+function repeatRuleSummary(rule: string | null) {
+  if (!rule?.startsWith("weekly")) {
+    return null;
+  }
+
+  const details = new Map(
+    rule
+      .split(";")
+      .slice(1)
+      .map((part) => {
+        const [key, value] = part.split("=");
+        return [key, value] as const;
+      })
+  );
+  const start = details.get("start");
+  const end = details.get("end");
+
+  return start && end ? `Weekly ${start} to ${end}` : "Weekly";
+}
+
 function isProfile(profile: CoachLessonProfile | null): profile is CoachLessonProfile {
   return Boolean(profile);
 }
@@ -216,6 +253,9 @@ function LessonCard({
   returnTo: string;
   showCoach: boolean;
 }) {
+  const seriesSummary = repeatRuleSummary(lesson.repeat_rule);
+  const isRecurring = Boolean(lesson.recurring_group_id);
+
   return (
     <details className="ui-collapsible overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <summary className="flex cursor-pointer items-start justify-between gap-3 p-3">
@@ -223,6 +263,7 @@ function LessonCard({
           <span className="flex flex-wrap items-center gap-2">
             <span className="truncate font-black text-court-navy">{profileDisplayName(lesson.player)}</span>
             <span className={`ui-chip ${lessonStatusTone(lesson.status)}`}>{formatLabel(lesson.status)}</span>
+            {isRecurring ? <span className="ui-chip ui-chip-navy">Weekly</span> : null}
           </span>
           <span className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
             <span className="ui-chip ui-chip-muted">
@@ -246,6 +287,7 @@ function LessonCard({
             Coach: {profileDisplayName(lesson.coach)}
             {showCoach && lesson.venue?.name ? ` | ${lesson.venue.name}` : ""}
           </p>
+          {seriesSummary ? <p className="font-bold text-court-teal">{seriesSummary}</p> : null}
           <p className="flex flex-wrap gap-2">
             <span className="ui-chip ui-chip-muted">
               <BookingIcon size={13} /> Booking {lesson.court_booking?.status ? formatLabel(lesson.court_booking.status) : "Not linked yet"}
@@ -259,6 +301,21 @@ function LessonCard({
           <input name="returnTo" type="hidden" value={returnTo} />
           <input name="lessonId" type="hidden" value={lesson.id} />
           <input name="title" type="hidden" value={lesson.title} />
+          {isRecurring ? (
+            <label className="text-sm font-semibold text-slate-700">
+              Apply changes to
+              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="single" name="editScope">
+                <option value="single">This lesson only</option>
+                <option value="future">This and future lessons</option>
+                <option value="series">Entire series</option>
+              </select>
+              <span className="mt-2 block text-xs font-normal leading-5 text-slate-600">
+                Series edits only affect scheduled lessons. Completed and historical records stay unchanged.
+              </span>
+            </label>
+          ) : (
+            <input name="editScope" type="hidden" value="single" />
+          )}
 
           <label className="text-sm font-semibold text-slate-700">
             Player
@@ -331,6 +388,15 @@ function LessonCard({
           <form action={cancelCoachLesson} className="mt-3 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:flex-row">
             <input name="returnTo" type="hidden" value={returnTo} />
             <input name="lessonId" type="hidden" value={lesson.id} />
+            {isRecurring ? (
+              <select className="rounded border border-amber-300 bg-white px-3 py-2 text-sm font-semibold focus-ring" defaultValue="single" name="cancelScope">
+                <option value="single">This lesson only</option>
+                <option value="future">This and future lessons</option>
+                <option value="series">Entire series</option>
+              </select>
+            ) : (
+              <input name="cancelScope" type="hidden" value="single" />
+            )}
             <select className="rounded border border-amber-300 bg-white px-3 py-2 text-sm font-semibold focus-ring" name="cancelStatus">
               <option value="cancelled">Cancelled</option>
               <option value="rain">Rain</option>
@@ -377,6 +443,8 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
   const defaultVenueId = access.context.venueId ?? options.venues[0]?.id ?? "";
   const defaultCoachId = coachOnly ? access.context.adultProfileId ?? "" : selectedCoachId || options.coachProfiles[0]?.id || access.context.adultProfileId || "";
   const defaultCreateSerial = todaySerial >= selectedWeekStart && todaySerial < selectedWeekEnd ? todaySerial : selectedWeekStart;
+  const defaultRecurrenceEndSerial = defaultCreateSerial + 12 * 7 * DAY_MS;
+  const defaultDayOfWeek = isoDayOfWeek(defaultCreateSerial);
   const weekDays = Array.from({ length: 7 }, (_, index) => {
     const serial = selectedWeekStart + index * DAY_MS;
     const dayLessons = visibleLessons
@@ -447,6 +515,14 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
         <form action={createCoachLesson} className="grid gap-3">
           <input name="returnTo" type="hidden" value={returnTo} />
 
+          <label className="text-sm font-semibold text-slate-700">
+            Repeat
+            <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="none" name="repeatMode">
+              <option value="none">Does not repeat</option>
+              <option value="weekly">Every week</option>
+            </select>
+          </label>
+
           {access.context.role !== "platform_admin" && access.context.venueId ? (
             <input name="venueId" type="hidden" value={access.context.venueId} />
           ) : (
@@ -500,13 +576,50 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             )}
           </label>
 
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-black text-court-navy">Weekly repeat settings</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">Used only when Repeat is set to Every week. PlayR creates one lesson and one court booking for every matching date.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-sm font-semibold text-slate-700">
+                Start date
+                <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={serialDateInput(defaultCreateSerial)} name="recurrenceStartDate" type="date" />
+              </label>
+              <label className="text-sm font-semibold text-slate-700">
+                End date
+                <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={serialDateInput(defaultRecurrenceEndSerial)} name="recurrenceEndDate" type="date" />
+              </label>
+              <label className="text-sm font-semibold text-slate-700">
+                Day
+                <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultDayOfWeek} name="dayOfWeek">
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                  <option value="7">Sunday</option>
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-sm font-semibold text-slate-700">
+                  Start time
+                  <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="14:00" name="lessonStartTime" type="time" />
+                </label>
+                <label className="text-sm font-semibold text-slate-700">
+                  End time
+                  <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="15:00" name="lessonEndTime" type="time" />
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700">
-              Start
+              One-off start
               <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={dateTimeLocalFromSerial(defaultCreateSerial, 14)} name="startTime" required type="datetime-local" />
             </label>
             <label className="text-sm font-semibold text-slate-700">
-              End
+              One-off end
               <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={dateTimeLocalFromSerial(defaultCreateSerial, 15)} name="endTime" required type="datetime-local" />
             </label>
           </div>
