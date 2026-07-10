@@ -44,6 +44,9 @@ function bookingLabel(booking: BookingBlock) {
   if (booking.booking_type === "player_booking") {
     return booking.player_name ? `Booked: ${booking.player_name}` : "Booked";
   }
+  if (booking.booking_type === "lesson") {
+    return "Coach Lesson";
+  }
   return booking.booking_type
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))

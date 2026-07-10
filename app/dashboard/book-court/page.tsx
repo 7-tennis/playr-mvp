@@ -20,7 +20,7 @@ type BookCourtPageProps = {
 };
 
 type BookingRow = Pick<CourtBooking, "court_id" | "player_profile_id" | "start_time" | "end_time" | "booking_type"> & {
-  profiles: Pick<Profile, "first_name" | "last_name"> | null;
+  player_name: string | null;
 };
 
 function zaDateInput(date = new Date()) {
@@ -130,12 +130,10 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
   }));
 
   const { data: bookingData } = courts.length
-    ? await supabase
-        .from("court_bookings")
-        .select("court_id,player_profile_id,start_time,end_time,booking_type,profiles:player_profile_id(first_name,last_name)")
-        .eq("status", "confirmed")
-        .gte("start_time", dayStart.toISOString())
-        .lt("start_time", dayEnd.toISOString())
+    ? await supabase.rpc("coachr_court_booking_blocks_for_range", {
+        check_end_time: dayEnd.toISOString(),
+        check_start_time: dayStart.toISOString()
+      })
     : { data: [] };
 
   const bookings = ((bookingData ?? []) as unknown as BookingRow[]).map((booking) => ({
@@ -144,7 +142,7 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
     start_time: booking.start_time,
     end_time: booking.end_time,
     booking_type: booking.booking_type as CourtBookingType,
-    player_name: booking.profiles ? `${booking.profiles.first_name} ${booking.profiles.last_name}` : null
+    player_name: booking.player_name
   }));
 
   return (

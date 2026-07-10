@@ -48,11 +48,22 @@ function statusMessage(value?: string) {
 }
 
 function errorMessage(value?: string) {
+  if (value?.startsWith("court_conflict:")) {
+    const courtName = value.split(":").slice(1).join(":") || "Selected court";
+    return `${courtName} is already booked at this time.`;
+  }
+
   switch (value) {
     case "missing_fields":
-      return "Choose a venue, coach, player, start time and end time.";
+      return "Choose a venue, coach, player, court, start time and end time.";
+    case "missing_court":
+      return "Choose a court so PlayR can reserve it for this lesson.";
     case "time_order":
       return "Lesson end time must be after the start time.";
+    case "court_conflict":
+      return "The selected court is already booked at this time.";
+    case "coach_conflict":
+      return "This coach already has another lesson at this time.";
     case "court_venue":
       return "That court is not linked to the selected venue.";
     case "coach_venue":
@@ -235,6 +246,12 @@ function LessonCard({
             Coach: {profileDisplayName(lesson.coach)}
             {showCoach && lesson.venue?.name ? ` | ${lesson.venue.name}` : ""}
           </p>
+          <p className="flex flex-wrap gap-2">
+            <span className="ui-chip ui-chip-muted">
+              <BookingIcon size={13} /> Booking {lesson.court_booking?.status ? formatLabel(lesson.court_booking.status) : "Not linked yet"}
+            </span>
+            <span className="ui-chip ui-chip-brand">Court reserved when confirmed</span>
+          </p>
           {lesson.notes ? <p className="rounded bg-slate-50 p-3 font-medium">{lesson.notes}</p> : null}
         </div>
 
@@ -269,8 +286,8 @@ function LessonCard({
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-sm font-semibold text-slate-700">
               Court
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={lesson.court_id ?? ""} name="courtId">
-                <option value="">Court TBC</option>
+              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={lesson.court_id ?? ""} name="courtId" required>
+                <option value="">Choose court</option>
                 {courts.map((court) => (
                   <option key={court.id} value={court.id}>
                     {court.name}
@@ -424,7 +441,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
         defaultOpen={searchParams?.new === "1" || visibleLessons.length === 0}
         eyebrow="Create"
         id="new-lesson"
-        summary="Add a lesson to the selected week."
+        summary="Add a lesson to the selected week. Creating it reserves the selected court."
         title="New lesson"
       >
         <form action={createCoachLesson} className="grid gap-3">
@@ -507,14 +524,17 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             </label>
             <label className="text-sm font-semibold text-slate-700">
               Court
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="courtId">
-                <option value="">Court TBC</option>
+              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="courtId" required>
+                <option value="">Choose court</option>
                 {options.courts.map((court) => (
                   <option key={court.id} value={court.id}>
                     {court.name}
                   </option>
                 ))}
               </select>
+              <span className="mt-2 block text-xs font-normal leading-5 text-slate-600">
+                This court will be reserved as a Coach Lesson and hidden from normal player availability for the lesson time.
+              </span>
             </label>
           </div>
 

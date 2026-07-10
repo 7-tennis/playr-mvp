@@ -858,13 +858,10 @@ export async function loadPlayData(searchParams?: PlaySearchParams): Promise<Pla
       .limit(20),
     supabase.rpc("matches_for_user"),
     selectedCourtId
-      ? supabase
-          .from("court_bookings")
-          .select("court_id,start_time,end_time")
-          .eq("court_id", selectedCourtId)
-          .eq("status", "confirmed")
-          .gte("start_time", dayStart.toISOString())
-          .lt("start_time", dayEnd.toISOString())
+      ? supabase.rpc("coachr_court_booking_blocks_for_range", {
+          check_end_time: dayEnd.toISOString(),
+          check_start_time: dayStart.toISOString()
+        })
       : { data: [], error: null },
     supabase.from("ratings").select("*").in("profile_id", ownProfileIds)
   ]);
@@ -931,7 +928,11 @@ export async function loadPlayData(searchParams?: PlaySearchParams): Promise<Pla
   const pendingConfirmations = matches.filter((match) => match.verification_status === "pending_confirmation" && match.submitted_by_user_id !== user.id);
   const awaitingOpponentConfirmations = matches.filter((match) => match.verification_status === "pending_confirmation" && match.submitted_by_user_id === user.id);
   const bookings = bookingError ? [] : ((bookingData ?? []) as unknown as BookingOption[]);
-  const bookedSlotTimes = new Set(((slotBookingData ?? []) as Pick<CourtBooking, "start_time">[]).map((booking) => new Date(booking.start_time).toISOString()));
+  const bookedSlotTimes = new Set(
+    ((slotBookingData ?? []) as Pick<CourtBooking, "court_id" | "start_time">[])
+      .filter((booking) => booking.court_id === selectedCourtId)
+      .map((booking) => new Date(booking.start_time).toISOString())
+  );
   const availableSlots = slotsForDate(selectedDate).filter((slot) => new Date(slot.startTime).getTime() > Date.now() && !bookedSlotTimes.has(new Date(slot.startTime).toISOString()));
 
   return {
