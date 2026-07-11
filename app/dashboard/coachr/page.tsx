@@ -2,7 +2,15 @@ import Link from "next/link";
 import { PageShell } from "@/components/page-shell";
 import { ArrowRightIcon, BookingIcon, EntriesIcon, MatchIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
-import { lessonStatusTone, loadCoachLessons, profileDisplayName, upcomingCoachLessons, type CoachLessonWithRelations } from "@/lib/coach-lessons";
+import {
+  lessonHasAttendanceResult,
+  lessonNeedsAttendance,
+  lessonStatusTone,
+  loadCoachLessons,
+  profileDisplayName,
+  upcomingCoachLessons,
+  type CoachLessonWithRelations
+} from "@/lib/coach-lessons";
 import { canAccessHeadCoach } from "@/lib/permissions";
 import { CoachRNav, CoachRRoleSummary, getProtectedCoachRPage } from "./coachr-shared";
 
@@ -97,10 +105,10 @@ export default async function CoachRPage() {
     const lessonSerial = localDateSerial(lesson.start_time);
     return lessonSerial >= weekStartSerial && lessonSerial < weekEndSerial && !isCancelledLesson(lesson);
   }).length;
-  const missedLessonCount = lessons.filter((lesson) => lesson.status === "missed").length;
-  const outstandingFeedbackCount = lessons.filter(
-    (lesson) => lesson.status === "completed" && lesson.feedback_status !== "shared" && lesson.feedback_status !== "completed"
-  ).length;
+  const completedLessonCount = lessons.filter((lesson) => lesson.status === "completed" || lessonHasAttendanceResult(lesson, "attended")).length;
+  const missedLessonCount = lessons.filter((lesson) => lesson.status === "missed" || lessonHasAttendanceResult(lesson, "missed")).length;
+  const rainLessonCount = lessons.filter((lesson) => lesson.status === "rain" || lessonHasAttendanceResult(lesson, "rain")).length;
+  const outstandingAttendanceCount = lessons.filter((lesson) => lessonNeedsAttendance(lesson)).length;
   const scopeLabel =
     access.context.role === "coach"
       ? "Your coaching week"
@@ -125,16 +133,30 @@ export default async function CoachRPage() {
     {
       label: "Missed",
       value: missedLessonCount,
-      helper: "to review",
+      helper: "player absent",
       icon: <StatusIcon size={18} />,
       tone: "bg-amber-50 text-amber-700"
     },
     {
-      label: "Feedback",
-      value: outstandingFeedbackCount,
-      helper: "outstanding",
+      label: "Completed",
+      value: completedLessonCount,
+      helper: "attendance recorded",
       icon: <MatchIcon size={18} />,
       tone: "bg-emerald-50 text-emerald-700"
+    },
+    {
+      label: "Rain",
+      value: rainLessonCount,
+      helper: "weather affected",
+      icon: <StatusIcon size={18} />,
+      tone: "bg-sky-50 text-sky-700"
+    },
+    {
+      label: "Attendance",
+      value: outstandingAttendanceCount,
+      helper: "needs marking",
+      icon: <EntriesIcon size={18} />,
+      tone: "bg-rose-50 text-rose-700"
     }
   ];
   const quickLinks = [
@@ -193,7 +215,7 @@ export default async function CoachRPage() {
         </div>
       </section>
 
-      <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {statCards.map((stat) => (
           <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={stat.label}>
             <div className="flex items-start justify-between gap-3">
@@ -206,6 +228,21 @@ export default async function CoachRPage() {
             </div>
           </article>
         ))}
+      </section>
+
+      <section className="mb-5 grid gap-2 rounded-lg border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-600 shadow-sm sm:grid-cols-4">
+        <p>
+          <span className="font-black text-court-navy">Completed</span> means attendance was recorded.
+        </p>
+        <p>
+          <span className="font-black text-court-navy">Missed</span> means the player was absent.
+        </p>
+        <p>
+          <span className="font-black text-court-navy">Rain</span> means the lesson was weather affected.
+        </p>
+        <p>
+          <span className="font-black text-court-navy">Sick/Cancelled</span> preserves the lesson history.
+        </p>
       </section>
 
       {lessons.length === 0 ? (

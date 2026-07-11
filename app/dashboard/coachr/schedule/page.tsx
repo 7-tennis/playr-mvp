@@ -5,17 +5,24 @@ import { ArrowRightIcon, BookingIcon, ChevronDownIcon, EntriesIcon, StatusIcon, 
 import { StatusAlert } from "@/components/status-alert";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import {
+  attendanceResultLabel,
+  attendanceResultTone,
+  coachLessonAttendanceResults,
   coachLessonStatuses,
   coachLessonTypes,
+  hasAttendanceRecorded,
+  lessonAttendanceRows,
   lessonStatusTone,
   loadCoachLessonOptions,
   loadCoachLessonsForRange,
   profileDisplayName,
+  type CoachLessonAttendanceWithProfile,
   type CoachLessonProfile,
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
 import { canAccessHeadCoach } from "@/lib/permissions";
-import { cancelCoachLesson, createCoachLesson, updateCoachLesson } from "../actions";
+import type { CoachLessonAttendanceResult } from "@/types/courtside";
+import { cancelCoachLesson, createCoachLesson, markCoachLessonAttendance, updateCoachLesson } from "../actions";
 import { CoachRNav, CoachRRoleSummary, getProtectedCoachRPage } from "../coachr-shared";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +55,8 @@ function statusMessage(value?: string) {
       return "Lesson cancelled.";
     case "series_cancelled":
       return "Recurring lesson series cancelled.";
+    case "attendance_marked":
+      return "Attendance saved.";
     default:
       return null;
   }
@@ -84,6 +93,12 @@ function errorMessage(value?: string) {
       return "Choose a player profile that is available to your CoachR role.";
     case "access":
       return "Your role cannot manage that lesson scope.";
+    case "attendance_confirm":
+      return "Confirm the correction before changing a saved attendance result.";
+    case "attendance_failed":
+      return "Attendance could not be saved.";
+    case "attendance_player":
+      return "Choose a player linked to this lesson attendance list.";
     case "create_failed":
       return "Lesson could not be created.";
     case "update_failed":
@@ -240,6 +255,118 @@ function mergeProfiles(primary: CoachLessonProfile[], lessons: CoachLessonWithRe
   return Array.from(profiles.values()).sort((a, b) => profileDisplayName(a).localeCompare(profileDisplayName(b)));
 }
 
+type AttendanceRosterItem = {
+  playerId: string;
+  name: string;
+  isJunior: boolean;
+  attendance: CoachLessonAttendanceWithProfile | null;
+};
+
+function isGroupAttendanceLesson(lesson: CoachLessonWithRelations) {
+  return lesson.lesson_type === "group" || lesson.lesson_type === "squad";
+}
+
+function attendanceRoster(lesson: CoachLessonWithRelations) {
+  const roster = new Map<string, AttendanceRosterItem>();
+
+  for (const row of lessonAttendanceRows(lesson)) {
+    roster.set(row.player_profile_id, {
+      attendance: row,
+      isJunior: Boolean(row.player?.is_junior ?? row.junior?.is_junior),
+      name: profileDisplayName(row.player ?? row.junior),
+      playerId: row.player_profile_id
+    });
+  }
+
+  if (lesson.player_id && !roster.has(lesson.player_id)) {
+    roster.set(lesson.player_id, {
+      attendance: null,
+      isJunior: Boolean(lesson.player?.is_junior),
+      name: profileDisplayName(lesson.player),
+      playerId: lesson.player_id
+    });
+  }
+
+  return Array.from(roster.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function attendanceSummary(lesson: CoachLessonWithRelations) {
+  const rows = lessonAttendanceRows(lesson);
+
+  if (rows.length === 0) {
+    if (lesson.status === "scheduled") {
+      return "Attendance not marked";
+    }
+
+    return formatLabel(lesson.status);
+  }
+
+  const counts = new Map<CoachLessonAttendanceResult, number>();
+  for (const row of rows) {
+    counts.set(row.attendance_status, (counts.get(row.attendance_status) ?? 0) + 1);
+  }
+
+  if (counts.size === 1) {
+    return attendanceResultLabel(rows[0].attendance_status);
+  }
+
+  return Array.from(counts.entries())
+    .map(([status, count]) => `${count} ${attendanceResultLabel(status).toLowerCase()}`)
+    .join(" / ");
+}
+
+function latestAttendanceRecordedAt(lesson: CoachLessonWithRelations) {
+  return lessonAttendanceRows(lesson)
+    .map((row) => row.recorded_at)
+    .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] ?? null;
+}
+
+function AttendanceButtons({
+  attendance,
+  lesson,
+  playerId,
+  returnTo
+}: {
+  attendance: CoachLessonAttendanceWithProfile | null;
+  lesson: CoachLessonWithRelations;
+  playerId: string;
+  returnTo: string;
+}) {
+  const recorded = Boolean(attendance);
+
+  return (
+    <form action={markCoachLessonAttendance} className="mt-3 grid gap-3">
+      <input name="returnTo" type="hidden" value={returnTo} />
+      <input name="lessonId" type="hidden" value={lesson.id} />
+      <input name="playerId" type="hidden" value={playerId} />
+      {recorded ? (
+        <label className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-800">
+          <input className="mt-1" name="confirmCorrection" type="checkbox" />
+          Confirm attendance correction
+        </label>
+      ) : null}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {coachLessonAttendanceResults.map((status) => {
+          const active = attendance?.attendance_status === status;
+          return (
+            <button
+              className={`rounded px-3 py-3 text-sm font-black transition ${
+                active ? "bg-court-navy text-white" : "border border-slate-200 bg-white text-court-navy hover:border-court-teal hover:text-court-teal"
+              }`}
+              key={status}
+              name="attendanceStatus"
+              type="submit"
+              value={status}
+            >
+              {attendanceResultLabel(status)}
+            </button>
+          );
+        })}
+      </div>
+    </form>
+  );
+}
+
 function LessonCard({
   courts,
   lesson,
@@ -255,6 +382,12 @@ function LessonCard({
 }) {
   const seriesSummary = repeatRuleSummary(lesson.repeat_rule);
   const isRecurring = Boolean(lesson.recurring_group_id);
+  const roster = attendanceRoster(lesson);
+  const groupAttendance = isGroupAttendanceLesson(lesson);
+  const recordedAt = latestAttendanceRecordedAt(lesson);
+  const attendanceMarked = hasAttendanceRecorded(lesson);
+  const rosterPlayerIds = new Set(roster.map((item) => item.playerId));
+  const groupPlayerOptions = groupAttendance ? playerOptions.filter((profile) => !rosterPlayerIds.has(profile.id)) : [];
 
   return (
     <details className="ui-collapsible overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -270,6 +403,7 @@ function LessonCard({
               <TimeIcon size={13} /> {timeLabel(lesson.start_time)} - {timeLabel(lesson.end_time)}
             </span>
             <span className="ui-chip ui-chip-brand">{formatLabel(lesson.lesson_type)}</span>
+            <span className={`ui-chip ${attendanceMarked ? "ui-chip-success" : "ui-chip-muted"}`}>{attendanceSummary(lesson)}</span>
             <span className="ui-chip ui-chip-muted">{lesson.court?.name ?? "Court TBC"}</span>
           </span>
         </span>
@@ -296,6 +430,92 @@ function LessonCard({
           </p>
           {lesson.notes ? <p className="rounded bg-slate-50 p-3 font-medium">{lesson.notes}</p> : null}
         </div>
+
+        <section className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-court-navy">Attendance</p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">
+                {recordedAt ? `Recorded ${formatDateTime(recordedAt)}` : "Mark this lesson occurrence only."}
+              </p>
+            </div>
+            {groupAttendance ? (
+              <form action={markCoachLessonAttendance} className="grid gap-2">
+                <input name="returnTo" type="hidden" value={returnTo} />
+                <input name="lessonId" type="hidden" value={lesson.id} />
+                <input name="markAll" type="hidden" value="true" />
+                <input name="attendanceStatus" type="hidden" value="attended" />
+                {attendanceMarked ? (
+                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-800">
+                    <input name="confirmCorrection" type="checkbox" />
+                    Confirm correction
+                  </label>
+                ) : null}
+                <button className="rounded bg-court-teal px-3 py-2 text-sm font-black text-white transition hover:bg-teal-500" type="submit">
+                  Mark All Attended
+                </button>
+              </form>
+            ) : null}
+          </div>
+
+          <div className="mt-3 grid gap-3">
+            {roster.map((item) => (
+              <article className="rounded-lg border border-slate-200 bg-white p-3" key={item.playerId}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-black text-court-navy">{item.name}</p>
+                      <span className="ui-chip ui-chip-muted">{item.isJunior ? "Junior" : "Player"}</span>
+                      {item.attendance ? (
+                        <span className={`ui-chip ${attendanceResultTone(item.attendance.attendance_status)}`}>
+                          {attendanceResultLabel(item.attendance.attendance_status)}
+                        </span>
+                      ) : (
+                        <span className="ui-chip ui-chip-muted">Not marked</span>
+                      )}
+                    </div>
+                    {item.attendance?.recorded_at ? (
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Recorded {formatDateTime(item.attendance.recorded_at)}</p>
+                    ) : null}
+                  </div>
+                </div>
+                <AttendanceButtons attendance={item.attendance} lesson={lesson} playerId={item.playerId} returnTo={returnTo} />
+              </article>
+            ))}
+          </div>
+
+          {groupPlayerOptions.length > 0 ? (
+            <form action={markCoachLessonAttendance} className="mt-3 grid gap-2 rounded-lg border border-dashed border-slate-300 bg-white p-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+              <input name="returnTo" type="hidden" value={returnTo} />
+              <input name="lessonId" type="hidden" value={lesson.id} />
+              <label className="text-sm font-semibold text-slate-700">
+                Add group player
+                <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="playerId" required>
+                  <option value="">Choose player</option>
+                  {groupPlayerOptions.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profileDisplayName(profile)}
+                      {profile.is_junior ? " (junior)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-semibold text-slate-700">
+                Result
+                <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="attended" name="attendanceStatus">
+                  {coachLessonAttendanceResults.map((status) => (
+                    <option key={status} value={status}>
+                      {attendanceResultLabel(status)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="rounded bg-court-navy px-3 py-2 text-sm font-black text-white transition hover:bg-court-blue" type="submit">
+                Add Attendance
+              </button>
+            </form>
+          ) : null}
+        </section>
 
         <form action={updateCoachLesson} className="grid gap-3">
           <input name="returnTo" type="hidden" value={returnTo} />

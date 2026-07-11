@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { coachLessonStatuses, coachLessonTypes } from "@/lib/coach-lessons";
+import { coachLessonAttendanceResults, coachLessonStatuses, coachLessonTypes } from "@/lib/coach-lessons";
 import { assertCoachRAccess } from "@/lib/permissions";
-import type { CoachLessonStatus, CoachLessonType } from "@/types/courtside";
+import type { CoachLessonAttendanceResult, CoachLessonStatus, CoachLessonType } from "@/types/courtside";
 
 const repeatModes = ["none", "weekly"] as const;
 const seriesScopes = ["single", "future", "series"] as const;
@@ -65,6 +65,8 @@ function lessonErrorValue(error: { code?: string; message?: string } | null | un
   if (
     [
       "access",
+      "attendance_confirm",
+      "attendance_player",
       "coach_conflict",
       "coach_venue",
       "court_venue",
@@ -90,7 +92,9 @@ function revalidateCoachLessonSurfaces() {
   revalidatePath("/admin/bookings");
   revalidatePath("/dashboard/book-court");
   revalidatePath("/dashboard/coachr");
+  revalidatePath("/dashboard/coachr/head-coach");
   revalidatePath("/dashboard/coachr/schedule");
+  revalidatePath("/dashboard/coachr/students");
   revalidatePath("/dashboard/my-bookings");
   revalidatePath("/dashboard/play");
   revalidatePath("/dashboard/play/plan-match");
@@ -263,4 +267,39 @@ export async function cancelCoachLesson(formData: FormData) {
 
   revalidateCoachLessonSurfaces();
   redirectWithParam(returnTo, "lesson", cancelScope === "single" ? "cancelled" : "series_cancelled");
+}
+
+export async function markCoachLessonAttendance(formData: FormData) {
+  const context = await assertCoachRAccess("coachr:schedule");
+  const returnTo = text(formData, "returnTo") || "/dashboard/coachr/schedule";
+  const lessonId = optionalUuid(formData, "lessonId");
+  const playerId = optionalUuid(formData, "playerId");
+  const attendanceStatus = allowedValue<CoachLessonAttendanceResult>(text(formData, "attendanceStatus"), coachLessonAttendanceResults, "attended");
+  const markAll = text(formData, "markAll") === "true";
+  const confirmCorrection = text(formData, "confirmCorrection") === "on" || text(formData, "confirmCorrection") === "true";
+
+  if (context.kind !== "authenticated" || !lessonId) {
+    redirectWithParam(returnTo, "lesson_error", "invalid_lesson");
+  }
+
+  if (!markAll && !playerId) {
+    redirectWithParam(returnTo, "lesson_error", "attendance_player");
+  }
+
+  const { error } = await context.supabase.rpc("coachr_mark_lesson_attendance", {
+    p_attendance_status: attendanceStatus,
+    p_confirm_correction: confirmCorrection,
+    p_lesson_id: lessonId,
+    p_mark_all: markAll,
+    p_notes: nullableText(formData, "attendanceNotes"),
+    p_player_id: markAll ? null : playerId
+  });
+
+  if (error) {
+    console.error("CoachR attendance mark failed", { error, role: context.role, lessonId, playerId, markAll });
+    redirectWithParam(returnTo, "lesson_error", lessonErrorValue(error, "attendance_failed"));
+  }
+
+  revalidateCoachLessonSurfaces();
+  redirectWithParam(returnTo, "lesson", "attendance_marked");
 }

@@ -21,6 +21,7 @@ export type RatingConfidence = "low" | "medium" | "high";
 export type CoachLessonType = "private" | "group" | "squad" | "matchplay" | "assessment" | "other";
 export type CoachLessonStatus = "scheduled" | "completed" | "missed" | "cancelled" | "rain" | "sick";
 export type CoachLessonAttendanceStatus = "not_marked" | "attended" | "partial" | "missed" | "excused";
+export type CoachLessonAttendanceResult = "attended" | "missed" | "cancelled" | "rain" | "sick";
 export type CoachLessonFeedbackStatus = "not_started" | "draft" | "shared" | "completed";
 export type NotificationType =
   | "match_invite_received"
@@ -221,6 +222,19 @@ export interface CoachLesson {
   updated_by_user_id: string | null;
   cancelled_at: string | null;
   cancelled_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachLessonAttendance {
+  id: string;
+  lesson_id: string;
+  player_profile_id: string;
+  junior_profile_id: string | null;
+  attendance_status: CoachLessonAttendanceResult;
+  recorded_by_user_id: string;
+  recorded_at: string;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }

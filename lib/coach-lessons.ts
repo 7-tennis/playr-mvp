@@ -1,7 +1,9 @@
 import type { PermissionContext } from "@/lib/permissions";
 import type {
   CoachLesson,
+  CoachLessonAttendance,
   CoachLessonAttendanceStatus,
+  CoachLessonAttendanceResult,
   CoachLessonFeedbackStatus,
   CoachLessonStatus,
   CoachLessonType,
@@ -14,12 +16,17 @@ import type {
 export const coachLessonTypes: CoachLessonType[] = ["private", "group", "squad", "matchplay", "assessment", "other"];
 export const coachLessonStatuses: CoachLessonStatus[] = ["scheduled", "completed", "missed", "cancelled", "rain", "sick"];
 export const coachLessonAttendanceStatuses: CoachLessonAttendanceStatus[] = ["not_marked", "attended", "partial", "missed", "excused"];
+export const coachLessonAttendanceResults: CoachLessonAttendanceResult[] = ["attended", "missed", "cancelled", "rain", "sick"];
 export const coachLessonFeedbackStatuses: CoachLessonFeedbackStatus[] = ["not_started", "draft", "shared", "completed"];
 
 export type CoachLessonProfile = Pick<Profile, "id" | "first_name" | "last_name" | "is_junior" | "parent_profile_id">;
 export type CoachLessonVenue = Pick<Venue, "id" | "name">;
 export type CoachLessonCourt = Pick<Court, "id" | "name" | "venue_id">;
 export type CoachLessonBooking = Pick<CourtBooking, "id" | "start_time" | "end_time" | "status">;
+export type CoachLessonAttendanceWithProfile = CoachLessonAttendance & {
+  player: CoachLessonProfile | null;
+  junior: CoachLessonProfile | null;
+};
 
 export type CoachLessonWithRelations = CoachLesson & {
   coach: CoachLessonProfile | null;
@@ -29,6 +36,7 @@ export type CoachLessonWithRelations = CoachLesson & {
   court: CoachLessonCourt | null;
   venue: CoachLessonVenue | null;
   court_booking: CoachLessonBooking | null;
+  attendance: CoachLessonAttendanceWithProfile[] | null;
 };
 
 export type CoachLessonOptionData = {
@@ -71,7 +79,21 @@ const coachLessonSelect = `
   parent:parent_id(id,first_name,last_name,is_junior,parent_profile_id),
   court:court_id(id,name,venue_id),
   venue:venue_id(id,name),
-  court_booking:court_booking_id(id,start_time,end_time,status)
+  court_booking:court_booking_id(id,start_time,end_time,status),
+  attendance:coach_lesson_attendance(
+    id,
+    lesson_id,
+    player_profile_id,
+    junior_profile_id,
+    attendance_status,
+    recorded_by_user_id,
+    recorded_at,
+    notes,
+    created_at,
+    updated_at,
+    player:player_profile_id(id,first_name,last_name,is_junior,parent_profile_id),
+    junior:junior_profile_id(id,first_name,last_name,is_junior,parent_profile_id)
+  )
 `;
 
 export function profileDisplayName(profile: Pick<Profile, "first_name" | "last_name"> | null | undefined) {
@@ -195,6 +217,63 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
 export function upcomingCoachLessons(lessons: CoachLessonWithRelations[]) {
   const now = Date.now();
   return lessons.filter((lesson) => new Date(lesson.start_time).getTime() >= now && lesson.status === "scheduled");
+}
+
+export function lessonAttendanceRows(lesson: CoachLessonWithRelations) {
+  return lesson.attendance ?? [];
+}
+
+export function hasAttendanceRecorded(lesson: CoachLessonWithRelations) {
+  return lessonAttendanceRows(lesson).length > 0 || lesson.attendance_status !== "not_marked" || lesson.status !== "scheduled";
+}
+
+export function attendanceResultLabel(status: CoachLessonAttendanceResult) {
+  switch (status) {
+    case "attended":
+      return "Attended";
+    case "missed":
+      return "Missed";
+    case "cancelled":
+      return "Cancelled";
+    case "rain":
+      return "Rain";
+    case "sick":
+      return "Sick";
+  }
+}
+
+export function attendanceResultTone(status: CoachLessonAttendanceResult) {
+  switch (status) {
+    case "attended":
+      return "ui-chip-success";
+    case "missed":
+      return "bg-rose-50 text-rose-700";
+    case "cancelled":
+    case "rain":
+    case "sick":
+      return "ui-chip-warning";
+  }
+}
+
+export function lessonHasAttendanceResult(lesson: CoachLessonWithRelations, status: CoachLessonAttendanceResult) {
+  const rows = lessonAttendanceRows(lesson);
+
+  if (rows.length > 0) {
+    return rows.some((row) => row.attendance_status === status);
+  }
+
+  if (status === "attended") {
+    return lesson.status === "completed" || lesson.attendance_status === "attended";
+  }
+  if (status === "missed") {
+    return lesson.status === "missed" || lesson.attendance_status === "missed";
+  }
+
+  return lesson.status === status;
+}
+
+export function lessonNeedsAttendance(lesson: CoachLessonWithRelations, now = Date.now()) {
+  return lesson.status === "scheduled" && new Date(lesson.end_time).getTime() <= now && lessonAttendanceRows(lesson).length === 0;
 }
 
 export function lessonStatusTone(status: CoachLessonStatus) {
