@@ -4,7 +4,14 @@ import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "platform_admin";
 export type StoredUserRole = UserRole | "admin" | "staff";
-export type CoachRPermission = "coachr" | "coachr:schedule" | "coachr:students" | "coachr:availability" | "coachr:head_coach";
+export type CoachRPermission =
+  | "coachr"
+  | "coachr:schedule"
+  | "coachr:students"
+  | "coachr:availability"
+  | "coachr:messages"
+  | "coachr:more"
+  | "coachr:head_coach";
 
 type RoleRow = {
   id: string;

@@ -81,6 +81,10 @@ export function PlayerDesktopNav({ showAdmin, showCoach }: { showAdmin: boolean;
 export function PlayerBottomNav({ showAdmin, showCoach }: { showAdmin: boolean; showCoach: boolean }) {
   const pathname = usePathname();
 
+  if (pathname.startsWith("/dashboard/coachr")) {
+    return null;
+  }
+
   return (
     <nav
       aria-label="Player navigation"

@@ -11,6 +11,7 @@ const seriesScopes = ["single", "future", "series"] as const;
 
 type RepeatMode = (typeof repeatModes)[number];
 type SeriesScope = (typeof seriesScopes)[number];
+type AuthenticatedCoachRContext = Awaited<ReturnType<typeof assertCoachRAccess>> & { kind: "authenticated" };
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -55,6 +56,10 @@ function redirectWithParam(returnTo: string, key: string, value: string): never 
 function lessonErrorValue(error: { code?: string; message?: string } | null | undefined, fallback: string) {
   const message = error?.message ?? "";
 
+  if (error?.code === "PGRST202" || message.toLowerCase().includes("could not find the function")) {
+    return "missing_rpc";
+  }
+
   if (message.startsWith("court_conflict:")) {
     return message;
   }
@@ -67,10 +72,16 @@ function lessonErrorValue(error: { code?: string; message?: string } | null | un
       "access",
       "attendance_confirm",
       "attendance_player",
+      "coach_profile_missing",
       "coach_conflict",
+      "coach_venue_missing",
       "coach_venue",
       "court_venue",
       "invalid_lesson",
+      "invalid_student",
+      "missing_rpc",
+      "no_active_courts",
+      "no_students",
       "missing_court",
       "missing_fields",
       "player_profile",
@@ -100,6 +111,70 @@ function revalidateCoachLessonSurfaces() {
   revalidatePath("/dashboard/play/plan-match");
 }
 
+async function preflightCoachLessonCreate({
+  coachId,
+  context,
+  courtId,
+  playerId,
+  venueId
+}: {
+  coachId: string | null;
+  context: AuthenticatedCoachRContext;
+  courtId: string | null;
+  playerId: string | null;
+  venueId: string | null;
+}) {
+  if (context.role === "coach" && !context.adultProfileId) {
+    return "coach_profile_missing";
+  }
+  if (context.role === "coach" && !context.venueId) {
+    return "coach_venue_missing";
+  }
+  if (!venueId) {
+    return "coach_venue_missing";
+  }
+  if (!coachId) {
+    return "coach_profile_missing";
+  }
+  if (!courtId) {
+    return "no_active_courts";
+  }
+  if (!playerId) {
+    return "no_students";
+  }
+
+  const [courtResult, playerResult, coachVenueResult] = await Promise.all([
+    context.supabase.from("courts").select("id,name,venue_id,status").eq("id", courtId).maybeSingle(),
+    context.supabase.from("profiles").select("id").eq("id", playerId).maybeSingle(),
+    context.supabase.rpc("coach_profile_can_teach_at_venue", {
+      check_coach_id: coachId,
+      check_user_id: context.user.id,
+      check_venue_id: venueId
+    })
+  ]);
+
+  if (coachVenueResult.error) {
+    return lessonErrorValue(coachVenueResult.error, "create_failed");
+  }
+  if (!coachVenueResult.data) {
+    return "coach_venue";
+  }
+  if (courtResult.error) {
+    return "create_failed";
+  }
+  if (!courtResult.data || courtResult.data.venue_id !== venueId || courtResult.data.status !== "active") {
+    return "court_venue";
+  }
+  if (playerResult.error) {
+    return "create_failed";
+  }
+  if (!playerResult.data) {
+    return "invalid_student";
+  }
+
+  return null;
+}
+
 export async function createCoachLesson(formData: FormData) {
   const context = await assertCoachRAccess("coachr:schedule");
   const returnTo = text(formData, "returnTo") || "/dashboard/coachr/schedule";
@@ -117,6 +192,17 @@ export async function createCoachLesson(formData: FormData) {
   const lessonType = allowedValue<CoachLessonType>(text(formData, "lessonType"), coachLessonTypes, "private");
   const title = text(formData, "title") || "Coaching lesson";
   const repeatMode = allowedValue<RepeatMode>(text(formData, "repeatMode"), [...repeatModes], "none");
+  const setupError = await preflightCoachLessonCreate({
+    coachId,
+    context,
+    courtId,
+    playerId,
+    venueId
+  });
+
+  if (setupError) {
+    redirectWithParam(returnTo, "lesson_error", setupError);
+  }
 
   if (repeatMode === "weekly") {
     const recurrenceStartDate = dateValue(formData, "recurrenceStartDate");

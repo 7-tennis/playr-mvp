@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { PageShell } from "@/components/page-shell";
 import { ArrowRightIcon, BookingIcon, EntriesIcon, MatchIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import {
@@ -12,7 +11,7 @@ import {
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
 import { canAccessHeadCoach } from "@/lib/permissions";
-import { CoachRNav, CoachRRoleSummary, getProtectedCoachRPage } from "./coachr-shared";
+import { CoachRActionCard, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "./coachr-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +49,18 @@ function lessonTimeLabel(value: string) {
 
 function isCancelledLesson(lesson: CoachLessonWithRelations) {
   return lesson.status === "cancelled" || lesson.status === "rain" || lesson.status === "sick";
+}
+
+function coachingHours(lessons: CoachLessonWithRelations[]) {
+  const minutes = lessons.reduce((total, lesson) => {
+    if (isCancelledLesson(lesson)) {
+      return total;
+    }
+
+    return total + Math.max(0, new Date(lesson.end_time).getTime() - new Date(lesson.start_time).getTime()) / 60000;
+  }, 0);
+
+  return Math.round((minutes / 60) * 10) / 10;
 }
 
 function LessonMiniCard({ lesson, compact = false }: { lesson: CoachLessonWithRelations; compact?: boolean }) {
@@ -108,7 +119,30 @@ export default async function CoachRPage() {
   const completedLessonCount = lessons.filter((lesson) => lesson.status === "completed" || lessonHasAttendanceResult(lesson, "attended")).length;
   const missedLessonCount = lessons.filter((lesson) => lesson.status === "missed" || lessonHasAttendanceResult(lesson, "missed")).length;
   const rainLessonCount = lessons.filter((lesson) => lesson.status === "rain" || lessonHasAttendanceResult(lesson, "rain")).length;
+  const cancelledLessonCount = lessons.filter((lesson) => lesson.status === "cancelled").length;
+  const extraLessonCount = lessons.filter((lesson) => /extra|make.?up|catch.?up/i.test(`${lesson.title} ${lesson.notes ?? ""}`)).length;
   const outstandingAttendanceCount = lessons.filter((lesson) => lessonNeedsAttendance(lesson)).length;
+  const weeklyLessons = lessons.filter((lesson) => {
+    const lessonSerial = localDateSerial(lesson.start_time);
+    return lessonSerial >= weekStartSerial && lessonSerial < weekEndSerial;
+  });
+  const studentCount = new Set(lessons.map((lesson) => lesson.player_id)).size;
+  const studentsWithUpcoming = new Set(upcomingLessons.map((lesson) => lesson.player_id)).size;
+  const programmeCounts = new Map<string, number>();
+  weeklyLessons.forEach((lesson) => {
+    programmeCounts.set(lesson.lesson_type, (programmeCounts.get(lesson.lesson_type) ?? 0) + 1);
+  });
+  const coachCards = Array.from(
+    lessons.reduce((map, lesson) => {
+      const current = map.get(lesson.coach_id) ?? { id: lesson.coach_id, name: profileDisplayName(lesson.coach), lessons: 0, today: 0 };
+      current.lessons += 1;
+      if (localDateSerial(lesson.start_time) === todaySerial) {
+        current.today += 1;
+      }
+      map.set(lesson.coach_id, current);
+      return map;
+    }, new Map<string, { id: string; lessons: number; name: string; today: number }>())
+  ).map(([, coach]) => coach);
   const scopeLabel =
     access.context.role === "coach"
       ? "Your coaching week"
@@ -187,8 +221,7 @@ export default async function CoachRPage() {
   ];
 
   return (
-    <PageShell eyebrow="CoachR" subtitle="Plan lessons, spot what needs attention, and keep the coaching week moving." title="CoachR">
-      <CoachRNav canUseHeadCoach={canAccessHeadCoach(access.context.role)} />
+    <CoachRPageFrame context={access.context} subtitle="Plan lessons, spot what needs attention, and keep the coaching week moving." title="MyCoachR">
       <CoachRRoleSummary context={access.context} />
 
       <section className="mb-5 overflow-hidden rounded-lg bg-court-navy text-white shadow-court">
@@ -217,16 +250,7 @@ export default async function CoachRPage() {
 
       <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {statCards.map((stat) => (
-          <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={stat.label}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wide text-slate-500">{stat.label}</p>
-                <p className="mt-2 text-3xl font-black text-court-navy">{stat.value}</p>
-                <p className="mt-1 text-sm font-semibold text-slate-600">{stat.helper}</p>
-              </div>
-              <span className={`grid h-10 w-10 shrink-0 place-items-center rounded ${stat.tone}`}>{stat.icon}</span>
-            </div>
-          </article>
+          <CoachRSummaryCard helper={stat.helper} icon={<span className={stat.tone}>{stat.icon}</span>} key={stat.label} label={stat.label} value={stat.value} />
         ))}
       </section>
 
@@ -309,19 +333,83 @@ export default async function CoachRPage() {
         </section>
       )}
 
+      <section className="mb-5 grid gap-3 lg:grid-cols-3">
+        <details className="surface-card ui-collapsible overflow-hidden" open>
+          <summary className="cursor-pointer p-4 sm:p-5">
+            <p className="section-kicker">Lesson Changes</p>
+            <h2 className="section-title mt-1">Changes to review</h2>
+          </summary>
+          <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2 sm:p-5">
+            <CoachRSummaryCard helper="player absent" label="Missed" value={missedLessonCount} />
+            <CoachRSummaryCard helper="rain affected" label="Rain" value={rainLessonCount} />
+            <CoachRSummaryCard helper="lesson cancelled" label="Cancelled" value={cancelledLessonCount} />
+            <CoachRSummaryCard helper="title/notes marked extra" label="Extra" value={extraLessonCount} />
+          </div>
+        </details>
+
+        <details className="surface-card ui-collapsible overflow-hidden" open>
+          <summary className="cursor-pointer p-4 sm:p-5">
+            <p className="section-kicker">Week Summary</p>
+            <h2 className="section-title mt-1">This week</h2>
+          </summary>
+          <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2 sm:p-5">
+            <CoachRSummaryCard helper="scheduled" label="Total" value={weeklyLessons.length} />
+            <CoachRSummaryCard helper="completed" label="Done" value={weeklyLessons.filter((lesson) => lesson.status === "completed").length} />
+            <CoachRSummaryCard helper="missed/rain/cancelled" label="Changed" value={weeklyLessons.filter(isCancelledLesson).length + weeklyLessons.filter((lesson) => lesson.status === "missed").length} />
+            <CoachRSummaryCard helper="coaching hours" label="Hours" value={coachingHours(weeklyLessons)} />
+          </div>
+        </details>
+
+        <details className="surface-card ui-collapsible overflow-hidden" open>
+          <summary className="cursor-pointer p-4 sm:p-5">
+            <p className="section-kicker">Programmes</p>
+            <h2 className="section-title mt-1">Lesson mix</h2>
+          </summary>
+          <div className="border-t border-slate-100 p-4 sm:p-5">
+            {programmeCounts.size > 0 ? (
+              <div className="flex flex-wrap gap-2 text-sm font-bold">
+                {Array.from(programmeCounts.entries()).map(([type, count]) => (
+                  <span className="ui-chip ui-chip-muted" key={type}>
+                    {formatLabel(type)} · {count}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="ui-empty-card">No programme mix for this week yet.</div>
+            )}
+          </div>
+        </details>
+      </section>
+
+      <section className="mb-5 grid gap-3 sm:grid-cols-3">
+        <CoachRSummaryCard helper="lesson-linked students" icon={<EntriesIcon size={18} />} label="Students" value={studentCount} />
+        <CoachRSummaryCard helper="with upcoming lessons" icon={<BookingIcon size={18} />} label="Placed" value={studentsWithUpcoming} />
+        <CoachRSummaryCard helper="configure availability next" icon={<StatusIcon size={18} />} label="Gaps" value="TBC" />
+      </section>
+
+      {canAccessHeadCoach(access.context.role) && coachCards.length > 0 ? (
+        <section className="mb-5 surface-card p-4 sm:p-5">
+          <p className="section-kicker">Venue Coaches</p>
+          <h2 className="section-title mt-1">Coach cards</h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {coachCards.map((coach) => (
+              <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={coach.id}>
+                <p className="font-black text-court-navy">{coach.name}</p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+                  <span className="ui-chip ui-chip-brand">{coach.today} today</span>
+                  <span className="ui-chip ui-chip-muted">{coach.lessons} in scope</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {quickLinks.map((link) => (
-          <Link className="surface-card block p-4 transition hover:-translate-y-0.5 hover:shadow-court" href={link.href} key={link.title}>
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-court-mist text-court-teal">{link.icon}</span>
-              <div className="min-w-0">
-                <h3 className="font-black text-court-navy">{link.title}</h3>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{link.text}</p>
-              </div>
-            </div>
-          </Link>
+          <CoachRActionCard href={link.href} icon={link.icon} key={link.title} text={link.text} title={link.title} />
         ))}
       </section>
-    </PageShell>
+    </CoachRPageFrame>
   );
 }

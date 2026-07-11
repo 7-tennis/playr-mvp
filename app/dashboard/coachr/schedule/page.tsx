@@ -75,7 +75,12 @@ function errorMessage(value?: string) {
   switch (value) {
     case "missing_fields":
       return "Choose a venue, coach, player, court, start time and end time.";
+    case "coach_profile_missing":
+      return "Your CoachR profile is not configured yet. Ask your Head Coach to link your user account to a coach profile.";
+    case "coach_venue_missing":
+      return "Your CoachR profile is not yet linked to a venue. Ask your Head Coach to complete your setup.";
     case "missing_court":
+    case "no_active_courts":
       return "Choose a court so PlayR can reserve it for this lesson.";
     case "time_order":
       return "Lesson end time must be after the start time.";
@@ -90,7 +95,12 @@ function errorMessage(value?: string) {
     case "coach_venue":
       return "Choose a coach linked to the selected venue.";
     case "player_profile":
+    case "invalid_student":
       return "Choose a player profile that is available to your CoachR role.";
+    case "no_students":
+      return "No student profiles are available yet. Add or select an existing PlayR profile first.";
+    case "missing_rpc":
+      return "CoachR lesson setup is missing a required database function. Run the latest Supabase migrations.";
     case "access":
       return "Your role cannot manage that lesson scope.";
     case "attendance_confirm":
@@ -100,7 +110,7 @@ function errorMessage(value?: string) {
     case "attendance_player":
       return "Choose a player linked to this lesson attendance list.";
     case "create_failed":
-      return "Lesson could not be created.";
+      return "Lesson could not be created. Check the CoachR setup cards below, then try again.";
     case "update_failed":
       return "Lesson could not be updated.";
     case "cancel_failed":
@@ -236,6 +246,22 @@ function repeatRuleSummary(rule: string | null) {
   return start && end ? `Weekly ${start} to ${end}` : "Weekly";
 }
 
+function dayTimeRange(lessons: CoachLessonWithRelations[]) {
+  if (lessons.length === 0) {
+    return "Open day";
+  }
+
+  return `${timeLabel(lessons[0].start_time)} - ${timeLabel(lessons[lessons.length - 1].end_time)}`;
+}
+
+function dayStatusSummary(lessons: CoachLessonWithRelations[]) {
+  const completed = lessons.filter((lesson) => lesson.status === "completed").length;
+  const scheduled = lessons.filter((lesson) => lesson.status === "scheduled").length;
+  const changed = lessons.filter((lesson) => lesson.status === "missed" || lesson.status === "cancelled" || lesson.status === "rain" || lesson.status === "sick").length;
+
+  return { changed, completed, scheduled };
+}
+
 function isProfile(profile: CoachLessonProfile | null): profile is CoachLessonProfile {
   return Boolean(profile);
 }
@@ -253,6 +279,62 @@ function mergeProfiles(primary: CoachLessonProfile[], lessons: CoachLessonWithRe
   }
 
   return Array.from(profiles.values()).sort((a, b) => profileDisplayName(a).localeCompare(profileDisplayName(b)));
+}
+
+function setupIssues({
+  coachOnly,
+  contextAdultProfileId,
+  contextVenueId,
+  coachCount,
+  courtCount,
+  playerCount
+}: {
+  coachOnly: boolean;
+  contextAdultProfileId: string | null;
+  contextVenueId: string | null;
+  coachCount: number;
+  courtCount: number;
+  playerCount: number;
+}) {
+  const issues: { title: string; text: string; tone: "error" | "warning" }[] = [];
+
+  if (coachOnly && !contextAdultProfileId) {
+    issues.push({
+      title: "Coach profile not configured",
+      text: "Your user account is not linked to a coach profile yet. Ask your Head Coach to complete your CoachR setup.",
+      tone: "error"
+    });
+  }
+  if (coachOnly && !contextVenueId) {
+    issues.push({
+      title: "Venue not linked",
+      text: "Your CoachR profile is not yet linked to a venue. Ask your Head Coach to complete your setup.",
+      tone: "error"
+    });
+  }
+  if (coachCount === 0) {
+    issues.push({
+      title: "No coach profiles available",
+      text: "CoachR could not find a coach/head-coach profile in this permitted venue.",
+      tone: "error"
+    });
+  }
+  if (courtCount === 0) {
+    issues.push({
+      title: "No active courts available",
+      text: "Add or activate a court for this venue before creating lessons.",
+      tone: "error"
+    });
+  }
+  if (playerCount === 0) {
+    issues.push({
+      title: "No students available",
+      text: "No PlayR profiles are available to place into a lesson yet.",
+      tone: "warning"
+    });
+  }
+
+  return issues;
 }
 
 type AttendanceRosterItem = {
@@ -658,6 +740,14 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
   const visibleLessons = selectedCoachId ? lessons.filter((lesson) => lesson.coach_id === selectedCoachId) : lessons;
   const playerOptions = mergeProfiles(options.playerProfiles, visibleLessons);
   const lessonPlayers = visibleLessons.map((lesson) => lesson.player).filter(isProfile).length;
+  const setupCards = setupIssues({
+    coachCount: options.coachProfiles.length,
+    coachOnly,
+    contextAdultProfileId: access.context.adultProfileId,
+    contextVenueId: access.context.venueId,
+    courtCount: options.courts.length,
+    playerCount: playerOptions.length
+  });
   const returnTo = scheduleHref(selectedWeekStart, selectedCoachId);
   const createHref = scheduleHref(selectedWeekStart, selectedCoachId, true);
   const defaultVenueId = access.context.venueId ?? options.venues[0]?.id ?? "";
@@ -695,6 +785,9 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             <Link className="inline-flex items-center justify-center gap-2 rounded border border-white/20 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10" href={scheduleHref(selectedWeekStart - 7 * DAY_MS, selectedCoachId)}>
               Previous Week
             </Link>
+            <Link className="inline-flex items-center justify-center gap-2 rounded border border-white/20 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10" href={scheduleHref(weekStartSerial(todaySerial), selectedCoachId)}>
+              Today
+            </Link>
             <Link className="inline-flex items-center justify-center gap-2 rounded border border-white/20 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10" href={scheduleHref(selectedWeekStart + 7 * DAY_MS, selectedCoachId)}>
               Next Week
             </Link>
@@ -725,8 +818,24 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
         </form>
       ) : null}
 
+      {setupCards.length > 0 ? (
+        <section className="mb-5 grid gap-3 md:grid-cols-2">
+          {setupCards.map((issue) => (
+            <article
+              className={`rounded-lg border p-4 shadow-sm ${
+                issue.tone === "error" ? "border-amber-200 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-court-navy"
+              }`}
+              key={issue.title}
+            >
+              <p className="text-sm font-black">{issue.title}</p>
+              <p className="mt-1 text-sm font-semibold leading-6 opacity-80">{issue.text}</p>
+            </article>
+          ))}
+        </section>
+      ) : null}
+
       <CollapsibleCard
-        defaultOpen={searchParams?.new === "1" || visibleLessons.length === 0}
+        defaultOpen={searchParams?.new === "1"}
         eyebrow="Create"
         id="new-lesson"
         summary="Add a lesson to the selected week. Creating it reserves the selected court."
@@ -735,13 +844,19 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
         <form action={createCoachLesson} className="grid gap-3">
           <input name="returnTo" type="hidden" value={returnTo} />
 
-          <label className="text-sm font-semibold text-slate-700">
-            Repeat
-            <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="none" name="repeatMode">
-              <option value="none">Does not repeat</option>
-              <option value="weekly">Every week</option>
-            </select>
-          </label>
+          <fieldset className="grid gap-2 sm:grid-cols-2">
+            <legend className="mb-2 text-sm font-black text-court-navy">Lesson plan</legend>
+            <label className="rounded-lg border border-court-teal bg-court-mist p-3 text-sm font-semibold text-court-navy">
+              <input className="mr-2" defaultChecked name="repeatMode" type="radio" value="none" />
+              Once-off lesson
+              <span className="mt-1 block text-xs font-normal leading-5 text-slate-600">Use the one-off start and end fields.</span>
+            </label>
+            <label className="rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-court-navy">
+              <input className="mr-2" name="repeatMode" type="radio" value="weekly" />
+              Recurring weekly lesson
+              <span className="mt-1 block text-xs font-normal leading-5 text-slate-600">Use the weekly repeat settings below.</span>
+            </label>
+          </fieldset>
 
           {access.context.role !== "platform_admin" && access.context.venueId ? (
             <input name="venueId" type="hidden" value={access.context.venueId} />
@@ -887,37 +1002,58 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
         </form>
       </CollapsibleCard>
 
-      <section className="mt-5 grid gap-3 xl:grid-cols-7">
-        {weekDays.map(({ dayLessons, serial }) => (
-          <article className={`rounded-lg border bg-white p-3 shadow-sm ${serial === todaySerial ? "border-court-teal ring-2 ring-court-mist" : "border-slate-200"}`} key={serial}>
-            <div className="mb-3 flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-black text-court-navy">{serialDateLabel(serial, "long")}</p>
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{dayLessons.length} lessons</p>
-              </div>
-              {serial === todaySerial ? <span className="ui-chip ui-chip-brand">Today</span> : null}
-            </div>
+      <section className="mt-5 grid gap-3">
+        {weekDays.map(({ dayLessons, serial }) => {
+          const status = dayStatusSummary(dayLessons);
 
-            {dayLessons.length > 0 ? (
-              <div className="grid gap-3">
-                {dayLessons.map((lesson) => (
-                  <LessonCard
-                    courts={options.courts}
-                    key={lesson.id}
-                    lesson={lesson}
-                    playerOptions={playerOptions}
-                    returnTo={returnTo}
-                    showCoach={!coachOnly}
-                  />
-                ))}
+          return (
+            <details
+              className={`ui-collapsible overflow-hidden rounded-lg border bg-white shadow-sm ${serial === todaySerial ? "border-court-teal ring-2 ring-court-mist" : "border-slate-200"}`}
+              key={serial}
+              open={serial === todaySerial}
+            >
+              <summary className="flex cursor-pointer items-start justify-between gap-3 p-4">
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-base font-black text-court-navy">{serialDateLabel(serial, "long")}</span>
+                    {serial === todaySerial ? <span className="ui-chip ui-chip-brand">Today</span> : null}
+                  </span>
+                  <span className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+                    <span className="ui-chip ui-chip-muted">{dayLessons.length} lessons</span>
+                    <span className="ui-chip ui-chip-muted">{dayTimeRange(dayLessons)}</span>
+                    {status.scheduled > 0 ? <span className="ui-chip ui-chip-brand">{status.scheduled} scheduled</span> : null}
+                    {status.completed > 0 ? <span className="ui-chip ui-chip-success">{status.completed} completed</span> : null}
+                    {status.changed > 0 ? <span className="ui-chip ui-chip-warning">{status.changed} changed</span> : null}
+                  </span>
+                </span>
+                <span className="ui-collapsible-chevron grid h-9 w-9 shrink-0 place-items-center rounded bg-court-mist text-court-teal">
+                  <ChevronDownIcon size={18} />
+                </span>
+              </summary>
+
+              <div className="border-t border-slate-100 p-3">
+                {dayLessons.length > 0 ? (
+                  <div className="grid gap-3">
+                    {dayLessons.map((lesson) => (
+                      <LessonCard
+                        courts={options.courts}
+                        key={lesson.id}
+                        lesson={lesson}
+                        playerOptions={playerOptions}
+                        returnTo={returnTo}
+                        showCoach={!coachOnly}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+                    No lessons. This is a good gap for make-ups or admin.
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-                No lessons.
-              </div>
-            )}
-          </article>
-        ))}
+            </details>
+          );
+        })}
       </section>
 
       <section className="mt-5 grid gap-3 sm:grid-cols-3">

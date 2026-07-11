@@ -19,7 +19,7 @@ export const coachLessonAttendanceStatuses: CoachLessonAttendanceStatus[] = ["no
 export const coachLessonAttendanceResults: CoachLessonAttendanceResult[] = ["attended", "missed", "cancelled", "rain", "sick"];
 export const coachLessonFeedbackStatuses: CoachLessonFeedbackStatus[] = ["not_started", "draft", "shared", "completed"];
 
-export type CoachLessonProfile = Pick<Profile, "id" | "first_name" | "last_name" | "is_junior" | "parent_profile_id">;
+export type CoachLessonProfile = Pick<Profile, "id" | "user_id" | "first_name" | "last_name" | "is_junior" | "parent_profile_id" | "junior_stage" | "player_level">;
 export type CoachLessonVenue = Pick<Venue, "id" | "name">;
 export type CoachLessonCourt = Pick<Court, "id" | "name" | "venue_id">;
 export type CoachLessonBooking = Pick<CourtBooking, "id" | "start_time" | "end_time" | "status">;
@@ -179,16 +179,26 @@ export async function loadCoachLessonsForRange(context: AuthenticatedContext, st
 }
 
 export async function loadCoachLessonOptions(context: AuthenticatedContext): Promise<CoachLessonOptionData> {
-  const [coachProfilesResult, playerProfilesResult, courtsResult, venuesResult] = await Promise.all([
+  const coachRoleQuery =
+    context.role === "platform_admin"
+      ? context.supabase.from("admin_users").select("user_id,venue_id,role").in("role", ["coach", "head_coach"]).limit(160)
+      : context.venueId
+        ? context.supabase.from("admin_users").select("user_id,venue_id,role").in("role", ["coach", "head_coach"]).eq("venue_id", context.venueId).limit(160)
+        : null;
+
+  const [ownCoachProfileResult, coachRolesResult, playerProfilesResult, courtsResult, venuesResult] = await Promise.all([
+    context.adultProfileId
+      ? context.supabase
+          .from("profiles")
+          .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
+          .eq("id", context.adultProfileId)
+          .eq("is_junior", false)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    coachRoleQuery ?? Promise.resolve({ data: [], error: null }),
     context.supabase
       .from("profiles")
-      .select("id,first_name,last_name,is_junior,parent_profile_id")
-      .eq("is_junior", false)
-      .order("first_name", { ascending: true })
-      .limit(80),
-    context.supabase
-      .from("profiles")
-      .select("id,first_name,last_name,is_junior,parent_profile_id")
+      .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
       .order("first_name", { ascending: true })
       .limit(120),
     context.venueId && context.role !== "platform_admin"
@@ -199,15 +209,23 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
       : context.supabase.from("venues").select("id,name").eq("status", "active").order("name", { ascending: true })
   ]);
 
-  const ownCoachProfile = context.adultProfileId
-    ? ((coachProfilesResult.data ?? []) as CoachLessonProfile[]).find((profile) => profile.id === context.adultProfileId) ?? null
-    : null;
+  const ownCoachProfile = (ownCoachProfileResult.data as CoachLessonProfile | null) ?? null;
+  const coachUserIds = Array.from(new Set(((coachRolesResult.data ?? []) as { user_id: string | null }[]).map((row) => row.user_id).filter(Boolean) as string[]));
+  const coachProfilesResult =
+    context.role === "coach"
+      ? { data: ownCoachProfile ? [ownCoachProfile] : [], error: null }
+      : coachUserIds.length > 0
+        ? await context.supabase
+            .from("profiles")
+            .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
+            .in("user_id", coachUserIds)
+            .eq("is_junior", false)
+            .order("first_name", { ascending: true })
+            .limit(160)
+        : { data: [], error: null };
 
   return {
-    coachProfiles:
-      context.role === "coach" && ownCoachProfile
-        ? [ownCoachProfile]
-        : (((coachProfilesResult.data ?? []) as CoachLessonProfile[]) ?? []),
+    coachProfiles: ((coachProfilesResult.data ?? []) as CoachLessonProfile[]) ?? [],
     playerProfiles: ((playerProfilesResult.data ?? []) as CoachLessonProfile[]) ?? [],
     courts: ((courtsResult.data ?? []) as CoachLessonCourt[]) ?? [],
     venues: ((venuesResult.data ?? []) as CoachLessonVenue[]) ?? []
