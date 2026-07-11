@@ -61,7 +61,7 @@ export default async function CoachRMorePage() {
         <section className="mb-5">
           <p className="section-kicker mb-3">Head Coach Tools</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CoachRActionCard href="/dashboard/coachr/head-coach" icon={<EntriesIcon size={18} />} text="Coach cards and venue oversight." title="Manage Coaches" />
+            <CoachRActionCard href="/dashboard/coachr/coaches" icon={<EntriesIcon size={18} />} text="Add, reactivate and deactivate venue coaches." title="Manage Coaches" />
             <CoachRActionCard href="/dashboard/coachr" icon={<ClubIcon size={18} />} text="Venue-level lesson summary." title="Venue Overview" />
             <CoachRActionCard href="/dashboard/coachr/students" icon={<EntriesIcon size={18} />} text="Student placement by coach." title="Student Allocation" />
             <CoachRActionCard href="/admin/courts" icon={<BookingIcon size={18} />} text="Court usage stays in ClubR admin." title="Court Usage" />

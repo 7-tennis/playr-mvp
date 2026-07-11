@@ -131,6 +131,10 @@ export interface AdminUser {
   role: AdminRole;
   venue_id: string | null;
   created_by: string | null;
+  assigned_by_user_id: string | null;
+  assigned_at: string | null;
+  updated_at: string | null;
+  deactivated_at: string | null;
   created_at: string;
 }
 
@@ -150,6 +154,7 @@ export interface Venue {
   name: string;
   slug: string;
   status: "active" | "inactive";
+  organisation_type: "academy" | "club" | "club_academy" | "school_district";
   created_at: string;
   updated_at: string;
 }

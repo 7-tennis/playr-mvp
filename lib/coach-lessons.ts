@@ -181,9 +181,15 @@ export async function loadCoachLessonsForRange(context: AuthenticatedContext, st
 export async function loadCoachLessonOptions(context: AuthenticatedContext): Promise<CoachLessonOptionData> {
   const coachRoleQuery =
     context.role === "platform_admin"
-      ? context.supabase.from("admin_users").select("user_id,venue_id,role").in("role", ["coach", "head_coach"]).limit(160)
+      ? context.supabase.from("admin_users").select("user_id,venue_id,role").in("role", ["coach", "head_coach"]).is("deactivated_at", null).limit(160)
       : context.venueId
-        ? context.supabase.from("admin_users").select("user_id,venue_id,role").in("role", ["coach", "head_coach"]).eq("venue_id", context.venueId).limit(160)
+        ? context.supabase
+            .from("admin_users")
+            .select("user_id,venue_id,role")
+            .in("role", ["coach", "head_coach"])
+            .eq("venue_id", context.venueId)
+            .is("deactivated_at", null)
+            .limit(160)
         : null;
 
   const [ownCoachProfileResult, coachRolesResult, playerProfilesResult, courtsResult, venuesResult] = await Promise.all([

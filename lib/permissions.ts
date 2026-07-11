@@ -9,6 +9,7 @@ export type CoachRPermission =
   | "coachr:schedule"
   | "coachr:students"
   | "coachr:availability"
+  | "coachr:coaches"
   | "coachr:messages"
   | "coachr:more"
   | "coachr:head_coach";
@@ -67,7 +68,7 @@ export function roleLabel(role: UserRole) {
     case "club_admin":
       return "Club Admin";
     case "platform_admin":
-      return "Platform Admin";
+      return "SupeR UseR";
   }
 }
 
@@ -128,7 +129,7 @@ export function canManageVenueResources({
 }
 
 export function canAccessCoachRPermission(role: UserRole, permission: CoachRPermission) {
-  if (permission === "coachr:head_coach") {
+  if (permission === "coachr:head_coach" || permission === "coachr:coaches") {
     return canAccessHeadCoach(role);
   }
 
@@ -136,13 +137,23 @@ export function canAccessCoachRPermission(role: UserRole, permission: CoachRPerm
 }
 
 async function loadRoleRow(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, userId: string) {
-  const withVenue = await supabase.from("admin_users").select("id,role,venue_id").eq("user_id", userId).maybeSingle();
+  const withVenue = await supabase
+    .from("admin_users")
+    .select("id,role,venue_id")
+    .eq("user_id", userId)
+    .is("deactivated_at", null)
+    .maybeSingle();
 
   if (!withVenue.error) {
     return (withVenue.data as RoleRow | null) ?? null;
   }
 
-  const withoutVenue = await supabase.from("admin_users").select("id,role").eq("user_id", userId).maybeSingle();
+  const withoutVenue = await supabase
+    .from("admin_users")
+    .select("id,role")
+    .eq("user_id", userId)
+    .is("deactivated_at", null)
+    .maybeSingle();
 
   if (withoutVenue.error) {
     return null;
@@ -218,7 +229,7 @@ export async function assertCoachRAccess(permission: CoachRPermission = "coachr"
 }
 
 function requiredCoachRRoles(permission: CoachRPermission) {
-  if (permission === "coachr:head_coach") {
+  if (permission === "coachr:head_coach" || permission === "coachr:coaches") {
     return ["head_coach", "club_admin", "platform_admin"] as UserRole[];
   }
 
