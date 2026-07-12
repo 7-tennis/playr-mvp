@@ -11,9 +11,9 @@ import {
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
 import { invitationLink } from "@/lib/organisations";
-import type { CoachLessonAttendanceResult, CoachPlayerAssignment } from "@/types/courtside";
+import type { CoachLessonAttendanceResult, CoachPlayerAssignment, OrganisationInvitation } from "@/types/courtside";
 import { CoachRPageFrame, CoachRRoleSummary, getProtectedCoachRPage } from "../coachr-shared";
-import { requestPlayerLink } from "./actions";
+import { cancelPlayerLinkRequest, requestPlayerLink } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,7 @@ type CoachPlayerAssignmentWithProfiles = Pick<CoachPlayerAssignment, "id" | "coa
   coach: CoachLessonProfile | null;
   player: CoachLessonProfile | null;
 };
+type PlayerLinkInvitation = Pick<OrganisationInvitation, "id" | "invited_email" | "invited_name" | "status" | "token" | "expires_at" | "metadata" | "created_at">;
 
 type StudentSummary = {
   id: string;
@@ -124,7 +125,14 @@ function addStudentLesson(summary: StudentSummary, lesson: CoachLessonWithRelati
 }
 
 function statusMessage(value?: string) {
-  return value === "player_invited" ? "Player link request created. Copy the invite link below; email delivery is not configured in this MVP." : null;
+  switch (value) {
+    case "player_invited":
+      return "Player link request created. Copy and share this secure link with the parent or guardian.";
+    case "player_invite_cancelled":
+      return "Player link request cancelled.";
+    default:
+      return null;
+  }
 }
 
 function errorMessage(value?: string) {
@@ -137,9 +145,18 @@ function errorMessage(value?: string) {
       return "Add the parent email and junior name before sending.";
     case "player_invite_failed":
       return "Player link request could not be created.";
+    case "player_invite_cancel_failed":
+      return "Player link request could not be cancelled.";
+    case "invitation_closed":
+      return "That request is no longer pending.";
     default:
       return null;
   }
+}
+
+function metadataText(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" ? value : "";
 }
 
 export default async function CoachRStudentsPage({ searchParams }: CoachRStudentsPageProps) {
@@ -176,9 +193,34 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
               .eq("status", "active")
               .limit(220)
           : Promise.resolve({ data: [], error: null });
-  const [lessons, options, assignmentResult] = await Promise.all([loadCoachLessons(access.context, 160), loadCoachLessonOptions(access.context), assignmentsQuery]);
+  const playerInvitationQuery =
+    access.context.role === "platform_admin"
+      ? access.context.supabase
+          .from("organisation_invitations")
+          .select("id,invited_email,invited_name,status,token,expires_at,metadata,created_at")
+          .eq("invitation_kind", "player_junior")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(120)
+      : access.context.venueId
+        ? access.context.supabase
+            .from("organisation_invitations")
+            .select("id,invited_email,invited_name,status,token,expires_at,metadata,created_at")
+            .eq("venue_id", access.context.venueId)
+            .eq("invitation_kind", "player_junior")
+            .eq("status", "pending")
+            .order("created_at", { ascending: false })
+            .limit(80)
+        : Promise.resolve({ data: [], error: null });
+  const [lessons, options, assignmentResult, playerInvitationsResult] = await Promise.all([
+    loadCoachLessons(access.context, 160),
+    loadCoachLessonOptions(access.context),
+    assignmentsQuery,
+    playerInvitationQuery
+  ]);
   const studentMap = new Map<string, StudentSummary>();
   const assignments = ((assignmentResult.data ?? []) as unknown as CoachPlayerAssignmentWithProfiles[]) ?? [];
+  const playerInvitations = ((playerInvitationsResult.data ?? []) as PlayerLinkInvitation[]) ?? [];
 
   lessons.forEach((lesson) => {
     const attendanceRows = lessonAttendanceRows(lesson);
@@ -357,6 +399,47 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
         <p className="mt-3 text-sm leading-6 text-slate-600">
           CoachR does not create duplicate profiles. Use the request first when a junior is not yet approved for this organisation.
         </p>
+      </CollapsibleCard>
+
+      <CollapsibleCard
+        eyebrow="Pending"
+        summary={`${playerInvitations.length} parent approvals awaiting a response. Pending juniors are not shown as authorised students yet.`}
+        title="Pending Player Requests"
+      >
+        {playerInvitations.length > 0 ? (
+          <div className="grid gap-3">
+            {playerInvitations.map((invitation) => {
+              const playerName = [metadataText(invitation.metadata, "playerFirstName"), metadataText(invitation.metadata, "playerLastName")].filter(Boolean).join(" ") || "Junior player";
+
+              return (
+                <article className="rounded-lg border border-slate-200 bg-court-mist p-3" key={invitation.id}>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-black text-court-navy">{playerName}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-600">
+                        Parent: {invitation.invited_name || invitation.invited_email} · {invitation.invited_email}
+                      </p>
+                    </div>
+                    <span className="ui-chip ui-chip-muted">Parent approval</span>
+                  </div>
+                  <p className="mt-2 text-xs font-semibold text-slate-600">Expires: {formatDateTime(invitation.expires_at)}</p>
+                  <code className="mt-2 block break-all rounded bg-white px-2 py-1 text-xs font-bold text-court-teal">{invitationLink(invitation.token)}</code>
+                  <form action={cancelPlayerLinkRequest} className="mt-3 flex flex-wrap items-center gap-2">
+                    <input name="invitationId" type="hidden" value={invitation.id} />
+                    <label className="text-xs font-semibold text-amber-800">
+                      <input className="mr-1" name="confirmCancel" type="checkbox" /> Confirm cancel
+                    </label>
+                    <button className="rounded border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-800" type="submit">
+                      Cancel Request
+                    </button>
+                  </form>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="ui-empty-card">No pending player-link requests.</div>
+        )}
       </CollapsibleCard>
 
       <section className="surface-card p-4 sm:p-5">

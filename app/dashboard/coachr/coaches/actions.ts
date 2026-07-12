@@ -156,3 +156,26 @@ export async function inviteVenueCoach(formData: FormData) {
   revalidateCoachAccess();
   redirect(`/dashboard/coachr/coaches?message=coach_invited&token=${token}`);
 }
+
+export async function cancelVenueCoachInvitation(formData: FormData) {
+  const context = await assertCoachRAccess("coachr:coaches");
+  const invitationId = text(formData, "invitationId");
+  const confirmed = text(formData, "confirmCancel") === "on";
+
+  if (context.kind !== "authenticated" || !invitationId || !confirmed) {
+    redirect("/dashboard/coachr/coaches?error=confirm_required");
+  }
+
+  const { error } = await context.supabase.rpc("cancel_organisation_invitation", {
+    p_confirm: true,
+    p_invitation_id: invitationId
+  });
+
+  if (error) {
+    console.error("Coach invitation cancellation failed", { error, role: context.role, venueId: context.venueId });
+    redirect(`/dashboard/coachr/coaches?error=${errorCode(error, "invitation_cancel_failed")}`);
+  }
+
+  revalidateCoachAccess();
+  redirect("/dashboard/coachr/coaches?message=invitation_cancelled");
+}

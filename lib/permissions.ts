@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import {
   appRoleForOrganisationRole,
   loadActiveOrganisationPreference,
-  loadOrganisationMembershipsForUser,
+  loadAllOrganisationMembershipsForUser,
   pickActiveOrganisationMembership,
   type OrganisationMembershipWithVenue
 } from "@/lib/organisations";
@@ -301,12 +301,13 @@ export async function getPermissionContext(): Promise<PermissionContext> {
     redirect("/login");
   }
 
-  const [roleRow, adultProfileResult, organisationMemberships, activeOrganisationPreference] = await Promise.all([
+  const [roleRow, adultProfileResult, allOrganisationMemberships, activeOrganisationPreference] = await Promise.all([
     loadActiveRoleRow(supabase, user.id),
     supabase.from("profiles").select("id").eq("user_id", user.id).eq("is_junior", false).maybeSingle(),
-    loadOrganisationMembershipsForUser(supabase, user.id),
+    loadAllOrganisationMembershipsForUser(supabase, user.id),
     loadActiveOrganisationPreference(supabase, user.id)
   ]);
+  const organisationMemberships = allOrganisationMemberships.filter((membership) => membership.status === "active" && membership.venue?.status !== "inactive");
   const adultProfile = (adultProfileResult.data as AdultProfileRow | null) ?? null;
   const { count } = adultProfile
     ? await supabase
@@ -321,7 +322,11 @@ export async function getPermissionContext(): Promise<PermissionContext> {
   const activeOrganisationRole = activeOrganisationMembership?.role ?? null;
   const membershipRole = activeOrganisationMembership ? appRoleForOrganisationRole(activeOrganisationMembership.role) : null;
   const storedRole = normalizeStoredRole(roleRow?.role, derivedRole);
-  const resolvedRole = storedRole === "platform_admin" ? "platform_admin" : membershipRole ?? storedRole;
+  const legacyVenueSuppressed = Boolean(
+    roleRow?.venue_id &&
+      allOrganisationMemberships.some((membership) => membership.venue_id === roleRow.venue_id && membership.status !== "active")
+  );
+  const resolvedRole = storedRole === "platform_admin" ? "platform_admin" : membershipRole ?? (legacyVenueSuppressed ? derivedRole : storedRole);
 
   return {
     kind: "authenticated",
@@ -330,7 +335,7 @@ export async function getPermissionContext(): Promise<PermissionContext> {
     role: resolvedRole,
     storedRole: roleRow?.role ?? null,
     roleSource: activeOrganisationMembership ? "stored" : roleRow ? "stored" : "derived",
-    venueId: resolvedRole === "platform_admin" ? null : activeOrganisationMembership?.venue_id ?? roleRow?.venue_id ?? null,
+    venueId: resolvedRole === "platform_admin" ? null : activeOrganisationMembership?.venue_id ?? (legacyVenueSuppressed ? null : roleRow?.venue_id ?? null),
     adultProfileId: adultProfile?.id ?? null,
     linkedJuniorCount,
     organisationMemberships,

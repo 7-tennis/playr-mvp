@@ -13,9 +13,18 @@ function encoded(message: string) {
   return encodeURIComponent(message);
 }
 
+function safeNextPath(value: string) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return null;
+  }
+
+  return value;
+}
+
 export async function signInWithPassword(formData: FormData) {
   const email = formText(formData, "email");
   const password = formText(formData, "password");
+  const next = safeNextPath(formText(formData, "next"));
 
   if (!email || !password) {
     redirect(`/login?error=${encoded("Enter your email and password.")}`);
@@ -29,13 +38,14 @@ export async function signInWithPassword(formData: FormData) {
     redirect(`/login?error=${encoded("We could not log you in. Check your email and password, and verify your email if you just created your account.")}`);
   }
 
-  redirect(await getPostLoginPathForUser(supabase, data.user.id));
+  redirect(next ?? (await getPostLoginPathForUser(supabase, data.user.id)));
 }
 
 export async function signUpWithPassword(formData: FormData) {
   const email = formText(formData, "email");
   const password = formText(formData, "password");
   const phone = formText(formData, "phone");
+  const next = safeNextPath(formText(formData, "next"));
   const marketingConsent = formData.get("marketing_consent") === "on";
 
   if (!email || !password) {
@@ -61,10 +71,11 @@ export async function signUpWithPassword(formData: FormData) {
   }
 
   if (!data.session) {
-    redirect(`/signup?message=${encoded("Check your email to verify your account. Open the confirmation link from Supabase, then return here and log in.")}`);
+    const nextParam = next ? `&next=${encodeURIComponent(next)}` : "";
+    redirect(`/signup?message=${encoded("Check your email to verify your account. Open the confirmation link from Supabase, then return here and log in.")}${nextParam}`);
   }
 
-  redirect("/dashboard/profile");
+  redirect(next ?? "/dashboard/profile");
 }
 
 export async function signOut() {

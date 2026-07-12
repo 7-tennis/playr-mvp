@@ -188,12 +188,11 @@ function membershipSelect() {
   `;
 }
 
-export async function loadOrganisationMembershipsForUser(supabase: ServerSupabaseClient, userId: string) {
+export async function loadAllOrganisationMembershipsForUser(supabase: ServerSupabaseClient, userId: string) {
   const { data, error } = await supabase
     .from("organisation_memberships")
     .select(membershipSelect())
     .eq("user_id", userId)
-    .eq("status", "active")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -205,7 +204,12 @@ export async function loadOrganisationMembershipsForUser(supabase: ServerSupabas
     return [] as OrganisationMembershipWithVenue[];
   }
 
-  return ((data ?? []) as unknown as OrganisationMembershipWithVenue[]).filter((membership) => membership.venue?.status !== "inactive");
+  return ((data ?? []) as unknown as OrganisationMembershipWithVenue[]) ?? [];
+}
+
+export async function loadOrganisationMembershipsForUser(supabase: ServerSupabaseClient, userId: string) {
+  const memberships = await loadAllOrganisationMembershipsForUser(supabase, userId);
+  return memberships.filter((membership) => membership.status === "active" && membership.venue?.status !== "inactive");
 }
 
 export async function loadActiveOrganisationPreference(supabase: ServerSupabaseClient, userId: string) {

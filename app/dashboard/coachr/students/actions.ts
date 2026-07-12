@@ -12,7 +12,7 @@ function text(formData: FormData, key: string) {
 function invitationError(error: { message?: string } | null | undefined, fallback: string) {
   const message = error?.message ?? "";
 
-  if (["access", "duplicate_invitation", "invalid_venue", "missing_fields"].includes(message)) {
+  if (["access", "confirm_required", "duplicate_invitation", "invalid_venue", "invitation_closed", "missing_fields"].includes(message)) {
     return message;
   }
 
@@ -63,4 +63,27 @@ export async function requestPlayerLink(formData: FormData) {
 
   revalidateStudentSurfaces();
   redirect(`/dashboard/coachr/students?message=player_invited&token=${token}`);
+}
+
+export async function cancelPlayerLinkRequest(formData: FormData) {
+  const context = await assertCoachRAccess("coachr:students");
+  const invitationId = text(formData, "invitationId");
+  const confirmed = text(formData, "confirmCancel") === "on";
+
+  if (context.kind !== "authenticated" || !invitationId || !confirmed) {
+    redirect("/dashboard/coachr/students?error=confirm_required");
+  }
+
+  const { error } = await context.supabase.rpc("cancel_organisation_invitation", {
+    p_confirm: true,
+    p_invitation_id: invitationId
+  });
+
+  if (error) {
+    console.error("CoachR player link request cancellation failed", { error, role: context.role, venueId: context.venueId });
+    redirect(`/dashboard/coachr/students?error=${invitationError(error, "player_invite_cancel_failed")}`);
+  }
+
+  revalidateStudentSurfaces();
+  redirect("/dashboard/coachr/students?message=player_invite_cancelled");
 }

@@ -4,9 +4,9 @@ import { formatDateTime } from "@/lib/courtside-format";
 import { loadCoachLessons, profileDisplayName } from "@/lib/coach-lessons";
 import { invitationLink, organisationRoleLabel } from "@/lib/organisations";
 import { normalizeStoredRole, roleLabel } from "@/lib/permissions";
-import type { AdminUser, OrganisationMembership, OrganisationRole, Profile } from "@/types/courtside";
+import type { AdminUser, OrganisationInvitation, OrganisationMembership, OrganisationRole, Profile } from "@/types/courtside";
 import { CoachRPageFrame, CoachRRoleSummary, getProtectedCoachRPage } from "../coachr-shared";
-import { assignVenueCoach, deactivateVenueCoach, inviteVenueCoach } from "./actions";
+import { assignVenueCoach, cancelVenueCoachInvitation, deactivateVenueCoach, inviteVenueCoach } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,7 @@ type AdultProfile = Pick<Profile, "id" | "user_id" | "first_name" | "last_name" 
 type FoundationCoachMembership = Pick<OrganisationMembership, "id" | "user_id" | "venue_id" | "role" | "status" | "accepted_at" | "created_at"> & {
   profile: AdultProfile | null;
 };
+type CoachInvitation = Pick<OrganisationInvitation, "id" | "invited_email" | "invited_name" | "intended_role" | "status" | "token" | "expires_at" | "created_at">;
 type CoachCard = {
   active: boolean;
   assignedAt: string | null;
@@ -47,7 +48,9 @@ function statusMessage(message?: string) {
     case "coach_deactivated":
       return "Coach access deactivated.";
     case "coach_invited":
-      return "Coach invitation created. Copy the invite link below; email delivery is not configured in this MVP.";
+      return "Coach invitation created. Copy and share this secure link with the invited coach.";
+    case "invitation_cancelled":
+      return "Invitation cancelled.";
     default:
       return null;
   }
@@ -69,6 +72,10 @@ function errorMessage(error?: string) {
       return "A pending invitation already exists for that coach email and role.";
     case "invite_failed":
       return "Coach invitation could not be created.";
+    case "invitation_cancel_failed":
+      return "Coach invitation could not be cancelled.";
+    case "invitation_closed":
+      return "That invitation is no longer pending.";
     case "invalid_role":
       return "That coaching role cannot be assigned from this page.";
     case "deactivate_failed":
@@ -118,7 +125,7 @@ export default async function CoachRCoachesPage({ searchParams }: CoachesPagePro
 
   const context = access.context;
   const query = (searchParams?.q ?? "").trim().toLowerCase();
-  const [lessons, assignmentsResult, foundationMembershipsResult, adultProfilesResult] = await Promise.all([
+  const [lessons, assignmentsResult, foundationMembershipsResult, coachInvitationsResult, adultProfilesResult] = await Promise.all([
     loadCoachLessons(context, 240),
     context.role === "platform_admin"
       ? context.supabase.from("admin_users").select("id,user_id,role,venue_id,assigned_at,deactivated_at").in("role", ["coach", "head_coach"]).order("created_at", { ascending: false })
@@ -144,6 +151,24 @@ export default async function CoachRCoachesPage({ searchParams }: CoachesPagePro
             .in("status", ["active", "suspended"])
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
+    context.role === "platform_admin"
+      ? context.supabase
+          .from("organisation_invitations")
+          .select("id,invited_email,invited_name,intended_role,status,token,expires_at,created_at")
+          .eq("invitation_kind", "coach")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(120)
+      : context.venueId
+        ? context.supabase
+            .from("organisation_invitations")
+            .select("id,invited_email,invited_name,intended_role,status,token,expires_at,created_at")
+            .eq("venue_id", context.venueId)
+            .eq("invitation_kind", "coach")
+            .eq("status", "pending")
+            .order("created_at", { ascending: false })
+            .limit(80)
+        : Promise.resolve({ data: [], error: null }),
     context.supabase
       .from("profiles")
       .select("id,user_id,first_name,last_name,email,is_junior")
@@ -154,6 +179,7 @@ export default async function CoachRCoachesPage({ searchParams }: CoachesPagePro
   ]);
   const assignments = ((assignmentsResult.data ?? []) as Assignment[]) ?? [];
   const foundationMemberships = ((foundationMembershipsResult.data ?? []) as unknown as FoundationCoachMembership[]) ?? [];
+  const coachInvitations = ((coachInvitationsResult.data ?? []) as CoachInvitation[]) ?? [];
   const adultProfiles = ((adultProfilesResult.data ?? []) as AdultProfile[]) ?? [];
   const profilesByUser = new Map(adultProfiles.map((profile) => [profile.user_id, profile]));
   const lessonStats = new Map<string, { lessons: number; nextLesson: string | null; students: Set<string> }>();
@@ -312,6 +338,41 @@ export default async function CoachRCoachesPage({ searchParams }: CoachesPagePro
           </form>
         ) : (
           <div className="ui-empty-card">Only Head Coaches and organisation administrators can invite coaches here.</div>
+        )}
+      </CollapsibleCard>
+
+      <CollapsibleCard
+        eyebrow="Pending"
+        summary={`${coachInvitations.length} coach invitations awaiting acceptance. Links must be shared manually.`}
+        title="Pending Coach Invitations"
+      >
+        {coachInvitations.length > 0 ? (
+          <div className="grid gap-3">
+            {coachInvitations.map((invitation) => (
+              <article className="rounded-lg border border-slate-200 bg-court-mist p-3" key={invitation.id}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-black text-court-navy">{invitation.invited_name || invitation.invited_email}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-600">{invitation.invited_email}</p>
+                  </div>
+                  <span className="ui-chip ui-chip-muted">{organisationRoleLabel(invitation.intended_role)}</span>
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-600">Expires: {formatDateTime(invitation.expires_at)}</p>
+                <code className="mt-2 block break-all rounded bg-white px-2 py-1 text-xs font-bold text-court-teal">{invitationLink(invitation.token)}</code>
+                <form action={cancelVenueCoachInvitation} className="mt-3 flex flex-wrap items-center gap-2">
+                  <input name="invitationId" type="hidden" value={invitation.id} />
+                  <label className="text-xs font-semibold text-amber-800">
+                    <input className="mr-1" name="confirmCancel" type="checkbox" /> Confirm cancel
+                  </label>
+                  <button className="rounded border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-800" type="submit">
+                    Cancel Invite
+                  </button>
+                </form>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="ui-empty-card">No pending coach invitations.</div>
         )}
       </CollapsibleCard>
 

@@ -12,7 +12,8 @@ const adminLinks = [
   { href: "/admin/results", label: "Results" },
   { href: "/admin/courts", label: "Courts" },
   { href: "/admin/bookings", label: "Bookings" },
-  { href: "/admin/organisations", label: "Organisations" }
+  { href: "/admin/organisations", label: "Organisations" },
+  { href: "/admin/foundation", label: "Foundation" }
 ];
 
 export function AdminNav() {

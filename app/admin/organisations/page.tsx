@@ -7,7 +7,15 @@ import { getAdminContext } from "@/lib/admin-auth";
 import { invitationKindLabel, invitationLink, organisationRoleLabel, organisationStatusLabel } from "@/lib/organisations";
 import { normalizeStoredRole, roleLabel } from "@/lib/permissions";
 import type { AdminUser, OrganisationInvitation, OrganisationMembership, Profile, Venue } from "@/types/courtside";
-import { assignOrganisationRole, createOrganisation, createOrganisationInvitation, deactivateOrganisationRole, updateOrganisationDetails, updateOrganisationType } from "./actions";
+import {
+  assignOrganisationRole,
+  cancelOrganisationInvitation,
+  createOrganisation,
+  createOrganisationInvitation,
+  deactivateOrganisationRole,
+  updateOrganisationDetails,
+  updateOrganisationType
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +62,9 @@ function statusMessage(message?: string, person?: string, venue?: string) {
     case "organisation_created":
       return "Organisation created.";
     case "invitation_created":
-      return "Invitation created. Copy the invite link below; email delivery is not configured in this MVP.";
+      return "Invitation created. Copy and share this secure link with the invited user.";
+    case "invitation_cancelled":
+      return "Invitation cancelled.";
     case "role_deactivated":
       return "Role assignment deactivated.";
     default:
@@ -82,6 +92,10 @@ function errorMessage(error?: string) {
       return "A pending invitation already exists for this organisation, email and role.";
     case "invitation_failed":
       return "Invitation could not be created.";
+    case "invitation_cancel_failed":
+      return "Invitation could not be cancelled.";
+    case "invitation_closed":
+      return "That invitation is no longer pending.";
     case "missing_fields":
       return "Complete the required fields before saving.";
     case "organisation_create_failed":
@@ -422,7 +436,17 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
                                 <span className="ui-chip ui-chip-muted">{organisationRoleLabel(invitation.intended_role)}</span>
                               </div>
                               <p className="mt-1 text-xs font-semibold text-slate-600">{invitationKindLabel(invitation.invitation_kind)} · {invitation.invited_email}</p>
+                              <p className="mt-1 text-xs font-semibold text-slate-600">Expires: {new Date(invitation.expires_at).toLocaleString()}</p>
                               <code className="mt-2 block break-all rounded bg-white px-2 py-1 text-xs font-bold text-court-teal">{invitationLink(invitation.token)}</code>
+                              <form action={cancelOrganisationInvitation} className="mt-3 flex flex-wrap items-center gap-2">
+                                <input name="invitationId" type="hidden" value={invitation.id} />
+                                <label className="text-xs font-semibold text-amber-800">
+                                  <input className="mr-1" name="confirmCancel" type="checkbox" /> Confirm cancel
+                                </label>
+                                <button className="rounded border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-800" type="submit">
+                                  Cancel Invite
+                                </button>
+                              </form>
                             </div>
                           ))
                         ) : (

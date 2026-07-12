@@ -52,6 +52,8 @@ function rpcErrorCode(error: { code?: string; message?: string } | null | undefi
       "invalid_assignment",
       "invalid_role",
       "invalid_venue",
+      "invalid_invitation",
+      "invitation_closed",
       "last_platform_admin",
       "missing_fields"
     ].includes(message)
@@ -171,6 +173,29 @@ export async function createOrganisationInvitation(formData: FormData) {
 
   revalidatePath("/admin/organisations");
   redirect(`/admin/organisations?message=invitation_created&token=${token}`);
+}
+
+export async function cancelOrganisationInvitation(formData: FormData) {
+  const { supabase } = await requirePlatformAdmin();
+  const invitationId = text(formData, "invitationId");
+  const confirmed = text(formData, "confirmCancel") === "on";
+
+  if (!invitationId || !confirmed) {
+    redirect("/admin/organisations?error=confirm_required");
+  }
+
+  const { error } = await supabase.rpc("cancel_organisation_invitation", {
+    p_confirm: true,
+    p_invitation_id: invitationId
+  });
+
+  if (error) {
+    console.error("Organisation invitation cancellation failed", { error, invitationId });
+    redirect(`/admin/organisations?error=${rpcErrorCode(error, "invitation_cancel_failed")}`);
+  }
+
+  revalidatePath("/admin/organisations");
+  redirect("/admin/organisations?message=invitation_cancelled");
 }
 
 export async function assignOrganisationRole(formData: FormData) {

@@ -864,6 +864,11 @@ begin
     raise exception 'missing_fields' using errcode = 'P0001';
   end if;
 
+  update public.organisation_invitations invitation
+  set status = 'expired'
+  where invitation.status = 'pending'
+    and invitation.expires_at <= now();
+
   if p_invitation_kind = 'coach' then
     if p_intended_role not in ('head_coach', 'coach', 'assistant_coach') then
       raise exception 'invalid_role' using errcode = 'P0001';
@@ -1112,7 +1117,11 @@ begin
         removed_at = null
     returning id into created_link_id;
 
-    intended_coach_profile_id := nullif(invite_record.metadata ->> 'coachProfileId', '')::uuid;
+    intended_coach_profile_id := case
+      when coalesce(invite_record.metadata ->> 'coachProfileId', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        then (invite_record.metadata ->> 'coachProfileId')::uuid
+      else null
+    end;
 
     if intended_coach_profile_id is not null then
       insert into public.coach_player_assignments (
@@ -1201,6 +1210,54 @@ begin
   set status = 'declined',
       accepted_by_user_id = actor_user_id,
       declined_at = now()
+  where id = invite_record.id;
+end;
+$$;
+
+create or replace function public.cancel_organisation_invitation(
+  p_invitation_id uuid,
+  p_confirm boolean default false
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_user_id uuid := (select auth.uid());
+  invite_record public.organisation_invitations%rowtype;
+begin
+  if actor_user_id is null then
+    raise exception 'access' using errcode = 'P0001';
+  end if;
+
+  if not p_confirm then
+    raise exception 'confirm_required' using errcode = 'P0001';
+  end if;
+
+  select *
+    into invite_record
+  from public.organisation_invitations
+  where id = p_invitation_id
+  limit 1;
+
+  if invite_record.id is null then
+    raise exception 'invalid_invitation' using errcode = 'P0001';
+  end if;
+
+  if invite_record.status <> 'pending' then
+    raise exception 'invitation_closed' using errcode = 'P0001';
+  end if;
+
+  if invite_record.invited_by_user_id <> actor_user_id
+    and not public.user_can_manage_organisation_roles(invite_record.venue_id, actor_user_id)
+    and not public.user_can_manage_organisation_coaches(invite_record.venue_id, actor_user_id) then
+    raise exception 'access' using errcode = 'P0001';
+  end if;
+
+  update public.organisation_invitations
+  set status = 'cancelled',
+      cancelled_at = now()
   where id = invite_record.id;
 end;
 $$;
@@ -1542,6 +1599,7 @@ revoke all on function public.sync_legacy_admin_user_from_membership(uuid, uuid,
 revoke all on function public.create_organisation_invitation(uuid, text, public.organisation_role, public.organisation_invitation_kind, text, text, uuid, uuid, uuid, jsonb) from public;
 revoke all on function public.accept_organisation_invitation(uuid, uuid, uuid) from public;
 revoke all on function public.decline_organisation_invitation(uuid) from public;
+revoke all on function public.cancel_organisation_invitation(uuid, boolean) from public;
 
 grant execute on function public.organisation_role_priority(public.organisation_role) to authenticated;
 grant execute on function public.user_is_platform_admin(uuid) to authenticated;
@@ -1553,3 +1611,4 @@ grant execute on function public.user_can_read_organisation_player_link(uuid, uu
 grant execute on function public.create_organisation_invitation(uuid, text, public.organisation_role, public.organisation_invitation_kind, text, text, uuid, uuid, uuid, jsonb) to authenticated;
 grant execute on function public.accept_organisation_invitation(uuid, uuid, uuid) to authenticated;
 grant execute on function public.decline_organisation_invitation(uuid) to authenticated;
+grant execute on function public.cancel_organisation_invitation(uuid, boolean) to authenticated;
