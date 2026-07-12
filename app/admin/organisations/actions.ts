@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAdminContext } from "@/lib/admin-auth";
-import type { AdminRole, Venue } from "@/types/courtside";
+import type { AdminRole, OrganisationRole, Venue } from "@/types/courtside";
 
 const assignableRoles: AdminRole[] = ["platform_admin", "club_admin", "head_coach", "coach"];
-const organisationTypes: Venue["organisation_type"][] = ["academy", "club", "club_academy", "school_district"];
+const organisationTypes: Venue["organisation_type"][] = ["academy", "club", "school", "district", "club_academy", "school_district"];
+const invitationRoles: OrganisationRole[] = ["organisation_admin", "head_coach", "coach", "assistant_coach", "club_manager", "sports_coordinator", "team_manager", "viewer"];
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -58,7 +59,118 @@ function rpcErrorCode(error: { code?: string; message?: string } | null | undefi
     return message;
   }
 
+  if (message === "duplicate_invitation") {
+    return message;
+  }
+
   return fallback;
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+export async function createOrganisation(formData: FormData) {
+  const { supabase } = await requirePlatformAdmin();
+  const name = text(formData, "name");
+  const organisationType = allowedValue<Venue["organisation_type"]>(text(formData, "organisationType"), organisationTypes, "academy");
+  const slug = slugify(text(formData, "slug") || name);
+
+  if (!name || !slug) {
+    redirect("/admin/organisations?error=missing_fields");
+  }
+
+  const { error } = await supabase.from("venues").insert({
+    address: text(formData, "address") || null,
+    contact_email: text(formData, "contactEmail") || null,
+    contact_phone: text(formData, "contactPhone") || null,
+    description: text(formData, "description") || null,
+    name,
+    organisation_type: organisationType,
+    slug,
+    status: "active"
+  });
+
+  if (error) {
+    console.error("Organisation creation failed", { error, name, organisationType });
+    redirect("/admin/organisations?error=organisation_create_failed");
+  }
+
+  revalidatePath("/admin/organisations");
+  redirect("/admin/organisations?message=organisation_created");
+}
+
+export async function updateOrganisationDetails(formData: FormData) {
+  const { supabase } = await requirePlatformAdmin();
+  const venueId = text(formData, "venueId");
+  const name = text(formData, "name");
+  const organisationType = allowedValue<Venue["organisation_type"]>(text(formData, "organisationType"), organisationTypes, "academy");
+  const status = allowedValue<"active" | "inactive">(text(formData, "status"), ["active", "inactive"], "active");
+  const slug = slugify(text(formData, "slug") || name);
+
+  if (!venueId || !name || !slug) {
+    redirect("/admin/organisations?error=missing_fields");
+  }
+
+  const { error } = await supabase
+    .from("venues")
+    .update({
+      address: text(formData, "address") || null,
+      contact_email: text(formData, "contactEmail") || null,
+      contact_phone: text(formData, "contactPhone") || null,
+      description: text(formData, "description") || null,
+      name,
+      organisation_type: organisationType,
+      slug,
+      status
+    })
+    .eq("id", venueId);
+
+  if (error) {
+    console.error("Organisation details update failed", { error, venueId });
+    redirect("/admin/organisations?error=organisation_update_failed");
+  }
+
+  revalidateAccessSurfaces();
+  redirect("/admin/organisations?message=organisation_updated");
+}
+
+export async function createOrganisationInvitation(formData: FormData) {
+  const { supabase } = await requirePlatformAdmin();
+  const venueId = text(formData, "venueId");
+  const email = text(formData, "email").toLowerCase();
+  const invitedName = text(formData, "invitedName") || null;
+  const invitedPhone = text(formData, "invitedPhone") || null;
+  const intendedRole = allowedValue<OrganisationRole>(text(formData, "intendedRole"), invitationRoles, "viewer");
+
+  if (!venueId || !email) {
+    redirect("/admin/organisations?error=missing_fields");
+  }
+
+  const { data: token, error } = await supabase.rpc("create_organisation_invitation", {
+    p_invitation_kind: intendedRole === "head_coach" || intendedRole === "coach" || intendedRole === "assistant_coach" ? "coach" : "organisation_member",
+    p_invited_email: email,
+    p_invited_name: invitedName,
+    p_invited_phone: invitedPhone,
+    p_intended_role: intendedRole,
+    p_metadata: {},
+    p_parent_profile_id: null,
+    p_target_junior_profile_id: null,
+    p_target_profile_id: null,
+    p_venue_id: venueId
+  });
+
+  if (error || !token) {
+    console.error("Organisation invitation creation failed", { error, venueId, intendedRole });
+    redirect(`/admin/organisations?error=${rpcErrorCode(error, "invitation_failed")}`);
+  }
+
+  revalidatePath("/admin/organisations");
+  redirect(`/admin/organisations?message=invitation_created&token=${token}`);
 }
 
 export async function assignOrganisationRole(formData: FormData) {

@@ -1,6 +1,14 @@
 import { redirect } from "next/navigation";
+import {
+  appRoleForOrganisationRole,
+  loadActiveOrganisationPreference,
+  loadOrganisationMembershipsForUser,
+  pickActiveOrganisationMembership,
+  type OrganisationMembershipWithVenue
+} from "@/lib/organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import type { OrganisationRole } from "@/types/courtside";
 
 export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "platform_admin";
 export type StoredUserRole = UserRole | "admin" | "staff";
@@ -38,6 +46,9 @@ export type PermissionContext =
       venueId: string | null;
       adultProfileId: string | null;
       linkedJuniorCount: number;
+      organisationMemberships: OrganisationMembershipWithVenue[];
+      activeOrganisationMembership: OrganisationMembershipWithVenue | null;
+      activeOrganisationRole: OrganisationRole | null;
     };
 
 export function normalizeStoredRole(role: StoredUserRole | string | null | undefined, fallback: UserRole = "player"): UserRole {
@@ -135,7 +146,11 @@ export function canManageVenueResources({
 }
 
 export function canAccessCoachRPermission(role: UserRole, permission: CoachRPermission) {
-  if (permission === "coachr:head_coach" || permission === "coachr:coaches") {
+  if (permission === "coachr:coaches") {
+    return role === "club_admin" || canAccessHeadCoach(role);
+  }
+
+  if (permission === "coachr:head_coach") {
     return canAccessHeadCoach(role);
   }
 
@@ -286,9 +301,11 @@ export async function getPermissionContext(): Promise<PermissionContext> {
     redirect("/login");
   }
 
-  const [roleRow, adultProfileResult] = await Promise.all([
+  const [roleRow, adultProfileResult, organisationMemberships, activeOrganisationPreference] = await Promise.all([
     loadActiveRoleRow(supabase, user.id),
-    supabase.from("profiles").select("id").eq("user_id", user.id).eq("is_junior", false).maybeSingle()
+    supabase.from("profiles").select("id").eq("user_id", user.id).eq("is_junior", false).maybeSingle(),
+    loadOrganisationMembershipsForUser(supabase, user.id),
+    loadActiveOrganisationPreference(supabase, user.id)
   ]);
   const adultProfile = (adultProfileResult.data as AdultProfileRow | null) ?? null;
   const { count } = adultProfile
@@ -300,17 +317,25 @@ export async function getPermissionContext(): Promise<PermissionContext> {
     : { count: 0 };
   const linkedJuniorCount = count ?? 0;
   const derivedRole: UserRole = linkedJuniorCount > 0 ? "parent" : "player";
+  const activeOrganisationMembership = pickActiveOrganisationMembership(organisationMemberships, activeOrganisationPreference);
+  const activeOrganisationRole = activeOrganisationMembership?.role ?? null;
+  const membershipRole = activeOrganisationMembership ? appRoleForOrganisationRole(activeOrganisationMembership.role) : null;
+  const storedRole = normalizeStoredRole(roleRow?.role, derivedRole);
+  const resolvedRole = storedRole === "platform_admin" ? "platform_admin" : membershipRole ?? storedRole;
 
   return {
     kind: "authenticated",
     supabase,
     user,
-    role: normalizeStoredRole(roleRow?.role, derivedRole),
+    role: resolvedRole,
     storedRole: roleRow?.role ?? null,
-    roleSource: roleRow ? "stored" : "derived",
-    venueId: roleRow?.venue_id ?? null,
+    roleSource: activeOrganisationMembership ? "stored" : roleRow ? "stored" : "derived",
+    venueId: resolvedRole === "platform_admin" ? null : activeOrganisationMembership?.venue_id ?? roleRow?.venue_id ?? null,
     adultProfileId: adultProfile?.id ?? null,
-    linkedJuniorCount
+    linkedJuniorCount,
+    organisationMemberships,
+    activeOrganisationMembership,
+    activeOrganisationRole
   };
 }
 
@@ -339,7 +364,11 @@ export async function assertCoachRAccess(permission: CoachRPermission = "coachr"
 }
 
 function requiredCoachRRoles(permission: CoachRPermission) {
-  if (permission === "coachr:head_coach" || permission === "coachr:coaches") {
+  if (permission === "coachr:coaches") {
+    return ["club_admin", "head_coach", "platform_admin"] as UserRole[];
+  }
+
+  if (permission === "coachr:head_coach") {
     return ["head_coach", "platform_admin"] as UserRole[];
   }
 

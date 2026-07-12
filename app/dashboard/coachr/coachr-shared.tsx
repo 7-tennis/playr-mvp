@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CoachRBottomNav, CoachRDesktopNav } from "@/components/coachr-navigation";
+import { OrganisationSwitcher } from "@/components/organisation-switcher";
 import { PageShell } from "@/components/page-shell";
 import { BookingIcon, ClubIcon, EntriesIcon, MatchIcon, PrivateIcon, TimeIcon } from "@/components/playr-icons";
 import { getCoachRAccess, roleLabel, type CoachRPermission, type PermissionContext, type UserRole } from "@/lib/permissions";
@@ -63,6 +64,9 @@ export function CoachRPageFrame({
   return (
     <PageShell eyebrow="CoachR" subtitle={subtitle} title={title}>
       <CoachRNav canUseHeadCoach={context.role === "head_coach" || context.role === "platform_admin"} />
+      <div className="mb-5">
+        <OrganisationSwitcher activeMembershipId={context.activeOrganisationMembership?.id ?? null} memberships={context.organisationMemberships} />
+      </div>
       <div className="pb-24 md:pb-0">{children}</div>
     </PageShell>
   );

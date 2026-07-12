@@ -191,8 +191,39 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
             .is("deactivated_at", null)
             .limit(160)
         : null;
+  const coachMembershipQuery =
+    context.role === "platform_admin"
+      ? context.supabase
+          .from("organisation_memberships")
+          .select("profile_id,user_id,venue_id,role,status")
+          .in("role", ["head_coach", "coach", "assistant_coach"])
+          .eq("status", "active")
+          .limit(220)
+      : context.venueId
+        ? context.supabase
+            .from("organisation_memberships")
+            .select("profile_id,user_id,venue_id,role,status")
+            .in("role", ["head_coach", "coach", "assistant_coach"])
+            .eq("status", "active")
+            .eq("venue_id", context.venueId)
+            .limit(220)
+        : null;
+  const linkedPlayerQuery =
+    context.role === "platform_admin"
+      ? null
+      : context.venueId
+        ? context.supabase.from("organisation_player_links").select("player_profile_id").eq("venue_id", context.venueId).eq("status", "active").limit(240)
+        : null;
+  const assignedPlayerQuery =
+    context.role === "platform_admin"
+      ? null
+      : context.role === "coach" && context.adultProfileId
+        ? context.supabase.from("coach_player_assignments").select("player_profile_id").eq("coach_profile_id", context.adultProfileId).eq("status", "active").limit(240)
+        : context.venueId
+          ? context.supabase.from("coach_player_assignments").select("player_profile_id").eq("venue_id", context.venueId).eq("status", "active").limit(240)
+          : null;
 
-  const [ownCoachProfileResult, coachRolesResult, playerProfilesResult, courtsResult, venuesResult] = await Promise.all([
+  const [ownCoachProfileResult, coachRolesResult, coachMembershipsResult, linkedPlayersResult, assignedPlayersResult, courtsResult, venuesResult] = await Promise.all([
     context.adultProfileId
       ? context.supabase
           .from("profiles")
@@ -202,11 +233,9 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     coachRoleQuery ?? Promise.resolve({ data: [], error: null }),
-    context.supabase
-      .from("profiles")
-      .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
-      .order("first_name", { ascending: true })
-      .limit(120),
+    coachMembershipQuery ?? Promise.resolve({ data: [], error: null }),
+    linkedPlayerQuery ?? Promise.resolve({ data: [], error: null }),
+    assignedPlayerQuery ?? Promise.resolve({ data: [], error: null }),
     context.venueId && context.role !== "platform_admin"
       ? context.supabase.from("courts").select("id,name,venue_id").eq("venue_id", context.venueId).eq("status", "active").order("sort_order", { ascending: true })
       : context.supabase.from("courts").select("id,name,venue_id").eq("status", "active").order("sort_order", { ascending: true }),
@@ -217,17 +246,46 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
 
   const ownCoachProfile = (ownCoachProfileResult.data as CoachLessonProfile | null) ?? null;
   const coachUserIds = Array.from(new Set(((coachRolesResult.data ?? []) as { user_id: string | null }[]).map((row) => row.user_id).filter(Boolean) as string[]));
+  const coachProfileIds = Array.from(new Set(((coachMembershipsResult.data ?? []) as { profile_id: string | null }[]).map((row) => row.profile_id).filter(Boolean) as string[]));
   const coachProfilesResult =
     context.role === "coach"
       ? { data: ownCoachProfile ? [ownCoachProfile] : [], error: null }
-      : coachUserIds.length > 0
+      : coachUserIds.length > 0 || coachProfileIds.length > 0
         ? await context.supabase
             .from("profiles")
             .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
-            .in("user_id", coachUserIds)
+            .or(
+              [
+                coachUserIds.length > 0 ? `user_id.in.(${coachUserIds.join(",")})` : null,
+                coachProfileIds.length > 0 ? `id.in.(${coachProfileIds.join(",")})` : null
+              ]
+                .filter(Boolean)
+                .join(",")
+            )
             .eq("is_junior", false)
             .order("first_name", { ascending: true })
-            .limit(160)
+            .limit(220)
+        : { data: [], error: null };
+  const playerProfileIds = Array.from(
+    new Set([
+      ...(((linkedPlayersResult.data ?? []) as { player_profile_id: string | null }[]).map((row) => row.player_profile_id).filter(Boolean) as string[]),
+      ...(((assignedPlayersResult.data ?? []) as { player_profile_id: string | null }[]).map((row) => row.player_profile_id).filter(Boolean) as string[])
+    ])
+  );
+  const playerProfilesResult =
+    context.role === "platform_admin"
+      ? await context.supabase
+          .from("profiles")
+          .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
+          .order("first_name", { ascending: true })
+          .limit(160)
+      : playerProfileIds.length > 0
+        ? await context.supabase
+            .from("profiles")
+            .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
+            .in("id", playerProfileIds)
+            .order("first_name", { ascending: true })
+            .limit(220)
         : { data: [], error: null };
 
   return {

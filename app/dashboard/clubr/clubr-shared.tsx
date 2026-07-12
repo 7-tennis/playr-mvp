@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ClubRBottomNav, ClubRDesktopNav } from "@/components/clubr-navigation";
+import { OrganisationSwitcher } from "@/components/organisation-switcher";
 import { PageShell } from "@/components/page-shell";
 import { ClubIcon, PrivateIcon } from "@/components/playr-icons";
 import { clubRScopeLabel, getClubRAccess, loadClubRVenue, type AuthenticatedClubRContext, type ClubRAccess } from "@/lib/clubr";
@@ -66,6 +67,9 @@ export function ClubRPageFrame({
           </span>
         </div>
       </section>
+      <div className="mb-5">
+        <OrganisationSwitcher activeMembershipId={context.activeOrganisationMembership?.id ?? null} memberships={context.organisationMemberships} />
+      </div>
       <div className="pb-24 md:pb-0">{children}</div>
       <ClubRBottomNav />
     </PageShell>

@@ -37,6 +37,23 @@ export type NotificationType =
   | "leaderboard_changed"
   | "membership_renewal"
   | "shop_reservation_update";
+export type OrganisationType = "academy" | "club" | "school" | "district" | "club_academy" | "school_district";
+export type OrganisationRole =
+  | "organisation_admin"
+  | "head_coach"
+  | "coach"
+  | "assistant_coach"
+  | "club_manager"
+  | "sports_coordinator"
+  | "team_manager"
+  | "viewer";
+export type OrganisationMembershipStatus = "pending" | "active" | "declined" | "suspended" | "removed";
+export type OrganisationInvitationStatus = "pending" | "accepted" | "declined" | "expired" | "cancelled";
+export type OrganisationInvitationKind = "organisation_member" | "coach" | "player_junior";
+export type OrganisationLinkStatus = "pending" | "active" | "declined" | "suspended" | "removed";
+export type OrganisationAssignmentStatus = "active" | "suspended" | "removed";
+export type OrganisationProgramRole = "coach" | "assistant_coach" | "player" | "manager" | "viewer";
+export type ProductContext = "playr" | "coachr" | "clubr" | "teamr";
 
 export interface Profile {
   id: string;
@@ -154,8 +171,119 @@ export interface Venue {
   name: string;
   slug: string;
   status: "active" | "inactive";
-  organisation_type: "academy" | "club" | "club_academy" | "school_district";
+  organisation_type: OrganisationType;
+  logo_url: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  address: string | null;
+  description: string | null;
+  primary_admin_profile_id: string | null;
+  head_coach_profile_id: string | null;
   created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationMembership {
+  id: string;
+  venue_id: string;
+  profile_id: string;
+  user_id: string | null;
+  role: OrganisationRole;
+  status: OrganisationMembershipStatus;
+  invited_by_user_id: string | null;
+  accepted_at: string | null;
+  suspended_at: string | null;
+  removed_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationInvitation {
+  id: string;
+  venue_id: string;
+  invitation_kind: OrganisationInvitationKind;
+  invited_email: string;
+  invited_phone: string | null;
+  invited_name: string | null;
+  intended_role: OrganisationRole;
+  status: OrganisationInvitationStatus;
+  token: string;
+  invited_by_user_id: string;
+  accepted_profile_id: string | null;
+  accepted_by_user_id: string | null;
+  target_profile_id: string | null;
+  target_junior_profile_id: string | null;
+  parent_profile_id: string | null;
+  metadata: Record<string, unknown>;
+  expires_at: string;
+  accepted_at: string | null;
+  declined_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationPlayerLink {
+  id: string;
+  venue_id: string;
+  player_profile_id: string;
+  parent_profile_id: string | null;
+  invitation_id: string | null;
+  status: OrganisationLinkStatus;
+  requested_by_user_id: string | null;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  declined_at: string | null;
+  removed_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachPlayerAssignment {
+  id: string;
+  venue_id: string;
+  coach_profile_id: string;
+  player_profile_id: string;
+  organisation_player_link_id: string | null;
+  status: OrganisationAssignmentStatus;
+  assigned_by_user_id: string | null;
+  assigned_at: string;
+  removed_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationProgram {
+  id: string;
+  venue_id: string;
+  name: string;
+  description: string | null;
+  status: "active" | "inactive";
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationProgramAssignment {
+  id: string;
+  program_id: string;
+  profile_id: string;
+  role: OrganisationProgramRole;
+  status: OrganisationAssignmentStatus;
+  assigned_by_user_id: string | null;
+  assigned_at: string;
+  removed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserActiveOrganisation {
+  user_id: string;
+  venue_id: string;
+  product_context: ProductContext;
   updated_at: string;
 }
 
