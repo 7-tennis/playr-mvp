@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { canAccessClubAdmin, canAccessCoachR, loadActiveRoleRow, normalizeStoredRole } from "@/lib/permissions";
+import { getPostLoginPathForUser } from "@/lib/auth-routing";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 function formText(formData: FormData, key: string) {
@@ -11,26 +11,6 @@ function formText(formData: FormData, key: string) {
 
 function encoded(message: string) {
   return encodeURIComponent(message);
-}
-
-async function getPostLoginPath(userId: string) {
-  const supabase = await createServerSupabaseClient();
-  const activeRole = await loadActiveRoleRow(supabase, userId);
-  const role = normalizeStoredRole(activeRole?.role ?? null);
-
-  if (role === "platform_admin") {
-    return "/admin/organisations";
-  }
-
-  if (canAccessClubAdmin(role)) {
-    return "/admin";
-  }
-
-  if (canAccessCoachR(role)) {
-    return "/dashboard/coachr";
-  }
-
-  return "/dashboard";
 }
 
 export async function signInWithPassword(formData: FormData) {
@@ -49,7 +29,7 @@ export async function signInWithPassword(formData: FormData) {
     redirect(`/login?error=${encoded("We could not log you in. Check your email and password, and verify your email if you just created your account.")}`);
   }
 
-  redirect(await getPostLoginPath(data.user.id));
+  redirect(await getPostLoginPathForUser(supabase, data.user.id));
 }
 
 export async function signUpWithPassword(formData: FormData) {
