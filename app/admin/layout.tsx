@@ -18,9 +18,18 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     );
   }
 
-  const { isAdmin } = await getAdminContext();
+  const { adminRole, isAdmin, roleSource, storedRole, user, venueId } = await getAdminContext();
 
   if (!isAdmin) {
+    console.warn("[playr-permissions]", {
+      event: "admin_access_restricted",
+      userId: `${user.id.slice(0, 8)}...`,
+      resolvedRole: adminRole,
+      storedRole,
+      roleSource,
+      venueLinked: Boolean(venueId)
+    });
+
     return (
       <main className="mx-auto min-h-[70vh] max-w-3xl px-4 py-10">
         <p className="text-sm font-black uppercase tracking-wide text-court-teal">ClubR Admin</p>

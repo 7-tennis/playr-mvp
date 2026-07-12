@@ -18,6 +18,8 @@ type RoleRow = {
   id: string;
   role: StoredUserRole;
   venue_id?: string | null;
+  deactivated_at?: string | null;
+  created_at?: string | null;
 };
 
 type AdultProfileRow = {
@@ -136,30 +138,134 @@ export function canAccessCoachRPermission(role: UserRole, permission: CoachRPerm
   return canAccessCoachR(role);
 }
 
-async function loadRoleRow(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, userId: string) {
-  const withVenue = await supabase
-    .from("admin_users")
-    .select("id,role,venue_id")
-    .eq("user_id", userId)
-    .is("deactivated_at", null)
-    .maybeSingle();
+function safeUserId(userId: string | null | undefined) {
+  return userId ? `${userId.slice(0, 8)}...` : "unknown";
+}
 
-  if (!withVenue.error) {
-    return (withVenue.data as RoleRow | null) ?? null;
+function rolePriority(role: StoredUserRole | string | null | undefined) {
+  switch (normalizeStoredRole(role)) {
+    case "platform_admin":
+      return 60;
+    case "club_admin":
+      return 50;
+    case "head_coach":
+      return 40;
+    case "coach":
+      return 30;
+    case "parent":
+      return 20;
+    case "player":
+      return 10;
+  }
+}
+
+function permissionDebugEnabled() {
+  return process.env.PLAYR_AUTH_DEBUG === "true" || process.env.NODE_ENV !== "production";
+}
+
+function logPermissionDiagnostic(level: "info" | "warn", event: string, details: Record<string, unknown>) {
+  if (level === "info" && !permissionDebugEnabled()) {
+    return;
   }
 
-  const withoutVenue = await supabase
+  const payload = { event, ...details };
+
+  if (level === "warn") {
+    console.warn("[playr-permissions]", payload);
+  } else {
+    console.info("[playr-permissions]", payload);
+  }
+}
+
+function isMissingColumnError(error: { code?: string; message?: string } | null | undefined, columnName: string) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42703" || (message.includes(columnName.toLowerCase()) && message.includes("column"));
+}
+
+function pickHighestActiveRole(rows: RoleRow[]) {
+  return [...rows].sort((a, b) => {
+    const priorityDelta = rolePriority(b.role) - rolePriority(a.role);
+
+    if (priorityDelta !== 0) {
+      return priorityDelta;
+    }
+
+    return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime();
+  })[0] ?? null;
+}
+
+export async function loadActiveRoleRow(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, userId: string) {
+  logPermissionDiagnostic("info", "active_role_lookup_start", { userId: safeUserId(userId) });
+
+  const activeRoleResult = await supabase
     .from("admin_users")
-    .select("id,role")
+    .select("id,role,venue_id,deactivated_at,created_at")
     .eq("user_id", userId)
     .is("deactivated_at", null)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
-  if (withoutVenue.error) {
+  if (activeRoleResult.error) {
+    logPermissionDiagnostic("warn", "active_role_query_error", {
+      userId: safeUserId(userId),
+      code: activeRoleResult.error.code,
+      message: activeRoleResult.error.message,
+      missingMigrationColumn: isMissingColumnError(activeRoleResult.error, "deactivated_at")
+    });
+
+    const fallbackResult = await supabase.from("admin_users").select("id,role,venue_id,created_at").eq("user_id", userId).order("created_at", { ascending: false });
+
+    if (fallbackResult.error) {
+      logPermissionDiagnostic("warn", "legacy_role_query_error", {
+        userId: safeUserId(userId),
+        code: fallbackResult.error.code,
+        message: fallbackResult.error.message,
+        missingVenueColumn: isMissingColumnError(fallbackResult.error, "venue_id")
+      });
+      return null;
+    }
+
+    const fallbackRows = ((fallbackResult.data ?? []) as RoleRow[]).filter((row) => row.deactivated_at == null);
+    const fallbackRole = pickHighestActiveRole(fallbackRows);
+
+    if (fallbackRole) {
+      logPermissionDiagnostic("info", "legacy_role_found", {
+        userId: safeUserId(userId),
+        role: normalizeStoredRole(fallbackRole.role),
+        venueLinked: Boolean(fallbackRole.venue_id),
+        rowCount: fallbackRows.length
+      });
+    }
+
+    return fallbackRole;
+  }
+
+  const rows = (activeRoleResult.data ?? []) as RoleRow[];
+
+  if (rows.length === 0) {
+    logPermissionDiagnostic("info", "active_role_missing", { userId: safeUserId(userId) });
     return null;
   }
 
-  return withoutVenue.data ? ({ ...(withoutVenue.data as Omit<RoleRow, "venue_id">), venue_id: null } satisfies RoleRow) : null;
+  if (rows.length > 1) {
+    logPermissionDiagnostic("warn", "multiple_active_role_rows", {
+      userId: safeUserId(userId),
+      rowCount: rows.length,
+      roles: rows.map((row) => normalizeStoredRole(row.role))
+    });
+  }
+
+  const roleRow = pickHighestActiveRole(rows);
+
+  if (roleRow) {
+    logPermissionDiagnostic("info", "active_role_found", {
+      userId: safeUserId(userId),
+      role: normalizeStoredRole(roleRow.role),
+      venueLinked: Boolean(roleRow.venue_id),
+      rowCount: rows.length
+    });
+  }
+
+  return roleRow;
 }
 
 export async function getPermissionContext(): Promise<PermissionContext> {
@@ -177,7 +283,7 @@ export async function getPermissionContext(): Promise<PermissionContext> {
   }
 
   const [roleRow, adultProfileResult] = await Promise.all([
-    loadRoleRow(supabase, user.id),
+    loadActiveRoleRow(supabase, user.id),
     supabase.from("profiles").select("id").eq("user_id", user.id).eq("is_junior", false).maybeSingle()
   ]);
   const adultProfile = (adultProfileResult.data as AdultProfileRow | null) ?? null;

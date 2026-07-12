@@ -20,7 +20,7 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function PlayerDesktopNav({ showAdmin, showCoach }: { showAdmin: boolean; showCoach: boolean }) {
+export function PlayerDesktopNav({ adminLabel = "ClubR Admin", showAdmin, showCoach }: { adminLabel?: string; showAdmin: boolean; showCoach: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -71,14 +71,14 @@ export function PlayerDesktopNav({ showAdmin, showCoach }: { showAdmin: boolean;
           )}
           href="/admin"
         >
-          ClubR Admin
+          {adminLabel}
         </Link>
       ) : null}
     </nav>
   );
 }
 
-export function PlayerBottomNav({ showAdmin, showCoach }: { showAdmin: boolean; showCoach: boolean }) {
+export function PlayerBottomNav({ adminLabel = "ClubR Admin", showAdmin, showCoach }: { adminLabel?: string; showAdmin: boolean; showCoach: boolean }) {
   const pathname = usePathname();
 
   if (pathname.startsWith("/dashboard/coachr")) {
@@ -123,7 +123,7 @@ export function PlayerBottomNav({ showAdmin, showCoach }: { showAdmin: boolean; 
       {showAdmin ? (
         <div className="mx-auto mt-2 max-w-md">
           <Link className="block rounded bg-court-mist px-3 py-2 text-center text-xs font-black text-court-navy" href="/admin">
-            ClubR Admin
+            {adminLabel}
           </Link>
         </div>
       ) : null}

@@ -2,13 +2,13 @@ import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
 import { PlayerBottomNav, PlayerDesktopNav } from "@/components/player-nav";
 import { NotificationIcon } from "@/components/playr-icons";
-import { canAccessClubAdmin, canAccessCoachR, normalizeStoredRole, type StoredUserRole } from "@/lib/permissions";
+import { canAccessClubAdmin, canAccessCoachR, loadActiveRoleRow, normalizeStoredRole, roleLabel, type UserRole } from "@/lib/permissions";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 async function getSessionState() {
   if (!hasSupabaseConfig()) {
-    return { isLoggedIn: false, isAdmin: false, isCoach: false, unreadNotifications: 0 };
+    return { isLoggedIn: false, isAdmin: false, isCoach: false, role: "player" as UserRole, unreadNotifications: 0 };
   }
 
   try {
@@ -18,28 +18,38 @@ async function getSessionState() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return { isLoggedIn: false, isAdmin: false, isCoach: false, unreadNotifications: 0 };
+      return { isLoggedIn: false, isAdmin: false, isCoach: false, role: "player" as UserRole, unreadNotifications: 0 };
     }
 
-    const [{ data: adminUser }, { count: unreadCount }] = await Promise.all([
-      supabase.from("admin_users").select("role").eq("user_id", user.id).maybeSingle(),
+    const [activeRole, { count: unreadCount }] = await Promise.all([
+      loadActiveRoleRow(supabase, user.id),
       supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .is("read_at", null)
     ]);
-    const role = normalizeStoredRole((adminUser?.role as StoredUserRole | null) ?? null);
+    const role = normalizeStoredRole(activeRole?.role ?? null);
 
-    return { isLoggedIn: true, isAdmin: canAccessClubAdmin(role), isCoach: canAccessCoachR(role), unreadNotifications: unreadCount ?? 0 };
-  } catch {
-    return { isLoggedIn: false, isAdmin: false, isCoach: false, unreadNotifications: 0 };
+    return { isLoggedIn: true, isAdmin: canAccessClubAdmin(role), isCoach: canAccessCoachR(role), role, unreadNotifications: unreadCount ?? 0 };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown session state error";
+
+    if (!message.includes("Dynamic server usage")) {
+      console.warn("[playr-permissions]", {
+        event: "site_header_session_state_failed",
+        message
+      });
+    }
+
+    return { isLoggedIn: false, isAdmin: false, isCoach: false, role: "player" as UserRole, unreadNotifications: 0 };
   }
 }
 
 export async function SiteHeader() {
-  const { isLoggedIn, isAdmin, isCoach, unreadNotifications } = await getSessionState();
+  const { isLoggedIn, isAdmin, isCoach, role, unreadNotifications } = await getSessionState();
   const brandHref = isLoggedIn ? "/dashboard" : "/";
+  const adminLabel = role === "platform_admin" ? roleLabel(role) : "ClubR Admin";
 
   return (
     <>
@@ -51,7 +61,7 @@ export async function SiteHeader() {
           </Link>
 
           {isLoggedIn ? (
-            <PlayerDesktopNav showAdmin={isAdmin} showCoach={isCoach} />
+            <PlayerDesktopNav adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} />
           ) : (
             <nav className="hidden items-center gap-5 text-sm font-bold text-slate-700 md:flex" aria-label="Public navigation">
               <Link className="transition hover:text-court-blue" href="/events">
@@ -97,7 +107,7 @@ export async function SiteHeader() {
           </div>
         </div>
       </header>
-      {isLoggedIn ? <PlayerBottomNav showAdmin={isAdmin} showCoach={isCoach} /> : null}
+      {isLoggedIn ? <PlayerBottomNav adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} /> : null}
     </>
   );
 }

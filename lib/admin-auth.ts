@@ -13,6 +13,8 @@ export async function getAdminContext() {
     user: context.user,
     isAdmin: canAccessClubAdmin(context.role),
     adminRole: context.role,
+    roleSource: context.roleSource,
+    storedRole: context.storedRole,
     venueId: context.venueId
   };
 }

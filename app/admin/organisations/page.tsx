@@ -81,9 +81,18 @@ function setupStatus(venue: Venue, assignments: AdminAssignment[]) {
 }
 
 export default async function OrganisationsPage({ searchParams }: OrganisationsPageProps) {
-  const { adminRole, supabase } = await getAdminContext();
+  const { adminRole, roleSource, storedRole, supabase, user, venueId } = await getAdminContext();
 
   if (adminRole !== "platform_admin") {
+    console.warn("[playr-permissions]", {
+      event: "super_user_access_restricted",
+      userId: `${user.id.slice(0, 8)}...`,
+      resolvedRole: adminRole,
+      storedRole,
+      roleSource,
+      venueLinked: Boolean(venueId)
+    });
+
     return (
       <PageShell eyebrow="SupeR UseR" title="Access restricted">
         <AdminNav />
