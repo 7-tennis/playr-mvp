@@ -1,4 +1,4 @@
-import { canAccessClubAdmin, canAccessCoachR, loadActiveRoleRow, normalizeStoredRole } from "@/lib/permissions";
+import { canAccessCoachR, loadActiveRoleRow, normalizeStoredRole } from "@/lib/permissions";
 import type { createServerSupabaseClient } from "@/utils/supabase/server";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
@@ -11,8 +11,8 @@ export async function getPostLoginPathForUser(supabase: ServerSupabaseClient, us
     return "/admin/organisations";
   }
 
-  if (canAccessClubAdmin(role)) {
-    return "/admin";
+  if (role === "club_admin") {
+    return "/dashboard/clubr";
   }
 
   if (canAccessCoachR(role)) {

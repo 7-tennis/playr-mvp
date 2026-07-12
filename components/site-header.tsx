@@ -2,7 +2,7 @@ import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
 import { PlayerBottomNav, PlayerDesktopNav } from "@/components/player-nav";
 import { NotificationIcon } from "@/components/playr-icons";
-import { canAccessClubAdmin, canAccessCoachR, loadActiveRoleRow, normalizeStoredRole, roleLabel, type UserRole } from "@/lib/permissions";
+import { canAccessClubR, canAccessCoachR, loadActiveRoleRow, normalizeStoredRole, roleLabel, type UserRole } from "@/lib/permissions";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
@@ -31,7 +31,7 @@ async function getSessionState() {
     ]);
     const role = normalizeStoredRole(activeRole?.role ?? null);
 
-    return { isLoggedIn: true, isAdmin: canAccessClubAdmin(role), isCoach: canAccessCoachR(role), role, unreadNotifications: unreadCount ?? 0 };
+    return { isLoggedIn: true, isAdmin: canAccessClubR(role), isCoach: canAccessCoachR(role), role, unreadNotifications: unreadCount ?? 0 };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown session state error";
 
@@ -49,7 +49,8 @@ async function getSessionState() {
 export async function SiteHeader() {
   const { isLoggedIn, isAdmin, isCoach, role, unreadNotifications } = await getSessionState();
   const brandHref = isLoggedIn ? "/dashboard" : "/";
-  const adminLabel = role === "platform_admin" ? roleLabel(role) : "ClubR Admin";
+  const adminHref = role === "platform_admin" ? "/admin/organisations" : "/dashboard/clubr";
+  const adminLabel = role === "platform_admin" ? roleLabel(role) : "ClubR";
 
   return (
     <>
@@ -61,7 +62,7 @@ export async function SiteHeader() {
           </Link>
 
           {isLoggedIn ? (
-            <PlayerDesktopNav adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} />
+            <PlayerDesktopNav adminHref={adminHref} adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} />
           ) : (
             <nav className="hidden items-center gap-5 text-sm font-bold text-slate-700 md:flex" aria-label="Public navigation">
               <Link className="transition hover:text-court-blue" href="/events">
@@ -107,7 +108,7 @@ export async function SiteHeader() {
           </div>
         </div>
       </header>
-      {isLoggedIn ? <PlayerBottomNav adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} /> : null}
+      {isLoggedIn ? <PlayerBottomNav adminHref={adminHref} adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} /> : null}
     </>
   );
 }

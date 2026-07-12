@@ -14,7 +14,9 @@ type OrganisationsPageProps = {
   searchParams?: {
     error?: string;
     message?: string;
+    person?: string;
     q?: string;
+    venue?: string;
   };
 };
 
@@ -25,16 +27,19 @@ function profileName(profile: AdultProfile | null | undefined) {
   return profile ? `${profile.first_name} ${profile.last_name}` : "Profile missing";
 }
 
-function statusMessage(message?: string) {
+function statusMessage(message?: string, person?: string, venue?: string) {
+  const name = person ?? "Selected user";
+  const club = venue ?? "selected organisation";
+
   switch (message) {
     case "head_coach_assigned":
-      return "Head Coach access assigned.";
+      return `Head Coach access assigned to ${name} for ${club}.`;
     case "club_admin_assigned":
-      return "Club Admin access assigned.";
+      return `ClubR access assigned to ${name} for ${club}.`;
     case "coach_assigned":
-      return "Coach access assigned.";
+      return `Coach access assigned to ${name} for ${club}.`;
     case "platform_admin_assigned":
-      return "SupeR UseR access assigned.";
+      return `SupeR UseR access assigned to ${name}.`;
     case "organisation_updated":
       return "Organisation type updated.";
     case "role_deactivated":
@@ -132,8 +137,8 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
     <PageShell eyebrow="SupeR UseR" subtitle="Assign first organisation administrators and keep venue access tidy." title="Organisations">
       <AdminNav />
 
-      {statusMessage(searchParams?.message) ? (
-        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">{statusMessage(searchParams?.message)}</div>
+      {statusMessage(searchParams?.message, searchParams?.person, searchParams?.venue) ? (
+        <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">{statusMessage(searchParams?.message, searchParams?.person, searchParams?.venue)}</div>
       ) : null}
       {errorMessage(searchParams?.error) ? (
         <div className="mb-5 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800">{errorMessage(searchParams?.error)}</div>
@@ -198,6 +203,13 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
         {((venues ?? []) as Venue[]).map((venue) => {
           const status = setupStatus(venue, assignments);
           const venueAdmins = activeAssignments.filter((assignment) => assignment.venue_id === venue.id);
+          const currentClubAdmins = venueAdmins.filter((assignment) => assignment.role === "club_admin");
+          const currentHeadCoaches = venueAdmins.filter((assignment) => assignment.role === "head_coach");
+          const setupWarnings = [
+            currentClubAdmins.length === 0 ? "No Club Admin assigned" : null,
+            currentHeadCoaches.length === 0 ? "No Head Coach assigned" : null,
+            !venue.organisation_type ? "Organisation type not set" : null
+          ].filter(Boolean);
 
           return (
             <article className="surface-card p-4 sm:p-5" key={venue.id}>
@@ -213,6 +225,19 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
                     <span className="ui-chip ui-chip-brand">{status.clubAdminCount} Club Admin</span>
                     <span className="ui-chip ui-chip-muted">{status.coachCount} Coaches</span>
                   </div>
+                  <div className="mt-3 grid gap-2 text-xs font-semibold text-slate-600">
+                    <p>Current Club Admin: {currentClubAdmins.map((assignment) => profileName(profileByUser.get(assignment.user_id))).join(", ") || "Not assigned"}</p>
+                    <p>Access status: {status.clubAdminCount > 0 ? "ClubR access active" : "ClubR access not configured"}</p>
+                  </div>
+                  {setupWarnings.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {setupWarnings.map((warning) => (
+                        <span className="ui-chip ui-chip-warning" key={warning}>
+                          {warning}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <form action={updateOrganisationType} className="flex gap-2">
                   <input name="venueId" type="hidden" value={venue.id} />
@@ -260,7 +285,13 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
                   </div>
                 </div>
 
-                <CollapsibleCard eyebrow="Assign" summary="Select an existing adult PlayR profile and confirm the role assignment." title="Assign access">
+                <CollapsibleCard
+                  eyebrow="Assign"
+                  summary={`Selected club: ${venue.name} · ${formatLabel(venue.organisation_type)} · Current Club Admin: ${
+                    currentClubAdmins.map((assignment) => profileName(profileByUser.get(assignment.user_id))).join(", ") || "not assigned"
+                  }`}
+                  title="Assign access"
+                >
                   <form action={assignOrganisationRole} className="grid gap-3">
                     <input name="venueId" type="hidden" value={venue.id} />
                     <label className="text-sm font-semibold text-slate-700">

@@ -30,6 +30,11 @@ async function requirePlatformAdmin() {
 function revalidateAccessSurfaces() {
   revalidatePath("/admin");
   revalidatePath("/admin/organisations");
+  revalidatePath("/dashboard/clubr");
+  revalidatePath("/dashboard/clubr/bookings");
+  revalidatePath("/dashboard/clubr/events");
+  revalidatePath("/dashboard/clubr/members");
+  revalidatePath("/dashboard/clubr/more");
   revalidatePath("/dashboard/coachr");
   revalidatePath("/dashboard/coachr/coaches");
   revalidatePath("/dashboard/coachr/more");
@@ -78,6 +83,11 @@ export async function assignOrganisationRole(formData: FormData) {
     redirect("/admin/organisations?error=adult_profile_required");
   }
 
+  const { data: venue } =
+    role === "platform_admin" || !venueId
+      ? { data: null }
+      : await supabase.from("venues").select("id,name,organisation_type").eq("id", venueId).maybeSingle();
+
   const { error } = await supabase.rpc("platform_assign_organisation_role", {
     p_confirm: true,
     p_role: role,
@@ -91,7 +101,16 @@ export async function assignOrganisationRole(formData: FormData) {
   }
 
   revalidateAccessSurfaces();
-  redirect(`/admin/organisations?message=${role}_assigned`);
+  const params = new URLSearchParams({
+    message: `${role}_assigned`,
+    person: `${profile.first_name} ${profile.last_name}`
+  });
+
+  if (venue?.name) {
+    params.set("venue", venue.name);
+  }
+
+  redirect(`/admin/organisations?${params.toString()}`);
 }
 
 export async function deactivateOrganisationRole(formData: FormData) {

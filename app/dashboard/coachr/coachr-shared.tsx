@@ -62,7 +62,7 @@ export function CoachRPageFrame({
 }) {
   return (
     <PageShell eyebrow="CoachR" subtitle={subtitle} title={title}>
-      <CoachRNav canUseHeadCoach={context.role === "head_coach" || context.role === "club_admin" || context.role === "platform_admin"} />
+      <CoachRNav canUseHeadCoach={context.role === "head_coach" || context.role === "platform_admin"} />
       <div className="pb-24 md:pb-0">{children}</div>
     </PageShell>
   );
@@ -123,9 +123,7 @@ export function CoachRRoleSummary({ context }: { context: Extract<PermissionCont
       ? "Own lessons, students, availability and feedback"
       : context.role === "head_coach"
         ? "All coaches linked to your venue"
-        : context.role === "club_admin"
-          ? "Venue-level courts, bookings, coaches and settings"
-          : "Internal full access";
+        : "Internal full access";
 
   return (
     <section className="surface-card mb-5 p-4 sm:p-5">

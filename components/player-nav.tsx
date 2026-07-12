@@ -20,7 +20,17 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function PlayerDesktopNav({ adminLabel = "ClubR Admin", showAdmin, showCoach }: { adminLabel?: string; showAdmin: boolean; showCoach: boolean }) {
+export function PlayerDesktopNav({
+  adminHref = "/admin",
+  adminLabel = "ClubR Admin",
+  showAdmin,
+  showCoach
+}: {
+  adminHref?: string;
+  adminLabel?: string;
+  showAdmin: boolean;
+  showCoach: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -65,11 +75,11 @@ export function PlayerDesktopNav({ adminLabel = "ClubR Admin", showAdmin, showCo
         <Link
           className={clsx(
             "ml-2 rounded border px-3 py-2 transition",
-            pathname.startsWith("/admin")
+            pathname.startsWith(adminHref)
               ? "border-court-teal bg-court-mist text-court-navy"
               : "border-slate-200 text-court-navy hover:border-court-teal"
           )}
-          href="/admin"
+          href={adminHref}
         >
           {adminLabel}
         </Link>
@@ -78,10 +88,20 @@ export function PlayerDesktopNav({ adminLabel = "ClubR Admin", showAdmin, showCo
   );
 }
 
-export function PlayerBottomNav({ adminLabel = "ClubR Admin", showAdmin, showCoach }: { adminLabel?: string; showAdmin: boolean; showCoach: boolean }) {
+export function PlayerBottomNav({
+  adminHref = "/admin",
+  adminLabel = "ClubR Admin",
+  showAdmin,
+  showCoach
+}: {
+  adminHref?: string;
+  adminLabel?: string;
+  showAdmin: boolean;
+  showCoach: boolean;
+}) {
   const pathname = usePathname();
 
-  if (pathname.startsWith("/dashboard/coachr")) {
+  if (pathname.startsWith("/dashboard/coachr") || pathname.startsWith("/dashboard/clubr")) {
     return null;
   }
 
@@ -122,7 +142,7 @@ export function PlayerBottomNav({ adminLabel = "ClubR Admin", showAdmin, showCoa
       ) : null}
       {showAdmin ? (
         <div className="mx-auto mt-2 max-w-md">
-          <Link className="block rounded bg-court-mist px-3 py-2 text-center text-xs font-black text-court-navy" href="/admin">
+          <Link className="block rounded bg-court-mist px-3 py-2 text-center text-xs font-black text-court-navy" href={adminHref}>
             {adminLabel}
           </Link>
         </div>

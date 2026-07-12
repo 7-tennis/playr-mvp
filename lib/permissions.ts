@@ -75,14 +75,18 @@ export function roleLabel(role: UserRole) {
 }
 
 export function canAccessCoachR(role: UserRole) {
-  return role === "coach" || role === "head_coach" || role === "club_admin" || role === "platform_admin";
+  return role === "coach" || role === "head_coach" || role === "platform_admin";
 }
 
 export function canAccessHeadCoach(role: UserRole) {
-  return role === "head_coach" || role === "club_admin" || role === "platform_admin";
+  return role === "head_coach" || role === "platform_admin";
 }
 
 export function canAccessClubAdmin(role: UserRole) {
+  return role === "club_admin" || role === "platform_admin";
+}
+
+export function canAccessClubR(role: UserRole) {
   return role === "club_admin" || role === "platform_admin";
 }
 
@@ -336,8 +340,8 @@ export async function assertCoachRAccess(permission: CoachRPermission = "coachr"
 
 function requiredCoachRRoles(permission: CoachRPermission) {
   if (permission === "coachr:head_coach" || permission === "coachr:coaches") {
-    return ["head_coach", "club_admin", "platform_admin"] as UserRole[];
+    return ["head_coach", "platform_admin"] as UserRole[];
   }
 
-  return ["coach", "head_coach", "club_admin", "platform_admin"] as UserRole[];
+  return ["coach", "head_coach", "platform_admin"] as UserRole[];
 }
