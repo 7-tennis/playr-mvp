@@ -35,6 +35,8 @@ function revalidateInvitationSurfaces() {
   revalidatePath("/dashboard/coachr/students");
   revalidatePath("/dashboard/coachr/coaches");
   revalidatePath("/dashboard/clubr");
+  revalidatePath("/dashboard/notifications");
+  revalidatePath("/dashboard/coachr/messages");
 }
 
 export async function acceptOrganisationInvitation(formData: FormData) {
@@ -47,11 +49,18 @@ export async function acceptOrganisationInvitation(formData: FormData) {
     redirect("/dashboard/organisations/invitations?error=invalid_invitation");
   }
 
-  const { error } = await context.supabase.rpc("accept_organisation_invitation", {
-    p_junior_profile_id: juniorProfileId,
-    p_profile_id: profileId,
-    p_token: token
-  });
+  const invitationResult = await context.supabase
+    .from("organisation_invitations")
+    .select("invitation_kind")
+    .eq("token", token)
+    .maybeSingle();
+  const { error } = invitationResult.data?.invitation_kind === "player"
+    ? await context.supabase.rpc("accept_adult_player_invitation", { p_profile_id: profileId, p_token: token })
+    : await context.supabase.rpc("accept_organisation_invitation", {
+        p_junior_profile_id: juniorProfileId,
+        p_profile_id: profileId,
+        p_token: token
+      });
 
   if (error) {
     console.error("Organisation invitation acceptance failed", { error, userId: context.user.id.slice(0, 8) });

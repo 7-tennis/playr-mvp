@@ -74,17 +74,19 @@ export function CoachRPageFrame({
 
 export function CoachRSummaryCard({
   helper,
+  href,
   icon,
   label,
   value
 }: {
   helper?: ReactNode;
+  href?: string;
   icon?: ReactNode;
   label: string;
   value: ReactNode;
 }) {
-  return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</p>
@@ -93,8 +95,20 @@ export function CoachRSummaryCard({
         </div>
         {icon ? <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-court-mist text-court-teal">{icon}</span> : null}
       </div>
-    </article>
+    </>
   );
+
+  return href ? (
+    <Link className="coachr-compact-card block" href={href}>
+      {content}
+    </Link>
+  ) : (
+    <article className="coachr-compact-card">{content}</article>
+  );
+}
+
+export function CoachRCompactGrid({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`coachr-compact-grid ${className}`.trim()}>{children}</div>;
 }
 
 export function CoachRActionCard({
@@ -130,14 +144,13 @@ export function CoachRRoleSummary({ context }: { context: Extract<PermissionCont
         : "Internal full access";
 
   return (
-    <section className="surface-card mb-5 p-4 sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <section className="mb-5 rounded-lg border border-court-teal/20 bg-court-mist/70 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="section-kicker">Role</p>
-          <h2 className="section-title mt-1">{roleLabel(context.role)}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{scope}</p>
+          <p className="text-sm font-black text-court-navy">{roleLabel(context.role)}</p>
+          <p className="mt-0.5 text-xs font-semibold text-slate-600">{scope}</p>
         </div>
-        <div className="flex flex-wrap gap-2 text-sm font-bold">
+        <div className="flex flex-wrap gap-2 text-xs font-bold">
           <span className="ui-chip ui-chip-brand">
             <ClubIcon size={14} /> {context.venueId ? "Venue linked" : "Venue to be linked"}
           </span>

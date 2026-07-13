@@ -23,6 +23,32 @@ function revalidateStudentSurfaces() {
   revalidatePath("/dashboard/coachr/students");
   revalidatePath("/dashboard/coachr");
   revalidatePath("/dashboard/organisations/invitations");
+  revalidatePath("/dashboard/notifications");
+}
+
+export async function requestAdultPlayerLink(formData: FormData) {
+  const context = await assertCoachRAccess("coachr:students");
+  const playerEmail = text(formData, "playerEmail").toLowerCase();
+
+  if (context.kind !== "authenticated" || !context.venueId || !playerEmail) {
+    redirect("/dashboard/coachr/students?error=missing_fields");
+  }
+
+  const { data: token, error } = await context.supabase.rpc("create_adult_player_invitation", {
+    p_coach_profile_id: text(formData, "coachProfileId") || context.adultProfileId,
+    p_invited_email: playerEmail,
+    p_invited_name: text(formData, "playerName") || null,
+    p_invited_phone: text(formData, "playerPhone") || null,
+    p_venue_id: context.venueId
+  });
+
+  if (error || !token) {
+    console.error("CoachR adult player link request failed", { code: error?.code, role: context.role, venueId: context.venueId });
+    redirect(`/dashboard/coachr/students?error=${invitationError(error, "player_invite_failed")}`);
+  }
+
+  revalidateStudentSurfaces();
+  redirect(`/dashboard/coachr/students?message=player_invited&token=${token}`);
 }
 
 export async function requestPlayerLink(formData: FormData) {

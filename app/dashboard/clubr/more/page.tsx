@@ -44,6 +44,7 @@ export default async function ClubRMorePage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <ClubRActionCard href="/dashboard/clubr" icon={<ClubIcon size={18} />} text="One View summary for your club." title="Club Profile" />
           <ClubRActionCard href="/admin/courts" icon={<BookingIcon size={18} />} text="Existing court setup and status tools." title="Courts" />
+          <ClubRActionCard href="/dashboard/coachr/courts" icon={<BookingIcon size={18} />} text="Grant or review shared organisation court access." title="Courts & Access" />
           <ClubRActionCard href="/dashboard/clubr/members" icon={<MembershipIcon size={18} />} text="Member cards and visible membership state." title="Membership Setup" />
           <ClubRActionCard href="/dashboard/profile" icon={<PrivateIcon size={18} />} text="Your private account and member profile." title="Club Admin Profile" />
           <ClubRActionCard href="/dashboard/notifications" icon={<NotificationIcon size={18} />} text="Club, event and booking notifications." title="Notifications" />

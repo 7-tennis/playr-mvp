@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRightIcon, BookingIcon, EntriesIcon, MatchIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
+import { ArrowRightIcon, BookingIcon, EntriesIcon, MatchIcon, NotificationIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import {
   lessonHasAttendanceResult,
@@ -10,8 +10,7 @@ import {
   upcomingCoachLessons,
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
-import { canAccessHeadCoach } from "@/lib/permissions";
-import { CoachRActionCard, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "./coachr-shared";
+import { CoachRActionCard, CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "./coachr-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +80,7 @@ function LessonMiniCard({ lesson, compact = false }: { lesson: CoachLessonWithRe
           {!compact ? (
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
               <span className="ui-chip ui-chip-muted">{formatLabel(lesson.lesson_type)}</span>
-              <span className="ui-chip ui-chip-muted">{lesson.court?.name ?? "Court TBC"}</span>
+              <span className="ui-chip ui-chip-muted">{lesson.location_type === "custom" ? lesson.custom_location ?? "Off-site" : lesson.location_type === "none" ? "No court" : lesson.court?.name ?? "Court TBC"}</span>
               <span className="ui-chip ui-chip-muted">{lesson.coach ? profileDisplayName(lesson.coach) : "Coach TBC"}</span>
             </div>
           ) : null}
@@ -102,7 +101,43 @@ export default async function CoachRPage() {
     return null;
   }
 
-  const lessons = await loadCoachLessons(access.context, lessonLoadLimit);
+  const activeStudentsQuery =
+    access.context.role === "coach" && access.context.adultProfileId
+      ? access.context.supabase
+          .from("coach_player_assignments")
+          .select("player_profile_id", { count: "exact", head: true })
+          .eq("coach_profile_id", access.context.adultProfileId)
+          .eq("venue_id", access.context.venueId ?? "00000000-0000-0000-0000-000000000000")
+          .eq("status", "active")
+      : access.context.venueId
+        ? access.context.supabase
+            .from("organisation_player_links")
+            .select("player_profile_id", { count: "exact", head: true })
+            .eq("venue_id", access.context.venueId)
+            .eq("status", "active")
+        : access.context.supabase.from("organisation_player_links").select("player_profile_id", { count: "exact", head: true }).eq("status", "active");
+  const pendingLinksQuery = access.context.venueId
+    ? access.context.supabase
+        .from("organisation_invitations")
+        .select("id", { count: "exact", head: true })
+        .eq("venue_id", access.context.venueId)
+        .in("invitation_kind", ["player", "player_junior"])
+        .eq("status", "pending")
+    : access.context.supabase
+        .from("organisation_invitations")
+        .select("id", { count: "exact", head: true })
+        .in("invitation_kind", ["player", "player_junior"])
+        .eq("status", "pending");
+  const [lessons, activeStudentsResult, pendingLinksResult, unreadMessagesResult] = await Promise.all([
+    loadCoachLessons(access.context, lessonLoadLimit),
+    activeStudentsQuery,
+    pendingLinksQuery,
+    access.context.supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", access.context.user.id)
+      .is("read_at", null)
+  ]);
   const upcomingLessons = upcomingCoachLessons(lessons);
   const nextLesson = upcomingLessons[0] ?? null;
   const todaySerial = localDateSerial(new Date());
@@ -120,29 +155,26 @@ export default async function CoachRPage() {
   const missedLessonCount = lessons.filter((lesson) => lesson.status === "missed" || lessonHasAttendanceResult(lesson, "missed")).length;
   const rainLessonCount = lessons.filter((lesson) => lesson.status === "rain" || lessonHasAttendanceResult(lesson, "rain")).length;
   const cancelledLessonCount = lessons.filter((lesson) => lesson.status === "cancelled").length;
-  const extraLessonCount = lessons.filter((lesson) => /extra|make.?up|catch.?up/i.test(`${lesson.title} ${lesson.notes ?? ""}`)).length;
+  const replacementLessonCount = lessons.filter((lesson) => /replacement|extra|make.?up|catch.?up/i.test(`${lesson.title} ${lesson.notes ?? ""}`)).length;
   const outstandingAttendanceCount = lessons.filter((lesson) => lessonNeedsAttendance(lesson)).length;
+  const outstandingFeedbackCount = lessons.filter(
+    (lesson) => new Date(lesson.end_time).getTime() <= Date.now() && (lesson.feedback_status === "not_started" || lesson.feedback_status === "draft")
+  ).length;
   const weeklyLessons = lessons.filter((lesson) => {
     const lessonSerial = localDateSerial(lesson.start_time);
     return lessonSerial >= weekStartSerial && lessonSerial < weekEndSerial;
   });
-  const studentCount = new Set(lessons.map((lesson) => lesson.player_id)).size;
-  const studentsWithUpcoming = new Set(upcomingLessons.map((lesson) => lesson.player_id)).size;
-  const programmeCounts = new Map<string, number>();
-  weeklyLessons.forEach((lesson) => {
-    programmeCounts.set(lesson.lesson_type, (programmeCounts.get(lesson.lesson_type) ?? 0) + 1);
-  });
-  const coachCards = Array.from(
-    lessons.reduce((map, lesson) => {
-      const current = map.get(lesson.coach_id) ?? { id: lesson.coach_id, name: profileDisplayName(lesson.coach), lessons: 0, today: 0 };
-      current.lessons += 1;
-      if (localDateSerial(lesson.start_time) === todaySerial) {
-        current.today += 1;
-      }
-      map.set(lesson.coach_id, current);
-      return map;
-    }, new Map<string, { id: string; lessons: number; name: string; today: number }>())
-  ).map(([, coach]) => coach);
+  const activeStudentCount = activeStudentsResult.count ?? new Set(lessons.map((lesson) => lesson.player_id)).size;
+  const privateStudentCount = new Set(lessons.filter((lesson) => lesson.lesson_type === "private").map((lesson) => lesson.player_id)).size;
+  const pendingLinkCount = pendingLinksResult.count ?? 0;
+  const unreadMessageCount = unreadMessagesResult.count ?? 0;
+  const activeOrganisationName = access.context.activeOrganisationMembership?.venue?.name ?? "Organisation not selected";
+  const coachName = access.context.activeOrganisationMembership?.profile
+    ? profileDisplayName(access.context.activeOrganisationMembership.profile)
+    : nextLesson?.coach
+      ? profileDisplayName(nextLesson.coach)
+      : access.context.user.email ?? "Coach";
+  const todayLabel = new Intl.DateTimeFormat("en-ZA", { dateStyle: "full", timeZone: "Africa/Johannesburg" }).format(new Date());
   const scopeLabel =
     access.context.role === "coach"
       ? "Your coaching week"
@@ -154,43 +186,33 @@ export default async function CoachRPage() {
       label: "Today",
       value: todayLessons.length,
       helper: "lessons",
+      href: "/dashboard/coachr/schedule",
       icon: <TimeIcon size={18} />,
       tone: "bg-court-mist text-court-teal"
     },
     {
-      label: "This week",
-      value: weeklyLessonCount,
-      helper: "planned lessons",
-      icon: <BookingIcon size={18} />,
+      label: "Students",
+      value: activeStudentCount,
+      helper: "active",
+      href: "/dashboard/coachr/students",
+      icon: <EntriesIcon size={18} />,
       tone: "bg-court-navy text-white"
     },
     {
-      label: "Missed",
-      value: missedLessonCount,
-      helper: "player absent",
+      label: "Feedback",
+      value: outstandingFeedbackCount,
+      helper: "due",
+      href: "/dashboard/coachr/students",
       icon: <StatusIcon size={18} />,
       tone: "bg-amber-50 text-amber-700"
     },
     {
-      label: "Completed",
-      value: completedLessonCount,
-      helper: "attendance recorded",
-      icon: <MatchIcon size={18} />,
+      label: "Messages",
+      value: unreadMessageCount,
+      helper: "unread",
+      href: "/dashboard/coachr/messages?filter=unread",
+      icon: <NotificationIcon size={18} />,
       tone: "bg-emerald-50 text-emerald-700"
-    },
-    {
-      label: "Rain",
-      value: rainLessonCount,
-      helper: "weather affected",
-      icon: <StatusIcon size={18} />,
-      tone: "bg-sky-50 text-sky-700"
-    },
-    {
-      label: "Attendance",
-      value: outstandingAttendanceCount,
-      helper: "needs marking",
-      icon: <EntriesIcon size={18} />,
-      tone: "bg-rose-50 text-rose-700"
     }
   ];
   const quickLinks = [
@@ -221,195 +243,99 @@ export default async function CoachRPage() {
   ];
 
   return (
-    <CoachRPageFrame context={access.context} subtitle="Plan lessons, spot what needs attention, and keep the coaching week moving." title="MyCoachR">
+    <CoachRPageFrame context={access.context} subtitle="Today, your next lesson and the coaching work that needs attention." title="MyCoachR">
       <CoachRRoleSummary context={access.context} />
 
       <section className="mb-5 overflow-hidden rounded-lg bg-court-navy text-white shadow-court">
-        <div className="grid gap-4 p-5 sm:grid-cols-[1.1fr_0.9fr] sm:p-6">
+        <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-end sm:p-5">
           <div>
-            <p className="text-xs font-black uppercase tracking-wide text-court-lime">{scopeLabel}</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
-              {nextLesson ? "Next lesson is ready." : "Your coaching schedule is ready."}
-            </h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-white/75">
-              {nextLesson
-                ? `${profileDisplayName(nextLesson.player)} · ${formatDateTime(nextLesson.start_time)}`
-                : "Add your first lesson to start planning your week."}
-            </p>
+            <p className="text-xs font-black uppercase tracking-wide text-court-lime">{activeOrganisationName}</p>
+            <h2 className="mt-1 text-2xl font-black tracking-tight">{coachName}</h2>
+            <p className="mt-1 text-sm font-semibold text-white/70">{scopeLabel} · {todayLabel}</p>
           </div>
-          <div className="flex flex-col justify-end gap-2 sm:items-end">
-            <Link className="inline-flex items-center justify-center gap-2 rounded bg-court-teal px-4 py-3 text-sm font-black text-white transition hover:bg-teal-500" href="/dashboard/coachr/schedule">
-              Quick Add Lesson <ArrowRightIcon size={16} />
+          <div className="flex flex-wrap gap-2">
+            <Link className="inline-flex items-center justify-center gap-2 rounded border border-white/20 px-3 py-2 text-sm font-black hover:bg-white/10" href="/dashboard/notifications">
+              <NotificationIcon size={16} /> Notifications
             </Link>
-            <Link className="inline-flex items-center justify-center gap-2 rounded border border-white/20 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10" href="/dashboard/coachr/schedule">
-              Weekly Schedule <ArrowRightIcon size={16} />
+            <Link className="inline-flex items-center justify-center gap-2 rounded bg-court-teal px-3 py-2 text-sm font-black hover:bg-teal-500" href="/dashboard/coachr/schedule?new=1#new-lesson">
+              Add Lesson <ArrowRightIcon size={15} />
             </Link>
           </div>
         </div>
       </section>
 
-      <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <CoachRCompactGrid className="mb-5">
         {statCards.map((stat) => (
-          <CoachRSummaryCard helper={stat.helper} icon={<span className={stat.tone}>{stat.icon}</span>} key={stat.label} label={stat.label} value={stat.value} />
+          <CoachRSummaryCard helper={stat.helper} href={stat.href} icon={<span className={stat.tone}>{stat.icon}</span>} key={stat.label} label={stat.label} value={stat.value} />
         ))}
-      </section>
-
-      <section className="mb-5 grid gap-2 rounded-lg border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-600 shadow-sm sm:grid-cols-4">
-        <p>
-          <span className="font-black text-court-navy">Completed</span> means attendance was recorded.
-        </p>
-        <p>
-          <span className="font-black text-court-navy">Missed</span> means the player was absent.
-        </p>
-        <p>
-          <span className="font-black text-court-navy">Rain</span> means the lesson was weather affected.
-        </p>
-        <p>
-          <span className="font-black text-court-navy">Sick/Cancelled</span> preserves the lesson history.
-        </p>
-      </section>
+      </CoachRCompactGrid>
 
       {lessons.length === 0 ? (
         <section className="empty-state mb-5">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded bg-court-mist text-court-teal">
-            <TimeIcon size={22} />
-          </div>
-          <h2 className="section-title mt-4">Your coaching schedule is ready.</h2>
+          <TimeIcon size={24} />
+          <h2 className="section-title mt-3">Your coaching schedule is ready.</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">Add your first lesson to start planning your week.</p>
-          <Link className="btn-primary mt-5" href="/dashboard/coachr/schedule">
-            Quick Add Lesson
-          </Link>
+          <Link className="btn-primary mt-4" href="/dashboard/coachr/schedule?new=1#new-lesson">Add First Lesson</Link>
         </section>
       ) : (
-        <section className="mb-5 grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
-          <div className="surface-card p-4 sm:p-5">
+        <section className="mb-5 grid gap-4 lg:grid-cols-2">
+          <article className="surface-card p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="section-kicker">Next up</p>
-                <h2 className="section-title mt-1">Upcoming lesson</h2>
+                <p className="section-kicker">Next Lesson</p>
+                <h2 className="section-title mt-1">{nextLesson ? lessonTimeLabel(nextLesson.start_time) : "Nothing scheduled"}</h2>
               </div>
-              <span className="grid h-10 w-10 place-items-center rounded bg-court-mist text-court-teal">
-                <BookingIcon size={18} />
-              </span>
+              <BookingIcon size={20} />
             </div>
-            {nextLesson ? (
-              <div className="mt-4">
-                <p className="text-2xl font-black text-court-navy">{lessonTimeLabel(nextLesson.start_time)}</p>
-                <p className="mt-1 text-sm font-bold text-slate-600">{formatDateTime(nextLesson.start_time)}</p>
-                <div className="mt-4">
-                  <LessonMiniCard lesson={nextLesson} />
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-600">
-                No upcoming lessons. Add a new lesson when the next coaching slot is confirmed.
-              </div>
-            )}
-          </div>
+            {nextLesson ? <div className="mt-4"><LessonMiniCard lesson={nextLesson} /></div> : <div className="ui-empty-card mt-4">Add a lesson when the next coaching slot is confirmed.</div>}
+            <Link className="btn-secondary mt-4 w-full" href="/dashboard/coachr/schedule">Open Schedule</Link>
+          </article>
 
-          <div className="surface-card p-4 sm:p-5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <article className="surface-card p-4 sm:p-5">
+            <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="section-kicker">Today</p>
-                <h2 className="section-title mt-1">Today&apos;s lessons</h2>
+                <h2 className="section-title mt-1">{todayLessons.length} lessons</h2>
               </div>
-              <Link className="inline-flex items-center gap-1 text-sm font-black text-court-teal hover:text-court-blue" href="/dashboard/coachr/schedule">
-                View schedule <ArrowRightIcon size={14} />
-              </Link>
+              <Link className="text-sm font-black text-court-teal" href="/dashboard/coachr/schedule">View all</Link>
             </div>
             {todayLessons.length > 0 ? (
-              <div className="mt-4 grid gap-3">
-                {todayLessons.slice(0, 4).map((lesson) => (
-                  <LessonMiniCard compact key={lesson.id} lesson={lesson} />
-                ))}
-                {todayLessons.length > 4 ? <p className="text-sm font-semibold text-slate-500">+{todayLessons.length - 4} more today</p> : null}
-              </div>
+              <div className="mt-4 grid gap-2">{todayLessons.slice(0, 3).map((lesson) => <LessonMiniCard compact key={lesson.id} lesson={lesson} />)}</div>
             ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-600">
-                No lessons today. Your schedule is clear.
-              </div>
+              <div className="ui-empty-card mt-4">No lessons today. Your schedule is clear.</div>
             )}
-          </div>
+          </article>
         </section>
       )}
 
-      <section className="mb-5 grid gap-3 lg:grid-cols-3">
-        <details className="surface-card ui-collapsible overflow-hidden" open>
-          <summary className="cursor-pointer p-4 sm:p-5">
-            <p className="section-kicker">Lesson Changes</p>
-            <h2 className="section-title mt-1">Changes to review</h2>
-          </summary>
-          <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2 sm:p-5">
-            <CoachRSummaryCard helper="player absent" label="Missed" value={missedLessonCount} />
-            <CoachRSummaryCard helper="rain affected" label="Rain" value={rainLessonCount} />
-            <CoachRSummaryCard helper="lesson cancelled" label="Cancelled" value={cancelledLessonCount} />
-            <CoachRSummaryCard helper="title/notes marked extra" label="Extra" value={extraLessonCount} />
-          </div>
-        </details>
+      <CoachRCompactGrid className="mb-5">
+        <CoachRSummaryCard helper="private students" href="/dashboard/coachr/students?lessonType=private" icon={<EntriesIcon size={18} />} label="Private" value={privateStudentCount} />
+        <CoachRSummaryCard helper="awaiting approval" href="/dashboard/coachr/students#pending-links" icon={<NotificationIcon size={18} />} label="Player Links" value={pendingLinkCount} />
+        <CoachRSummaryCard helper="player absent" href="/dashboard/coachr/schedule" icon={<StatusIcon size={18} />} label="Missed" value={missedLessonCount} />
+        <CoachRSummaryCard helper="needs marking" href="/dashboard/coachr/schedule" icon={<MatchIcon size={18} />} label="Attendance" value={outstandingAttendanceCount} />
+      </CoachRCompactGrid>
 
-        <details className="surface-card ui-collapsible overflow-hidden" open>
-          <summary className="cursor-pointer p-4 sm:p-5">
-            <p className="section-kicker">Week Summary</p>
-            <h2 className="section-title mt-1">This week</h2>
-          </summary>
-          <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-2 sm:p-5">
-            <CoachRSummaryCard helper="scheduled" label="Total" value={weeklyLessons.length} />
-            <CoachRSummaryCard helper="completed" label="Done" value={weeklyLessons.filter((lesson) => lesson.status === "completed").length} />
-            <CoachRSummaryCard helper="missed/rain/cancelled" label="Changed" value={weeklyLessons.filter(isCancelledLesson).length + weeklyLessons.filter((lesson) => lesson.status === "missed").length} />
-            <CoachRSummaryCard helper="coaching hours" label="Hours" value={coachingHours(weeklyLessons)} />
+      <section className="surface-card mb-5 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="section-kicker">Weekly Summary</p>
+            <h2 className="section-title mt-1">{weeklyLessonCount} planned · {coachingHours(weeklyLessons)} hours</h2>
           </div>
-        </details>
-
-        <details className="surface-card ui-collapsible overflow-hidden" open>
-          <summary className="cursor-pointer p-4 sm:p-5">
-            <p className="section-kicker">Programmes</p>
-            <h2 className="section-title mt-1">Lesson mix</h2>
-          </summary>
-          <div className="border-t border-slate-100 p-4 sm:p-5">
-            {programmeCounts.size > 0 ? (
-              <div className="flex flex-wrap gap-2 text-sm font-bold">
-                {Array.from(programmeCounts.entries()).map(([type, count]) => (
-                  <span className="ui-chip ui-chip-muted" key={type}>
-                    {formatLabel(type)} · {count}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div className="ui-empty-card">No programme mix for this week yet.</div>
-            )}
-          </div>
-        </details>
+          <Link className="btn-secondary px-3 py-2" href="/dashboard/coachr/schedule">Open Week</Link>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="ui-chip ui-chip-success">{completedLessonCount} completed</span>
+          <span className="ui-chip ui-chip-warning">{rainLessonCount} rain</span>
+          <span className="ui-chip ui-chip-muted">{cancelledLessonCount} cancelled</span>
+          <span className="ui-chip ui-chip-brand">{replacementLessonCount} replacement</span>
+        </div>
       </section>
 
-      <section className="mb-5 grid gap-3 sm:grid-cols-3">
-        <CoachRSummaryCard helper="lesson-linked students" icon={<EntriesIcon size={18} />} label="Students" value={studentCount} />
-        <CoachRSummaryCard helper="with upcoming lessons" icon={<BookingIcon size={18} />} label="Placed" value={studentsWithUpcoming} />
-        <CoachRSummaryCard helper="configure availability next" icon={<StatusIcon size={18} />} label="Gaps" value="TBC" />
-      </section>
-
-      {canAccessHeadCoach(access.context.role) && coachCards.length > 0 ? (
-        <section className="mb-5 surface-card p-4 sm:p-5">
-          <p className="section-kicker">Venue Coaches</p>
-          <h2 className="section-title mt-1">Coach cards</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {coachCards.map((coach) => (
-              <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={coach.id}>
-                <p className="font-black text-court-navy">{coach.name}</p>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-                  <span className="ui-chip ui-chip-brand">{coach.today} today</span>
-                  <span className="ui-chip ui-chip-muted">{coach.lessons} in scope</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <CoachRCompactGrid>
         {quickLinks.map((link) => (
           <CoachRActionCard href={link.href} icon={link.icon} key={link.title} text={link.text} title={link.title} />
         ))}
-      </section>
+      </CoachRCompactGrid>
     </CoachRPageFrame>
   );
 }

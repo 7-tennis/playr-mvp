@@ -1,6 +1,6 @@
 import Link from "next/link";
+import { CoachRCourtPicker } from "@/components/coachr-court-picker";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { PageShell } from "@/components/page-shell";
 import { ArrowRightIcon, BookingIcon, ChevronDownIcon, EntriesIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
@@ -17,13 +17,14 @@ import {
   loadCoachLessonsForRange,
   profileDisplayName,
   type CoachLessonAttendanceWithProfile,
+  type CoachLessonCourt,
   type CoachLessonProfile,
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
-import { canAccessHeadCoach } from "@/lib/permissions";
+import { canManageOrganisationCourtAccess } from "@/lib/organisations";
 import type { CoachLessonAttendanceResult } from "@/types/courtside";
 import { cancelCoachLesson, createCoachLesson, markCoachLessonAttendance, updateCoachLesson } from "../actions";
-import { CoachRNav, CoachRRoleSummary, getProtectedCoachRPage } from "../coachr-shared";
+import { CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "../coachr-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,7 @@ function errorMessage(value?: string) {
 
   switch (value) {
     case "missing_fields":
-      return "Choose a venue, coach, player, court, start time and end time.";
+      return "Complete the venue, coach, player, location and lesson time.";
     case "coach_profile_missing":
       return "Your CoachR profile is not configured yet. Ask your Head Coach to link your user account to a coach profile.";
     case "coach_venue_missing":
@@ -92,6 +93,10 @@ function errorMessage(value?: string) {
       return "Choose a weekly recurrence range with at least one matching day and no more than 12 months.";
     case "court_venue":
       return "That court is not linked to the selected venue.";
+    case "court_access":
+      return "This organisation no longer has access to that court.";
+    case "custom_location":
+      return "Enter the off-site lesson location.";
     case "coach_venue":
       return "Choose a coach linked to the selected venue.";
     case "player_profile":
@@ -321,9 +326,9 @@ function setupIssues({
   }
   if (courtCount === 0) {
     issues.push({
-      title: "No active courts available",
-      text: "Add or activate a court for this venue before creating lessons.",
-      tone: "error"
+      title: "No managed courts available",
+      text: "Ask an authorised manager to configure court access, or use a clear off-site location.",
+      tone: "warning"
     });
   }
   if (playerCount === 0) {
@@ -450,14 +455,18 @@ function AttendanceButtons({
 }
 
 function LessonCard({
+  canManageCourtAccess,
   courts,
   lesson,
+  organisationId,
   playerOptions,
   returnTo,
   showCoach
 }: {
-  courts: { id: string; name: string; venue_id: string | null }[];
+  canManageCourtAccess: boolean;
+  courts: CoachLessonCourt[];
   lesson: CoachLessonWithRelations;
+  organisationId: string;
   playerOptions: CoachLessonProfile[];
   returnTo: string;
   showCoach: boolean;
@@ -486,7 +495,7 @@ function LessonCard({
             </span>
             <span className="ui-chip ui-chip-brand">{formatLabel(lesson.lesson_type)}</span>
             <span className={`ui-chip ${attendanceMarked ? "ui-chip-success" : "ui-chip-muted"}`}>{attendanceSummary(lesson)}</span>
-            <span className="ui-chip ui-chip-muted">{lesson.court?.name ?? "Court TBC"}</span>
+            <span className="ui-chip ui-chip-muted">{lesson.location_type === "custom" ? lesson.custom_location ?? "Off-site" : lesson.location_type === "none" ? "No court" : lesson.court ? `${lesson.court.owner?.name ? `${lesson.court.owner.name} — ` : ""}${lesson.court.name}` : "Court TBC"}</span>
           </span>
         </span>
         <span className="ui-collapsible-chevron grid h-8 w-8 shrink-0 place-items-center rounded bg-court-mist text-court-teal">
@@ -508,7 +517,7 @@ function LessonCard({
             <span className="ui-chip ui-chip-muted">
               <BookingIcon size={13} /> Booking {lesson.court_booking?.status ? formatLabel(lesson.court_booking.status) : "Not linked yet"}
             </span>
-            <span className="ui-chip ui-chip-brand">Court reserved when confirmed</span>
+            <span className="ui-chip ui-chip-brand">{lesson.location_type === "managed_court" ? "Court reserved when confirmed" : "No managed court booking"}</span>
           </p>
           {lesson.notes ? <p className="rounded bg-slate-50 p-3 font-medium">{lesson.notes}</p> : null}
         </div>
@@ -642,18 +651,7 @@ function LessonCard({
             </label>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-sm font-semibold text-slate-700">
-              Court
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={lesson.court_id ?? ""} name="courtId" required>
-                <option value="">Choose court</option>
-                {courts.map((court) => (
-                  <option key={court.id} value={court.id}>
-                    {court.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700">
               Type
               <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={lesson.lesson_type} name="lessonType">
@@ -675,6 +673,16 @@ function LessonCard({
               </select>
             </label>
           </div>
+
+          <CoachRCourtPicker
+            canManageAccess={canManageCourtAccess}
+            courts={courts}
+            defaultCourtId={lesson.court_id ?? ""}
+            defaultCustomLocation={lesson.custom_location ?? ""}
+            defaultLocationType={lesson.location_type ?? (lesson.court_id ? "managed_court" : "none")}
+            excludeLessonId={lesson.id}
+            organisationId={organisationId}
+          />
 
           <label className="text-sm font-semibold text-slate-700">
             Notes
@@ -751,6 +759,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
   const returnTo = scheduleHref(selectedWeekStart, selectedCoachId);
   const createHref = scheduleHref(selectedWeekStart, selectedCoachId, true);
   const defaultVenueId = access.context.venueId ?? options.venues[0]?.id ?? "";
+  const canManageCourtAccess = access.context.role === "platform_admin" || canManageOrganisationCourtAccess(access.context.activeOrganisationRole);
   const defaultCoachId = coachOnly ? access.context.adultProfileId ?? "" : selectedCoachId || options.coachProfiles[0]?.id || access.context.adultProfileId || "";
   const defaultCreateSerial = todaySerial >= selectedWeekStart && todaySerial < selectedWeekEnd ? todaySerial : selectedWeekStart;
   const defaultRecurrenceEndSerial = defaultCreateSerial + 12 * 7 * DAY_MS;
@@ -763,12 +772,14 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
 
     return { dayLessons, serial };
   });
+  const selectedTodayCount = visibleLessons.filter((lesson) => localDateSerial(lesson.start_time) === todaySerial).length;
+  const missedCount = visibleLessons.filter((lesson) => lesson.status === "missed").length;
+  const replacementCount = visibleLessons.filter((lesson) => /replacement|extra|make.?up|catch.?up/i.test(`${lesson.title} ${lesson.notes ?? ""}`)).length;
 
   return (
-    <PageShell eyebrow="CoachR" subtitle="Plan a coaching week, update lessons quickly, and keep every day easy to scan." title="Weekly Schedule">
+    <CoachRPageFrame context={access.context} subtitle="Plan a coaching week, update lessons quickly, and keep every day easy to scan." title="Weekly Schedule">
       <StatusAlert className="mb-5" message={statusMessage(searchParams?.lesson)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.lesson_error)} tone="error" />
-      <CoachRNav canUseHeadCoach={canAccessHeadCoach(access.context.role)} />
       <CoachRRoleSummary context={access.context} />
 
       <section className="mb-5 overflow-hidden rounded-lg bg-court-navy text-white shadow-court">
@@ -797,6 +808,13 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
           </div>
         </div>
       </section>
+
+      <CoachRCompactGrid className="mb-5">
+        <CoachRSummaryCard helper="selected day" label="Today" value={selectedTodayCount} />
+        <CoachRSummaryCard helper="lesson slots" label="This Week" value={visibleLessons.length} />
+        <CoachRSummaryCard helper="player absent" label="Missed" value={missedCount} />
+        <CoachRSummaryCard helper="make-up lessons" label="Replacement" value={replacementCount} />
+      </CoachRCompactGrid>
 
       {canFilterByCoach ? (
         <form className="surface-card mb-5 grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-end" method="get">
@@ -970,21 +988,9 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
                 ))}
               </select>
             </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Court
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="courtId" required>
-                <option value="">Choose court</option>
-                {options.courts.map((court) => (
-                  <option key={court.id} value={court.id}>
-                    {court.name}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-2 block text-xs font-normal leading-5 text-slate-600">
-                This court will be reserved as a Coach Lesson and hidden from normal player availability for the lesson time.
-              </span>
-            </label>
           </div>
+
+          <CoachRCourtPicker canManageAccess={canManageCourtAccess} courts={options.courts} organisationId={defaultVenueId} />
 
           <label className="text-sm font-semibold text-slate-700">
             Title
@@ -1036,9 +1042,11 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
                   <div className="grid gap-3">
                     {dayLessons.map((lesson) => (
                       <LessonCard
+                        canManageCourtAccess={canManageCourtAccess}
                         courts={options.courts}
                         key={lesson.id}
                         lesson={lesson}
+                        organisationId={lesson.venue_id}
                         playerOptions={playerOptions}
                         returnTo={returnTo}
                         showCoach={!coachOnly}
@@ -1079,6 +1087,6 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
           <p className="mt-1 text-sm leading-6 text-slate-600">Keep coach availability tidy.</p>
         </Link>
       </section>
-    </PageShell>
+    </CoachRPageFrame>
   );
 }

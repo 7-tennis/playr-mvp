@@ -31,7 +31,16 @@ const notificationVisuals: Record<NotificationType, { className: string }> = {
   badge_unlocked: { className: "bg-emerald-50 text-emerald-700" },
   leaderboard_changed: { className: "bg-court-navy text-white" },
   membership_renewal: { className: "bg-court-mist text-court-teal" },
-  shop_reservation_update: { className: "bg-slate-100 text-slate-700" }
+  shop_reservation_update: { className: "bg-slate-100 text-slate-700" },
+  coach_invitation: { className: "bg-court-navy text-white" },
+  player_link_invitation: { className: "bg-court-mist text-court-teal" },
+  parent_approval_required: { className: "bg-amber-50 text-amber-800" },
+  invitation_accepted: { className: "bg-emerald-50 text-emerald-700" },
+  invitation_declined: { className: "bg-slate-100 text-slate-700" },
+  lesson_created: { className: "bg-court-mist text-court-teal" },
+  lesson_updated: { className: "bg-sky-50 text-sky-700" },
+  lesson_cancelled: { className: "bg-amber-50 text-amber-800" },
+  new_message: { className: "bg-court-navy text-white" }
 };
 
 function notificationIcon(type: NotificationType) {
@@ -39,6 +48,11 @@ function notificationIcon(type: NotificationType) {
     case "match_invite_received":
     case "match_invite_accepted":
     case "match_invite_declined":
+    case "coach_invitation":
+    case "player_link_invitation":
+    case "parent_approval_required":
+    case "invitation_accepted":
+    case "invitation_declined":
       return <InviteIcon size={20} />;
     case "court_booking_confirmed":
       return <BookingIcon size={20} />;
@@ -58,6 +72,10 @@ function notificationIcon(type: NotificationType) {
       return <MembershipIcon size={20} />;
     case "shop_reservation_update":
       return <ShopIcon size={20} />;
+    case "lesson_created":
+    case "lesson_updated":
+    case "lesson_cancelled":
+      return <BookingIcon size={20} />;
     default:
       return <NotificationIcon size={20} />;
   }
@@ -89,6 +107,8 @@ function errorMessage(error?: string) {
 
 function sortNotifications(notifications: Notification[]) {
   return [...notifications].sort((left, right) => {
+    if (left.status === "action_required" && right.status !== "action_required") return -1;
+    if (left.status !== "action_required" && right.status === "action_required") return 1;
     if (!left.read_at && right.read_at) {
       return -1;
     }
@@ -102,10 +122,12 @@ function sortNotifications(notifications: Notification[]) {
 
 function NotificationCard({ notification }: { notification: Notification }) {
   const unread = !notification.read_at;
+  const actionRequired = notification.action_required || notification.status === "action_required";
+  const resolved = notification.status === "resolved" || notification.status === "expired";
   const visual = notificationVisuals[notification.type] ?? notificationVisuals.match_invite_received;
 
   return (
-    <article className={`rounded-lg border bg-white p-4 shadow-sm sm:p-5 ${unread ? "border-court-teal/40 ring-2 ring-court-mist" : "border-slate-200"}`}>
+    <article className={`rounded-lg border bg-white p-4 shadow-sm sm:p-5 ${actionRequired ? "border-amber-300 ring-2 ring-amber-50" : unread ? "border-court-teal/40 ring-2 ring-court-mist" : "border-slate-200"}`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 gap-3">
           <div className={`grid h-11 w-11 shrink-0 place-items-center rounded ${visual.className}`}>{notificationIcon(notification.type)}</div>
@@ -113,6 +135,8 @@ function NotificationCard({ notification }: { notification: Notification }) {
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-black text-court-navy">{notification.title}</h2>
               <span className={`ui-chip ${unread ? "ui-chip-brand" : "ui-chip-muted"}`}>{unread ? "Unread" : "Read"}</span>
+              {actionRequired ? <span className="ui-chip ui-chip-warning">Action required</span> : null}
+              {resolved ? <span className="ui-chip ui-chip-success">{notification.status === "expired" ? "Expired" : "Resolved"}</span> : null}
               <span className="ui-chip ui-chip-muted">{formatLabel(notification.type)}</span>
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-700">{notification.message}</p>
@@ -123,7 +147,7 @@ function NotificationCard({ notification }: { notification: Notification }) {
         <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
           {notification.href ? (
             <Link className="btn-secondary px-3 py-2" href={notification.href}>
-              Open
+              {actionRequired ? "Review" : "Open"}
             </Link>
           ) : null}
           {unread ? (
@@ -158,6 +182,11 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
     redirect("/login");
   }
 
+  const syncResult = await supabase.rpc("sync_my_pending_invitation_notifications");
+  if (syncResult.error && syncResult.error.code !== "PGRST202") {
+    console.warn("Pending invitation notifications could not be synced", { code: syncResult.error.code, userId: user.id.slice(0, 8) });
+  }
+
   const { data, error } = await supabase
     .from("notifications")
     .select("*")
@@ -167,6 +196,7 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
 
   const notifications = sortNotifications((data ?? []) as Notification[]);
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
+  const actionRequiredCount = notifications.filter((notification) => notification.action_required || notification.status === "action_required").length;
 
   return (
     <PageShell
@@ -184,7 +214,7 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
             <div>
               <p className="section-kicker">Inbox</p>
               <h2 className="section-title mt-1">{unreadCount} unread</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Latest private PlayR updates appear here first.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{actionRequiredCount > 0 ? `${actionRequiredCount} need your action.` : "Latest private PlayR updates appear here first."}</p>
             </div>
             {unreadCount > 0 ? (
               <form action={markAllNotificationsRead}>

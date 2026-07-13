@@ -21,7 +21,11 @@ export const coachLessonFeedbackStatuses: CoachLessonFeedbackStatus[] = ["not_st
 
 export type CoachLessonProfile = Pick<Profile, "id" | "user_id" | "first_name" | "last_name" | "is_junior" | "parent_profile_id" | "junior_stage" | "player_level">;
 export type CoachLessonVenue = Pick<Venue, "id" | "name">;
-export type CoachLessonCourt = Pick<Court, "id" | "name" | "venue_id">;
+export type CoachLessonCourt = Pick<Court, "id" | "name" | "venue_id"> & {
+  owner_name?: string | null;
+  access_kind?: "owned" | "shared";
+  owner?: { name: string } | null;
+};
 export type CoachLessonBooking = Pick<CourtBooking, "id" | "start_time" | "end_time" | "status">;
 export type CoachLessonAttendanceWithProfile = CoachLessonAttendance & {
   player: CoachLessonProfile | null;
@@ -57,6 +61,8 @@ const coachLessonSelect = `
   parent_id,
   court_id,
   court_booking_id,
+  location_type,
+  custom_location,
   lesson_type,
   title,
   start_time,
@@ -77,7 +83,7 @@ const coachLessonSelect = `
   player:player_id(id,first_name,last_name,is_junior,parent_profile_id),
   junior:junior_profile_id(id,first_name,last_name,is_junior,parent_profile_id),
   parent:parent_id(id,first_name,last_name,is_junior,parent_profile_id),
-  court:court_id(id,name,venue_id),
+  court:court_id(id,name,venue_id,owner:venue_id(name)),
   venue:venue_id(id,name),
   court_booking:court_booking_id(id,start_time,end_time,status),
   attendance:coach_lesson_attendance(
@@ -132,6 +138,9 @@ export async function loadCoachLessons(context: AuthenticatedContext, limit = 40
       return [] as CoachLessonWithRelations[];
     }
     query = query.eq("coach_id", context.adultProfileId);
+    if (context.venueId) {
+      query = query.eq("venue_id", context.venueId);
+    }
   } else if (context.role !== "platform_admin" && context.venueId) {
     query = query.eq("venue_id", context.venueId);
   }
@@ -164,6 +173,9 @@ export async function loadCoachLessonsForRange(context: AuthenticatedContext, st
       return [] as CoachLessonWithRelations[];
     }
     query = query.eq("coach_id", context.adultProfileId);
+    if (context.venueId) {
+      query = query.eq("venue_id", context.venueId);
+    }
   } else if (context.role !== "platform_admin" && context.venueId) {
     query = query.eq("venue_id", context.venueId);
   }
@@ -211,19 +223,21 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
   const linkedPlayerQuery =
     context.role === "platform_admin"
       ? null
-      : context.venueId
+      : context.role === "coach"
+        ? null
+        : context.venueId
         ? context.supabase.from("organisation_player_links").select("player_profile_id").eq("venue_id", context.venueId).eq("status", "active").limit(240)
         : null;
   const assignedPlayerQuery =
     context.role === "platform_admin"
       ? null
-      : context.role === "coach" && context.adultProfileId
-        ? context.supabase.from("coach_player_assignments").select("player_profile_id").eq("coach_profile_id", context.adultProfileId).eq("status", "active").limit(240)
+      : context.role === "coach" && context.adultProfileId && context.venueId
+        ? context.supabase.from("coach_player_assignments").select("player_profile_id").eq("coach_profile_id", context.adultProfileId).eq("venue_id", context.venueId).eq("status", "active").limit(240)
         : context.venueId
           ? context.supabase.from("coach_player_assignments").select("player_profile_id").eq("venue_id", context.venueId).eq("status", "active").limit(240)
           : null;
 
-  const [ownCoachProfileResult, coachRolesResult, coachMembershipsResult, linkedPlayersResult, assignedPlayersResult, courtsResult, venuesResult] = await Promise.all([
+  const [ownCoachProfileResult, coachRolesResult, coachMembershipsResult, linkedPlayersResult, assignedPlayersResult, authorisedCourtsResult, venuesResult] = await Promise.all([
     context.adultProfileId
       ? context.supabase
           .from("profiles")
@@ -236,13 +250,53 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
     coachMembershipQuery ?? Promise.resolve({ data: [], error: null }),
     linkedPlayerQuery ?? Promise.resolve({ data: [], error: null }),
     assignedPlayerQuery ?? Promise.resolve({ data: [], error: null }),
-    context.venueId && context.role !== "platform_admin"
-      ? context.supabase.from("courts").select("id,name,venue_id").eq("venue_id", context.venueId).eq("status", "active").order("sort_order", { ascending: true })
-      : context.supabase.from("courts").select("id,name,venue_id").eq("status", "active").order("sort_order", { ascending: true }),
+    context.venueId
+      ? context.supabase.rpc("coachr_authorised_courts", { p_organisation_id: context.venueId })
+      : Promise.resolve({ data: [], error: null }),
     context.venueId && context.role !== "platform_admin"
       ? context.supabase.from("venues").select("id,name").eq("id", context.venueId).order("name", { ascending: true })
       : context.supabase.from("venues").select("id,name").eq("status", "active").order("name", { ascending: true })
   ]);
+
+  let courts: CoachLessonCourt[] = ((authorisedCourtsResult.data ?? []) as {
+    access_kind: "owned" | "shared";
+    court_id: string;
+    court_name: string;
+    owner_venue_id: string;
+    owner_venue_name: string;
+  }[]).map((court) => ({
+    access_kind: court.access_kind,
+    id: court.court_id,
+    name: court.court_name,
+    owner_name: court.owner_venue_name,
+    venue_id: court.owner_venue_id
+  }));
+
+  if (authorisedCourtsResult.error && context.venueId) {
+    console.warn("CoachR shared courts RPC unavailable; using owned-court compatibility query", {
+      code: authorisedCourtsResult.error.code,
+      venueId: context.venueId
+    });
+    const ownedCourtsResult = await context.supabase
+      .from("courts")
+      .select("id,name,venue_id,venue:venue_id(name)")
+      .eq("venue_id", context.venueId)
+      .eq("status", "active")
+      .order("sort_order", { ascending: true });
+
+    courts = ((ownedCourtsResult.data ?? []) as unknown as {
+      id: string;
+      name: string;
+      venue_id: string | null;
+      venue: { name: string } | null;
+    }[]).map((court) => ({
+      access_kind: "owned",
+      id: court.id,
+      name: court.name,
+      owner_name: court.venue?.name ?? null,
+      venue_id: court.venue_id
+    }));
+  }
 
   const ownCoachProfile = (ownCoachProfileResult.data as CoachLessonProfile | null) ?? null;
   const coachUserIds = Array.from(new Set(((coachRolesResult.data ?? []) as { user_id: string | null }[]).map((row) => row.user_id).filter(Boolean) as string[]));
@@ -291,7 +345,7 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
   return {
     coachProfiles: ((coachProfilesResult.data ?? []) as CoachLessonProfile[]) ?? [],
     playerProfiles: ((playerProfilesResult.data ?? []) as CoachLessonProfile[]) ?? [],
-    courts: ((courtsResult.data ?? []) as CoachLessonCourt[]) ?? [],
+    courts,
     venues: ((venuesResult.data ?? []) as CoachLessonVenue[]) ?? []
   };
 }

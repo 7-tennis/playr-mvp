@@ -40,6 +40,7 @@ export default async function CoachRMessagesPage({ searchParams }: CoachRMessage
 
   const query = (searchParams?.q ?? "").trim().toLowerCase();
   const filter = searchParams?.filter ?? "";
+  await access.context.supabase.rpc("sync_my_pending_invitation_notifications");
   const { data, error } = await access.context.supabase
     .from("notifications")
     .select("*")

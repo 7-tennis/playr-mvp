@@ -14,6 +14,8 @@ export type AdminRole = UserRole | "admin" | "staff";
 export type CourtStatus = "active" | "inactive";
 export type CourtBookingStatus = "confirmed" | "cancelled";
 export type CourtBookingType = "player_booking" | "lesson" | "maintenance" | "club_programme" | "competition" | "americano";
+export type CoachLessonLocationType = "managed_court" | "custom" | "none";
+export type OrganisationCourtAccessStatus = "active" | "inactive" | "revoked";
 export type MatchInviteType = "casual" | "verified";
 export type MatchInviteStatus = "pending" | "accepted" | "declined" | "cancelled";
 export type MatchVerificationStatus = "pending_confirmation" | "verified" | "disputed" | "admin_verified" | "cancelled";
@@ -36,7 +38,17 @@ export type NotificationType =
   | "badge_unlocked"
   | "leaderboard_changed"
   | "membership_renewal"
-  | "shop_reservation_update";
+  | "shop_reservation_update"
+  | "coach_invitation"
+  | "player_link_invitation"
+  | "parent_approval_required"
+  | "invitation_accepted"
+  | "invitation_declined"
+  | "lesson_created"
+  | "lesson_updated"
+  | "lesson_cancelled"
+  | "new_message";
+export type NotificationStatus = "unread" | "read" | "action_required" | "resolved" | "expired";
 export type OrganisationType = "academy" | "club" | "school" | "district" | "club_academy" | "school_district";
 export type OrganisationRole =
   | "organisation_admin"
@@ -49,7 +61,7 @@ export type OrganisationRole =
   | "viewer";
 export type OrganisationMembershipStatus = "pending" | "active" | "declined" | "suspended" | "removed";
 export type OrganisationInvitationStatus = "pending" | "accepted" | "declined" | "expired" | "cancelled";
-export type OrganisationInvitationKind = "organisation_member" | "coach" | "player_junior";
+export type OrganisationInvitationKind = "organisation_member" | "coach" | "player" | "player_junior";
 export type OrganisationLinkStatus = "pending" | "active" | "declined" | "suspended" | "removed";
 export type OrganisationAssignmentStatus = "active" | "suspended" | "removed";
 export type OrganisationProgramRole = "coach" | "assistant_coach" | "player" | "manager" | "viewer";
@@ -158,6 +170,7 @@ export interface AdminUser {
 export interface Court {
   id: string;
   venue_id: string | null;
+  operator_venue_id: string | null;
   name: string;
   status: CourtStatus;
   sort_order: number;
@@ -302,6 +315,26 @@ export interface CourtBooking {
   updated_at: string;
   cancelled_at: string | null;
   cancelled_by_user_id: string | null;
+  booking_organisation_id: string | null;
+  owner_organisation_id: string | null;
+  coach_lesson_id: string | null;
+  booking_purpose: string | null;
+}
+
+export interface OrganisationCourtAccess {
+  id: string;
+  owner_venue_id: string;
+  approved_venue_id: string;
+  court_id: string | null;
+  status: OrganisationCourtAccessStatus;
+  valid_from: string | null;
+  valid_until: string | null;
+  notes: string | null;
+  created_by_user_id: string;
+  revoked_by_user_id: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface MatchInvite {
@@ -341,6 +374,8 @@ export interface CoachLesson {
   parent_id: string | null;
   court_id: string | null;
   court_booking_id: string | null;
+  location_type: CoachLessonLocationType;
+  custom_location: string | null;
   lesson_type: CoachLessonType;
   title: string;
   start_time: string;
@@ -438,6 +473,10 @@ export interface Notification {
   href: string | null;
   metadata: Record<string, unknown>;
   dedupe_key: string | null;
+  status: NotificationStatus;
+  action_required: boolean;
+  invitation_id: string | null;
   read_at: string | null;
+  resolved_at: string | null;
   created_at: string;
 }

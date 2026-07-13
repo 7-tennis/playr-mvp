@@ -12,8 +12,8 @@ import {
 } from "@/lib/coach-lessons";
 import { invitationLink } from "@/lib/organisations";
 import type { CoachLessonAttendanceResult, CoachPlayerAssignment, OrganisationInvitation } from "@/types/courtside";
-import { CoachRPageFrame, CoachRRoleSummary, getProtectedCoachRPage } from "../coachr-shared";
-import { cancelPlayerLinkRequest, requestPlayerLink } from "./actions";
+import { CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "../coachr-shared";
+import { cancelPlayerLinkRequest, requestAdultPlayerLink, requestPlayerLink } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ type CoachPlayerAssignmentWithProfiles = Pick<CoachPlayerAssignment, "id" | "coa
   coach: CoachLessonProfile | null;
   player: CoachLessonProfile | null;
 };
-type PlayerLinkInvitation = Pick<OrganisationInvitation, "id" | "invited_email" | "invited_name" | "status" | "token" | "expires_at" | "metadata" | "created_at">;
+type PlayerLinkInvitation = Pick<OrganisationInvitation, "id" | "invitation_kind" | "invited_email" | "invited_name" | "status" | "token" | "expires_at" | "metadata" | "created_at">;
 
 type StudentSummary = {
   id: string;
@@ -127,7 +127,7 @@ function addStudentLesson(summary: StudentSummary, lesson: CoachLessonWithRelati
 function statusMessage(value?: string) {
   switch (value) {
     case "player_invited":
-      return "Player link request created. Copy and share this secure link with the parent or guardian.";
+      return "Player link request created. The invited account will see an action notification when its PlayR profile is available; the secure link remains available for manual sharing.";
     case "player_invite_cancelled":
       return "Player link request cancelled.";
     default:
@@ -140,9 +140,9 @@ function errorMessage(value?: string) {
     case "access":
       return "You do not have permission to request that player link.";
     case "duplicate_invitation":
-      return "A pending request already exists for that parent email.";
+      return "A pending player request already exists for that email.";
     case "missing_fields":
-      return "Add the parent email and junior name before sending.";
+      return "Add the required player or parent details before sending.";
     case "player_invite_failed":
       return "Player link request could not be created.";
     case "player_invite_cancel_failed":
@@ -183,6 +183,7 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
             .from("coach_player_assignments")
             .select("id,coach_profile_id,player_profile_id,venue_id,status,assigned_at,coach:coach_profile_id(id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level),player:player_profile_id(id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level)")
             .eq("coach_profile_id", access.context.adultProfileId)
+            .eq("venue_id", access.context.venueId ?? "00000000-0000-0000-0000-000000000000")
             .eq("status", "active")
             .limit(220)
         : access.context.venueId
@@ -197,17 +198,17 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
     access.context.role === "platform_admin"
       ? access.context.supabase
           .from("organisation_invitations")
-          .select("id,invited_email,invited_name,status,token,expires_at,metadata,created_at")
-          .eq("invitation_kind", "player_junior")
+          .select("id,invitation_kind,invited_email,invited_name,status,token,expires_at,metadata,created_at")
+          .in("invitation_kind", ["player", "player_junior"])
           .eq("status", "pending")
           .order("created_at", { ascending: false })
           .limit(120)
       : access.context.venueId
         ? access.context.supabase
             .from("organisation_invitations")
-            .select("id,invited_email,invited_name,status,token,expires_at,metadata,created_at")
+            .select("id,invitation_kind,invited_email,invited_name,status,token,expires_at,metadata,created_at")
             .eq("venue_id", access.context.venueId)
-            .eq("invitation_kind", "player_junior")
+            .in("invitation_kind", ["player", "player_junior"])
             .eq("status", "pending")
             .order("created_at", { ascending: false })
             .limit(80)
@@ -267,6 +268,9 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
     .filter((student) => (selectedStage ? student.stage === selectedStage : true))
     .filter((student) => (selectedLessonType ? student.lessonTypes.includes(selectedLessonType) : true))
     .sort((left, right) => left.name.localeCompare(right.name));
+  const allStudents = Array.from(studentMap.values());
+  const privateStudentCount = allStudents.filter((student) => student.lessonTypes.includes("private")).length;
+  const assignedStudentCount = new Set(assignments.map((assignment) => assignment.player_profile_id)).size;
 
   return (
     <CoachRPageFrame context={access.context} subtitle="Search, filter and open student coaching cards without leaving CoachR." title="Students">
@@ -283,6 +287,13 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
           Parent approval link: <code className="break-all rounded bg-white px-2 py-1 text-court-teal">{invitationLink(searchParams.token)}</code>
         </div>
       ) : null}
+
+      <CoachRCompactGrid className="mb-5">
+        <CoachRSummaryCard helper="active students" label="Total" value={allStudents.length} />
+        <CoachRSummaryCard helper="private coaching" label="Private" value={privateStudentCount} />
+        <CoachRSummaryCard helper="coach assigned" label="Assigned" value={assignedStudentCount} />
+        <CoachRSummaryCard helper="parent approval" href="#pending-links" label="Pending" value={playerInvitations.length} />
+      </CoachRCompactGrid>
 
       <CollapsibleCard
         defaultOpen={searchParams?.q !== undefined}
@@ -338,9 +349,24 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
 
       <CollapsibleCard
         eyebrow="Add"
-        summary="Request parent approval before a junior becomes visible in CoachR."
+        summary="Invite an adult directly, or request parent approval for a junior."
         title="Request Player Link"
       >
+        <section className="mb-5 rounded-lg border border-court-teal/20 bg-court-mist p-4">
+          <p className="text-sm font-black text-court-navy">Adult player</p>
+          <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">The adult approves the connection from their own PlayR account.</p>
+          <form action={requestAdultPlayerLink} className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="text-sm font-semibold text-slate-700">Player email<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="playerEmail" required type="email" /></label>
+            <label className="text-sm font-semibold text-slate-700">Player name<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="playerName" placeholder="Optional" /></label>
+            <label className="text-sm font-semibold text-slate-700">Player phone<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="playerPhone" placeholder="Optional" /></label>
+            {!coachOnly && options.coachProfiles.length > 0 ? (
+              <label className="text-sm font-semibold text-slate-700">Coach assignment<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="coachProfileId"><option value="">Assign after acceptance</option>{options.coachProfiles.map((coach) => <option key={coach.id} value={coach.id}>{profileDisplayName(coach)}</option>)}</select></label>
+            ) : null}
+            <button className="btn-primary md:col-span-2" type="submit">Send Adult Invitation</button>
+          </form>
+        </section>
+
+        <p className="mb-3 text-sm font-black text-court-navy">Junior player · parent or guardian approval</p>
         <form action={requestPlayerLink} className="grid gap-3 md:grid-cols-2">
           <label className="text-sm font-semibold text-slate-700">
             Parent email
@@ -403,13 +429,17 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
 
       <CollapsibleCard
         eyebrow="Pending"
+        id="pending-links"
         summary={`${playerInvitations.length} parent approvals awaiting a response. Pending juniors are not shown as authorised students yet.`}
         title="Pending Player Requests"
       >
         {playerInvitations.length > 0 ? (
           <div className="grid gap-3">
             {playerInvitations.map((invitation) => {
-              const playerName = [metadataText(invitation.metadata, "playerFirstName"), metadataText(invitation.metadata, "playerLastName")].filter(Boolean).join(" ") || "Junior player";
+              const isAdult = invitation.invitation_kind === "player";
+              const playerName = isAdult
+                ? invitation.invited_name || invitation.invited_email
+                : [metadataText(invitation.metadata, "playerFirstName"), metadataText(invitation.metadata, "playerLastName")].filter(Boolean).join(" ") || "Junior player";
 
               return (
                 <article className="rounded-lg border border-slate-200 bg-court-mist p-3" key={invitation.id}>
@@ -417,10 +447,10 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
                     <div>
                       <p className="font-black text-court-navy">{playerName}</p>
                       <p className="mt-1 text-xs font-semibold text-slate-600">
-                        Parent: {invitation.invited_name || invitation.invited_email} · {invitation.invited_email}
+                        {isAdult ? "Player" : "Parent"}: {invitation.invited_name || invitation.invited_email} · {invitation.invited_email}
                       </p>
                     </div>
-                    <span className="ui-chip ui-chip-muted">Parent approval</span>
+                    <span className="ui-chip ui-chip-muted">{isAdult ? "Adult approval" : "Parent approval"}</span>
                   </div>
                   <p className="mt-2 text-xs font-semibold text-slate-600">Expires: {formatDateTime(invitation.expires_at)}</p>
                   <code className="mt-2 block break-all rounded bg-white px-2 py-1 text-xs font-bold text-court-teal">{invitationLink(invitation.token)}</code>

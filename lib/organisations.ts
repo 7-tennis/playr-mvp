@@ -153,12 +153,18 @@ export function canInviteOrganisationPlayers(role: OrganisationRole | string | n
   return canManageOrganisationCoaches(role) || role === "coach" || role === "assistant_coach";
 }
 
+export function canManageOrganisationCourtAccess(role: OrganisationRole | string | null | undefined) {
+  return role === "organisation_admin" || role === "club_manager" || role === "sports_coordinator";
+}
+
 export function invitationKindLabel(kind: OrganisationInvitationKind | string | null | undefined) {
   switch (kind) {
     case "coach":
       return "Coach invitation";
     case "player_junior":
       return "Player link request";
+    case "player":
+      return "Adult player request";
     default:
       return "Organisation invitation";
   }

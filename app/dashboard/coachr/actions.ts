@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { coachLessonAttendanceResults, coachLessonStatuses, coachLessonTypes } from "@/lib/coach-lessons";
 import { assertCoachRAccess } from "@/lib/permissions";
-import type { CoachLessonAttendanceResult, CoachLessonStatus, CoachLessonType } from "@/types/courtside";
+import type { CoachLessonAttendanceResult, CoachLessonLocationType, CoachLessonStatus, CoachLessonType } from "@/types/courtside";
 
 const repeatModes = ["none", "weekly"] as const;
 const seriesScopes = ["single", "future", "series"] as const;
+const locationTypes: CoachLessonLocationType[] = ["managed_court", "custom", "none"];
 
 type RepeatMode = (typeof repeatModes)[number];
 type SeriesScope = (typeof seriesScopes)[number];
@@ -30,7 +31,7 @@ function optionalUuid(formData: FormData, key: string) {
 
 function datetimeValue(formData: FormData, key: string) {
   const value = text(formData, key);
-  return value ? new Date(value).toISOString() : "";
+  return value ? new Date(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) ? `${value}:00+02:00` : value).toISOString() : "";
 }
 
 function dateValue(formData: FormData, key: string) {
@@ -77,6 +78,8 @@ function lessonErrorValue(error: { code?: string; message?: string } | null | un
       "coach_venue_missing",
       "coach_venue",
       "court_venue",
+      "court_access",
+      "custom_location",
       "invalid_lesson",
       "invalid_student",
       "missing_rpc",
@@ -104,8 +107,10 @@ function revalidateCoachLessonSurfaces() {
   revalidatePath("/dashboard/book-court");
   revalidatePath("/dashboard/coachr");
   revalidatePath("/dashboard/coachr/head-coach");
+  revalidatePath("/dashboard/coachr/messages");
   revalidatePath("/dashboard/coachr/schedule");
   revalidatePath("/dashboard/coachr/students");
+  revalidatePath("/dashboard/notifications");
   revalidatePath("/dashboard/my-bookings");
   revalidatePath("/dashboard/play");
   revalidatePath("/dashboard/play/plan-match");
@@ -115,12 +120,16 @@ async function preflightCoachLessonCreate({
   coachId,
   context,
   courtId,
+  customLocation,
+  locationType,
   playerId,
   venueId
 }: {
   coachId: string | null;
   context: AuthenticatedCoachRContext;
   courtId: string | null;
+  customLocation: string | null;
+  locationType: CoachLessonLocationType;
   playerId: string | null;
   venueId: string | null;
 }) {
@@ -136,15 +145,20 @@ async function preflightCoachLessonCreate({
   if (!coachId) {
     return "coach_profile_missing";
   }
-  if (!courtId) {
+  if (locationType === "managed_court" && !courtId) {
     return "no_active_courts";
+  }
+  if (locationType === "custom" && !customLocation) {
+    return "custom_location";
   }
   if (!playerId) {
     return "no_students";
   }
 
   const [courtResult, playerResult, coachVenueResult] = await Promise.all([
-    context.supabase.from("courts").select("id,name,venue_id,status").eq("id", courtId).maybeSingle(),
+    courtId
+      ? context.supabase.from("courts").select("id,name,venue_id,status").eq("id", courtId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     context.supabase.from("profiles").select("id").eq("id", playerId).maybeSingle(),
     context.supabase.rpc("coach_profile_can_teach_at_venue", {
       check_coach_id: coachId,
@@ -162,7 +176,7 @@ async function preflightCoachLessonCreate({
   if (courtResult.error) {
     return "create_failed";
   }
-  if (!courtResult.data || courtResult.data.venue_id !== venueId || courtResult.data.status !== "active") {
+  if (locationType === "managed_court" && (!courtResult.data || courtResult.data.status !== "active")) {
     return "court_venue";
   }
   if (playerResult.error) {
@@ -187,6 +201,8 @@ export async function createCoachLesson(formData: FormData) {
   const coachId = context.role === "coach" ? context.adultProfileId : optionalUuid(formData, "coachId") ?? context.adultProfileId;
   const playerId = optionalUuid(formData, "playerId");
   const courtId = optionalUuid(formData, "courtId");
+  const locationType = allowedValue<CoachLessonLocationType>(text(formData, "locationType"), locationTypes, "managed_court");
+  const customLocation = nullableText(formData, "customLocation");
   const startTime = datetimeValue(formData, "startTime");
   const endTime = datetimeValue(formData, "endTime");
   const lessonType = allowedValue<CoachLessonType>(text(formData, "lessonType"), coachLessonTypes, "private");
@@ -196,6 +212,8 @@ export async function createCoachLesson(formData: FormData) {
     coachId,
     context,
     courtId,
+    customLocation,
+    locationType,
     playerId,
     venueId
   });
@@ -204,18 +222,18 @@ export async function createCoachLesson(formData: FormData) {
     redirectWithParam(returnTo, "lesson_error", setupError);
   }
 
-  if (repeatMode === "weekly") {
-    const recurrenceStartDate = dateValue(formData, "recurrenceStartDate");
-    const recurrenceEndDate = dateValue(formData, "recurrenceEndDate");
-    const dayOfWeek = Number(text(formData, "dayOfWeek"));
-    const lessonStartTime = timeValue(formData, "lessonStartTime");
-    const lessonEndTime = timeValue(formData, "lessonEndTime");
+  const recurrenceStartDate = repeatMode === "weekly" ? dateValue(formData, "recurrenceStartDate") : null;
+  const recurrenceEndDate = repeatMode === "weekly" ? dateValue(formData, "recurrenceEndDate") : null;
+  const dayOfWeek = repeatMode === "weekly" ? Number(text(formData, "dayOfWeek")) : null;
+  const lessonStartTime = repeatMode === "weekly" ? timeValue(formData, "lessonStartTime") : null;
+  const lessonEndTime = repeatMode === "weekly" ? timeValue(formData, "lessonEndTime") : null;
 
-    if (!venueId || !coachId || !playerId || !courtId || !recurrenceStartDate || !recurrenceEndDate || !lessonStartTime || !lessonEndTime || !Number.isInteger(dayOfWeek)) {
+  if (repeatMode === "weekly") {
+    if (!venueId || !coachId || !playerId || !recurrenceStartDate || !recurrenceEndDate || !lessonStartTime || !lessonEndTime || !Number.isInteger(dayOfWeek)) {
       redirectWithParam(returnTo, "lesson_error", "missing_fields");
     }
 
-    if (dayOfWeek < 1 || dayOfWeek > 7 || new Date(`${recurrenceEndDate}T00:00:00Z`).getTime() < new Date(`${recurrenceStartDate}T00:00:00Z`).getTime()) {
+    if ((dayOfWeek ?? 0) < 1 || (dayOfWeek ?? 0) > 7 || new Date(`${recurrenceEndDate}T00:00:00Z`).getTime() < new Date(`${recurrenceStartDate}T00:00:00Z`).getTime()) {
       redirectWithParam(returnTo, "lesson_error", "recurrence_range");
     }
 
@@ -227,46 +245,32 @@ export async function createCoachLesson(formData: FormData) {
       redirectWithParam(returnTo, "lesson_error", "time_order");
     }
 
-    const { error } = await context.supabase.rpc("coachr_create_weekly_lesson_series", {
-      p_coach_id: coachId,
-      p_court_id: courtId,
-      p_day_of_week: dayOfWeek,
-      p_end_date: recurrenceEndDate,
-      p_end_time: lessonEndTime,
-      p_lesson_type: lessonType,
-      p_notes: nullableText(formData, "notes"),
-      p_player_id: playerId,
-      p_start_date: recurrenceStartDate,
-      p_start_time: lessonStartTime,
-      p_title: title,
-      p_venue_id: venueId
-    });
-
-    if (error) {
-      console.error("CoachR weekly lesson series create failed", { error, role: context.role, venueId, coachId });
-      redirectWithParam(returnTo, "lesson_error", lessonErrorValue(error, "create_failed"));
-    }
-
-    revalidateCoachLessonSurfaces();
-    redirectWithParam(returnTo, "lesson", "series_created");
   }
 
-  if (!venueId || !coachId || !playerId || !courtId || !startTime || !endTime) {
+  if (!venueId || !coachId || !playerId || (repeatMode === "none" && (!startTime || !endTime))) {
     redirectWithParam(returnTo, "lesson_error", "missing_fields");
   }
 
-  if (new Date(endTime).getTime() <= new Date(startTime).getTime()) {
+  if (repeatMode === "none" && new Date(endTime).getTime() <= new Date(startTime).getTime()) {
     redirectWithParam(returnTo, "lesson_error", "time_order");
   }
 
-  const { error } = await context.supabase.rpc("coachr_create_lesson_with_booking", {
+  const { error } = await context.supabase.rpc("coachr_create_lesson_plan", {
     p_coach_id: coachId,
     p_court_id: courtId,
-    p_end_time: endTime,
+    p_custom_location: customLocation,
+    p_day_of_week: dayOfWeek,
+    p_end_time: repeatMode === "none" ? endTime : null,
     p_lesson_type: lessonType,
+    p_location_type: locationType,
     p_notes: nullableText(formData, "notes"),
     p_player_id: playerId,
-    p_start_time: startTime,
+    p_recurrence_end_date: recurrenceEndDate,
+    p_recurrence_end_time: lessonEndTime,
+    p_recurrence_start_date: recurrenceStartDate,
+    p_recurrence_start_time: lessonStartTime,
+    p_repeat_mode: repeatMode,
+    p_start_time: repeatMode === "none" ? startTime : null,
     p_title: title,
     p_venue_id: venueId
   });
@@ -277,7 +281,7 @@ export async function createCoachLesson(formData: FormData) {
   }
 
   revalidateCoachLessonSurfaces();
-  redirectWithParam(returnTo, "lesson", "created");
+  redirectWithParam(returnTo, "lesson", repeatMode === "weekly" ? "series_created" : "created");
 }
 
 export async function updateCoachLesson(formData: FormData) {
@@ -296,9 +300,11 @@ export async function updateCoachLesson(formData: FormData) {
   const lessonType = allowedValue<CoachLessonType>(text(formData, "lessonType"), coachLessonTypes, "private");
   const playerId = optionalUuid(formData, "playerId");
   const courtId = optionalUuid(formData, "courtId");
+  const locationType = allowedValue<CoachLessonLocationType>(text(formData, "locationType"), locationTypes, "managed_court");
+  const customLocation = nullableText(formData, "customLocation");
   const editScope = allowedValue<SeriesScope>(text(formData, "editScope"), [...seriesScopes], "single");
 
-  if (!playerId || !courtId || !startTime || !endTime) {
+  if (!playerId || !startTime || !endTime || (locationType === "managed_court" && !courtId) || (locationType === "custom" && !customLocation)) {
     redirectWithParam(returnTo, "lesson_error", "missing_fields");
   }
 
@@ -306,11 +312,13 @@ export async function updateCoachLesson(formData: FormData) {
     redirectWithParam(returnTo, "lesson_error", "time_order");
   }
 
-  const { error } = await context.supabase.rpc("coachr_update_lesson_series_with_bookings", {
+  const { error } = await context.supabase.rpc("coachr_update_lesson_plan", {
     p_court_id: courtId,
+    p_custom_location: customLocation,
     p_end_time: endTime,
     p_lesson_id: lessonId,
     p_lesson_type: lessonType,
+    p_location_type: locationType,
     p_notes: nullableText(formData, "notes"),
     p_player_id: playerId,
     p_scope: editScope,
@@ -349,6 +357,18 @@ export async function cancelCoachLesson(formData: FormData) {
   if (error) {
     console.error("CoachR lesson cancel failed", { error, role: context.role, lessonId });
     redirectWithParam(returnTo, "lesson_error", lessonErrorValue(error, "cancel_failed"));
+  }
+
+  const { error: notificationError } = await context.supabase.rpc("coachr_notify_lesson_cancellation", {
+    p_lesson_id: lessonId
+  });
+
+  if (notificationError) {
+    console.error("CoachR lesson cancellation notification failed", {
+      error: notificationError,
+      lessonId,
+      role: context.role
+    });
   }
 
   revalidateCoachLessonSurfaces();
