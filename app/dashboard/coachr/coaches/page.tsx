@@ -388,22 +388,23 @@ export default async function CoachRCoachesPage({ searchParams }: CoachesPagePro
             });
 
             return (
-              <article className="surface-card p-4 sm:p-5" key={key}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <details className="ui-collapsible surface-card p-4 sm:p-5" key={key}>
+                <summary className="flex cursor-pointer flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h2 className="section-title">{profileName(profile)}</h2>
-                    <p className="mt-1 text-sm font-semibold text-slate-600">{profile?.email ?? "Email unavailable"}</p>
-                    <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">{coachRoleLabel}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-600">{coachRoleLabel} · {stats?.nextLesson ? `Next ${formatDateTime(stats.nextLesson)}` : "No upcoming lesson"}</p>
                   </div>
                   <span className={`ui-chip ${active ? "ui-chip-success" : "ui-chip-warning"}`}>{active ? "Ready" : "Access inactive"}</span>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
+                </summary>
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <p className="text-sm font-semibold text-slate-600">{profile?.email ?? "Email unavailable"}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
                   {chips.map((chip) => (
                     <span className={`ui-chip ${chip.tone}`} key={chip.label}>
                       {chip.label}
                     </span>
                   ))}
-                </div>
+                  </div>
                 <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-600">
                   <p>Assigned: {assignedAt ? formatDateTime(assignedAt) : "To be confirmed"}</p>
                   <p>Next lesson: {stats?.nextLesson ? formatDateTime(stats.nextLesson) : "No upcoming lesson"}</p>
@@ -429,7 +430,8 @@ export default async function CoachRCoachesPage({ searchParams }: CoachesPagePro
                     </button>
                   </form>
                 ) : null}
-              </article>
+                </div>
+              </details>
             );
           })
         ) : (

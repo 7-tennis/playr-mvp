@@ -86,7 +86,7 @@ export function roleLabel(role: UserRole) {
 }
 
 export function canAccessCoachR(role: UserRole) {
-  return role === "coach" || role === "head_coach" || role === "platform_admin";
+  return role === "coach" || role === "head_coach" || role === "club_admin" || role === "platform_admin";
 }
 
 export function canAccessHeadCoach(role: UserRole) {
@@ -377,5 +377,5 @@ function requiredCoachRRoles(permission: CoachRPermission) {
     return ["head_coach", "platform_admin"] as UserRole[];
   }
 
-  return ["coach", "head_coach", "platform_admin"] as UserRole[];
+  return ["coach", "head_coach", "club_admin", "platform_admin"] as UserRole[];
 }

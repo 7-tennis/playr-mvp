@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { searchAcademyConnectionCandidates } from "@/lib/academy-students";
 import { assertCoachRAccess } from "@/lib/permissions";
 
 function text(formData: FormData, key: string) {
@@ -12,7 +13,22 @@ function text(formData: FormData, key: string) {
 function invitationError(error: { message?: string } | null | undefined, fallback: string) {
   const message = error?.message ?? "";
 
-  if (["access", "confirm_required", "duplicate_invitation", "invalid_venue", "invitation_closed", "missing_fields"].includes(message)) {
+  if (
+    [
+      "access",
+      "already_connected",
+      "confirm_required",
+      "duplicate_invitation",
+      "invalid_coach",
+      "invalid_player",
+      "invalid_student",
+      "invalid_venue",
+      "invitation_closed",
+      "missing_fields",
+      "parent_contact_missing",
+      "player_contact_missing"
+    ].includes(message)
+  ) {
     return message;
   }
 
@@ -45,13 +61,89 @@ function revalidateStudentSurfaces() {
   revalidatePath("/dashboard/coachr");
   revalidatePath("/dashboard/organisations/invitations");
   revalidatePath("/dashboard/notifications");
+  revalidatePath("/dashboard/players/[id]", "page");
+}
+
+export async function searchExistingPlayerConnections(formData: FormData) {
+  const context = await assertCoachRAccess("coachr:students");
+  const query = text(formData, "query");
+  const venueId = context.kind === "authenticated" ? context.venueId ?? context.activeOrganisationMembership?.venue_id : null;
+
+  if (context.kind !== "authenticated" || !venueId || query.length < 3) {
+    return { candidates: [], error: "search_too_broad" as const };
+  }
+
+  const result = await searchAcademyConnectionCandidates(context, query, venueId);
+  return {
+    candidates: result.candidates,
+    error: result.error
+  };
+}
+
+export async function requestExistingPlayerLink(formData: FormData) {
+  const context = await assertCoachRAccess("coachr:students");
+  const playerProfileId = text(formData, "playerProfileId");
+  const venueId = context.kind === "authenticated" ? context.venueId ?? context.activeOrganisationMembership?.venue_id : null;
+
+  if (context.kind !== "authenticated" || !venueId || !playerProfileId) {
+    redirect("/dashboard/coachr/students?error=missing_fields");
+  }
+
+  const { data: token, error } = await context.supabase.rpc("coachr_request_existing_player_connection", {
+    p_coach_profile_id: text(formData, "coachProfileId") || null,
+    p_player_profile_id: playerProfileId,
+    p_proposal: {},
+    p_venue_id: venueId
+  });
+
+  if (error || !token) {
+    console.error("CoachR existing player connection request failed", {
+      code: error?.code,
+      role: context.role,
+      venueId
+    });
+    redirect(`/dashboard/coachr/students?error=${invitationError(error, "player_invite_failed")}`);
+  }
+
+  revalidateStudentSurfaces();
+  redirect(`/dashboard/coachr/students?message=player_invited&token=${token}`);
+}
+
+export async function assignStudentCoach(formData: FormData) {
+  const context = await assertCoachRAccess("coachr:students");
+  const playerProfileId = text(formData, "playerProfileId");
+  const coachProfileId = text(formData, "coachProfileId");
+  const venueId = context.kind === "authenticated" ? context.venueId ?? context.activeOrganisationMembership?.venue_id : null;
+
+  if (context.kind !== "authenticated" || !venueId || !playerProfileId || !coachProfileId) {
+    redirect("/dashboard/coachr/students?error=missing_fields");
+  }
+
+  const { error } = await context.supabase.rpc("coachr_assign_student_coach", {
+    p_coach_profile_id: coachProfileId,
+    p_player_profile_id: playerProfileId,
+    p_venue_id: venueId
+  });
+
+  if (error) {
+    console.error("CoachR student coach assignment failed", {
+      code: error.code,
+      role: context.role,
+      venueId
+    });
+    redirect(`/dashboard/coachr/students?error=${invitationError(error, "assignment_failed")}`);
+  }
+
+  revalidateStudentSurfaces();
+  redirect("/dashboard/coachr/students?message=coach_assigned");
 }
 
 export async function requestAdultPlayerLink(formData: FormData) {
   const context = await assertCoachRAccess("coachr:students");
   const playerEmail = text(formData, "playerEmail").toLowerCase();
+  const venueId = context.kind === "authenticated" ? context.venueId ?? context.activeOrganisationMembership?.venue_id : null;
 
-  if (context.kind !== "authenticated" || !context.venueId || !playerEmail) {
+  if (context.kind !== "authenticated" || !venueId || !playerEmail) {
     redirect("/dashboard/coachr/students?error=missing_fields");
   }
 
@@ -61,11 +153,11 @@ export async function requestAdultPlayerLink(formData: FormData) {
     p_invited_name: text(formData, "playerName") || null,
     p_invited_phone: text(formData, "playerPhone") || null,
     p_proposal: proposal(formData),
-    p_venue_id: context.venueId
+    p_venue_id: venueId
   });
 
   if (error || !token) {
-    console.error("CoachR adult player link request failed", { code: error?.code, role: context.role, venueId: context.venueId });
+    console.error("CoachR adult player link request failed", { code: error?.code, role: context.role, venueId });
     redirect(`/dashboard/coachr/students?error=${invitationError(error, "player_invite_failed")}`);
   }
 
@@ -80,8 +172,9 @@ export async function requestPlayerLink(formData: FormData) {
   const parentPhone = text(formData, "parentPhone");
   const playerFirstName = text(formData, "playerFirstName");
   const playerLastName = text(formData, "playerLastName");
+  const venueId = context.kind === "authenticated" ? context.venueId ?? context.activeOrganisationMembership?.venue_id : null;
 
-  if (context.kind !== "authenticated" || !context.venueId || !parentEmail || !playerFirstName || !playerLastName) {
+  if (context.kind !== "authenticated" || !venueId || !parentEmail || !playerFirstName || !playerLastName) {
     redirect("/dashboard/coachr/students?error=missing_fields");
   }
 
@@ -102,11 +195,11 @@ export async function requestPlayerLink(formData: FormData) {
     p_parent_profile_id: null,
     p_target_junior_profile_id: null,
     p_target_profile_id: null,
-    p_venue_id: context.venueId
+    p_venue_id: venueId
   });
 
   if (error || !token) {
-    console.error("CoachR player link request failed", { error, role: context.role, venueId: context.venueId });
+    console.error("CoachR player link request failed", { error, role: context.role, venueId });
     redirect(`/dashboard/coachr/students?error=${invitationError(error, "player_invite_failed")}`);
   }
 

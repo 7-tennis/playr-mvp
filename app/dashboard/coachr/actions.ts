@@ -160,7 +160,11 @@ async function preflightCoachLessonCreate({
     courtId
       ? context.supabase.from("courts").select("id,name,venue_id,status").eq("id", courtId).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-    context.supabase.from("profiles").select("id").eq("id", playerId).maybeSingle(),
+    context.supabase.rpc("coachr_player_is_active_student", {
+      p_coach_profile_id: coachId,
+      p_player_profile_id: playerId,
+      p_venue_id: venueId
+    }),
     context.supabase.rpc("coach_profile_can_teach_at_venue", {
       check_coach_id: coachId,
       check_user_id: context.user.id,
@@ -181,9 +185,9 @@ async function preflightCoachLessonCreate({
     return "court_venue";
   }
   if (playerResult.error) {
-    return "create_failed";
+    return lessonErrorValue(playerResult.error, "create_failed");
   }
-  if (!playerResult.data) {
+  if (playerResult.data !== true) {
     return "invalid_student";
   }
 

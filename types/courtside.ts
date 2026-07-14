@@ -235,6 +235,7 @@ export interface OrganisationInvitation {
   token: string;
   invited_by_user_id: string;
   accepted_profile_id: string | null;
+  accepted_by_profile_id: string | null;
   accepted_by_user_id: string | null;
   target_profile_id: string | null;
   target_junior_profile_id: string | null;
@@ -246,6 +247,55 @@ export interface OrganisationInvitation {
   cancelled_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AcademyStudentCoachAssignment {
+  assignmentId: string;
+  coachProfileId: string;
+  coachName: string;
+  assignedAt: string;
+}
+
+export interface ActiveAcademyStudent {
+  organisationPlayerLinkId: string;
+  venueId: string;
+  playerProfileId: string;
+  firstName: string;
+  lastName: string;
+  isJunior: boolean;
+  parentProfileId: string | null;
+  parentName: string | null;
+  juniorStage: JuniorStage | null;
+  playerLevel: PlayerLevel | null;
+  status: "active";
+  proposalStatus: CoachingProposalStatus;
+  connectionContext: Record<string, unknown>;
+  approvedAt: string | null;
+  assignedCoaches: AcademyStudentCoachAssignment[];
+  assignedToCurrentUser: boolean;
+}
+
+export interface AcademyConnectionCandidate {
+  playerProfileId: string;
+  playerName: string;
+  isJunior: boolean;
+  parentProfileId: string | null;
+  parentName: string | null;
+  maskedEmail: string | null;
+  relationshipStatus: OrganisationLinkStatus | "not_connected";
+}
+
+export interface PlayerConnectionAcceptanceResult {
+  status: OrganisationInvitationStatus;
+  alreadyAccepted: boolean;
+  invitationId: string;
+  acceptedProfileId?: string;
+  acceptedByProfileId?: string;
+  organisationPlayerLinkId?: string;
+  coachAssignmentId?: string;
+  coachAssignmentStatus?: "active" | "unassigned";
+  proposalStatus?: CoachingProposalStatus;
+  warning?: string;
 }
 
 export interface OrganisationPlayerLink {

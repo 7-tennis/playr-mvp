@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CoachRCourtPicker } from "@/components/coachr-court-picker";
+import { CoachRStudentSelector } from "@/components/coachr-student-selector";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { ArrowRightIcon, BookingIcon, ChevronDownIcon, EntriesIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
@@ -35,6 +36,7 @@ type CoachRSchedulePageProps = {
     lesson?: string;
     lesson_error?: string;
     new?: string;
+    player?: string;
     week?: string;
   };
 };
@@ -106,7 +108,7 @@ function errorMessage(value?: string) {
     case "invalid_student":
       return "Choose a player profile that is available to your CoachR role.";
     case "no_students":
-      return "No student profiles are available yet. Add or select an existing PlayR profile first.";
+      return "No active academy student was selected. Open Students to connect or assign a player first.";
     case "missing_rpc":
       return "CoachR lesson setup is missing a required database function. Run the latest Supabase migrations.";
     case "access":
@@ -225,8 +227,40 @@ function dateTimeLocalValue(value: string) {
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }
 
-function dateTimeLocalFromSerial(serial: number, hour: number) {
-  return `${serialDateInput(serial)}T${String(hour).padStart(2, "0")}:00`;
+function recordValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function proposalText(proposal: Record<string, unknown> | null, key: string) {
+  const value = proposal?.[key];
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+function validDate(value: string, fallback: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
+}
+
+function validTime(value: string, fallback: string) {
+  return /^\d{2}:\d{2}$/.test(value) ? value : fallback;
+}
+
+function addMinutes(time: string, minutes: number) {
+  const [hours, minute] = time.split(":").map(Number);
+  const total = Math.min(23 * 60 + 59, Math.max(0, hours * 60 + minute + minutes));
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function proposedDayOfWeek(value: string, fallback: number) {
+  const days = new Map([
+    ["monday", 1],
+    ["tuesday", 2],
+    ["wednesday", 3],
+    ["thursday", 4],
+    ["friday", 5],
+    ["saturday", 6],
+    ["sunday", 7]
+  ]);
+  return days.get(value.trim().toLowerCase()) ?? fallback;
 }
 
 function isoDayOfWeek(serial: number) {
@@ -295,7 +329,9 @@ function setupIssues({
   contextVenueId,
   coachCount,
   courtCount,
-  playerCount
+  playerCount,
+  pendingPlayerInvitationCount,
+  studentLoadError
 }: {
   coachOnly: boolean;
   contextAdultProfileId: string | null;
@@ -303,6 +339,8 @@ function setupIssues({
   coachCount: number;
   courtCount: number;
   playerCount: number;
+  pendingPlayerInvitationCount: number;
+  studentLoadError: "missing_organisation" | "load_failed" | null;
 }) {
   const issues: { title: string; text: string; tone: "error" | "warning" }[] = [];
 
@@ -334,10 +372,20 @@ function setupIssues({
       tone: "warning"
     });
   }
-  if (playerCount === 0) {
+  if (studentLoadError === "load_failed") {
     issues.push({
-      title: "No students available",
-      text: "No PlayR profiles are available to place into a lesson yet.",
+      title: "Students could not be loaded",
+      text: "Check the active organisation or try again. This is a loading problem, not an empty academy.",
+      tone: "error"
+    });
+  } else if (playerCount === 0) {
+    issues.push({
+      title: coachOnly ? "No assigned students" : "No connected students",
+      text: coachOnly
+        ? "A Head Coach can assign an active academy student to this coach."
+        : pendingPlayerInvitationCount > 0
+          ? "Student invitations are awaiting approval. Lessons can be created once a player connection is accepted."
+          : "Invite a student or request access to an existing PlayR profile. Lessons can be created after approval.",
       tone: "warning"
     });
   }
@@ -752,6 +800,8 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
   const canFilterByCoach = !coachOnly && options.coachProfiles.length > 0;
   const requestedCoachId = searchParams?.coach ?? "";
   const selectedCoachId = canFilterByCoach && options.coachProfiles.some((profile) => profile.id === requestedCoachId) ? requestedCoachId : "";
+  const requestedPlayerId = searchParams?.player ?? "";
+  const selectedStudent = options.studentOptions.find((student) => student.profile.id === requestedPlayerId) ?? null;
   const visibleLessons = selectedCoachId ? lessons.filter((lesson) => lesson.coach_id === selectedCoachId) : lessons;
   const playerOptions = mergeProfiles(options.playerProfiles, visibleLessons);
   const lessonPlayers = visibleLessons.map((lesson) => lesson.player).filter(isProfile).length;
@@ -761,16 +811,45 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
     contextAdultProfileId: access.context.adultProfileId,
     contextVenueId: access.context.venueId,
     courtCount: options.courts.length,
-    playerCount: playerOptions.length
+    pendingPlayerInvitationCount: options.pendingPlayerInvitationCount,
+    playerCount: options.studentOptions.length,
+    studentLoadError: options.studentLoadError
   });
   const returnTo = scheduleHref(selectedWeekStart, selectedCoachId);
   const createHref = scheduleHref(selectedWeekStart, selectedCoachId, true);
-  const defaultVenueId = access.context.venueId ?? options.venues[0]?.id ?? "";
+  const defaultVenueId = access.context.venueId ?? access.context.activeOrganisationMembership?.venue_id ?? options.venues[0]?.id ?? "";
   const canManageCourtAccess = access.context.role === "platform_admin" || canManageOrganisationCourtAccess(access.context.activeOrganisationRole);
-  const defaultCoachId = coachOnly ? access.context.adultProfileId ?? "" : selectedCoachId || options.coachProfiles[0]?.id || access.context.adultProfileId || "";
   const defaultCreateSerial = todaySerial >= selectedWeekStart && todaySerial < selectedWeekEnd ? todaySerial : selectedWeekStart;
-  const defaultRecurrenceEndSerial = defaultCreateSerial + 12 * 7 * DAY_MS;
-  const defaultDayOfWeek = isoDayOfWeek(defaultCreateSerial);
+  const proposal = recordValue(selectedStudent?.connectionContext.proposal);
+  const proposalCoachId = typeof selectedStudent?.connectionContext.coachProfileId === "string" ? selectedStudent.connectionContext.coachProfileId : "";
+  const validProposalCoachId = options.coachProfiles.some((coach) => coach.id === proposalCoachId) ? proposalCoachId : "";
+  const assignedStudentCoachId = selectedStudent?.assignedCoachIds.find((coachId) => options.coachProfiles.some((coach) => coach.id === coachId)) ?? "";
+  const defaultCoachId = coachOnly
+    ? access.context.adultProfileId ?? ""
+    : selectedCoachId || validProposalCoachId || assignedStudentCoachId || options.coachProfiles[0]?.id || access.context.adultProfileId || "";
+  const defaultPlayerId = selectedStudent?.profile.id ?? "";
+  const fallbackCreateDate = serialDateInput(defaultCreateSerial);
+  const proposalStartDate = validDate(proposalText(proposal, "startDate"), fallbackCreateDate);
+  const defaultRecurrenceEndDate = new Date(Date.parse(`${proposalStartDate}T00:00:00Z`) + 12 * 7 * DAY_MS).toISOString().slice(0, 10);
+  const proposalStartTime = validTime(proposalText(proposal, "startTime"), "14:00");
+  const proposalDuration = Number.parseInt(proposalText(proposal, "durationMinutes"), 10);
+  const proposalEndTime = addMinutes(proposalStartTime, Number.isFinite(proposalDuration) && proposalDuration > 0 ? proposalDuration : 60);
+  const defaultDayOfWeek = proposedDayOfWeek(proposalText(proposal, "day"), isoDayOfWeek(defaultCreateSerial));
+  const defaultRepeatMode = proposalText(proposal, "recurrence") === "weekly" ? "weekly" : "none";
+  const proposedLessonType = coachLessonTypes.includes(proposalText(proposal, "lessonType") as (typeof coachLessonTypes)[number])
+    ? proposalText(proposal, "lessonType")
+    : "private";
+  const studentSelectorOptions = options.studentOptions.map((student) => ({
+    context: [
+      student.profile.is_junior ? "Junior" : "Adult",
+      student.parentName ? `Parent: ${student.parentName}` : null,
+      student.assignedCoachNames.length > 0 ? student.assignedCoachNames.join(", ") : "Unassigned",
+      "Active"
+    ].filter(Boolean).join(" · "),
+    id: student.profile.id,
+    name: profileDisplayName(student.profile),
+    searchText: student.searchText
+  }));
   const weekDays = Array.from({ length: 7 }, (_, index) => {
     const serial = selectedWeekStart + index * DAY_MS;
     const dayLessons = visibleLessons
@@ -869,15 +948,21 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
         <form action={createCoachLesson} className="grid gap-3">
           <input name="returnTo" type="hidden" value={returnTo} />
 
+          {selectedStudent && proposal ? (
+            <div className="rounded-lg border border-court-teal/25 bg-court-mist p-3 text-sm font-semibold text-court-navy">
+              Proposed lesson details for <span className="font-black">{profileDisplayName(selectedStudent.profile)}</span> have been loaded as editable defaults. Review them before saving.
+            </div>
+          ) : null}
+
           <fieldset className="grid gap-2 sm:grid-cols-2">
             <legend className="mb-2 text-sm font-black text-court-navy">Lesson plan</legend>
             <label className="rounded-lg border border-court-teal bg-court-mist p-3 text-sm font-semibold text-court-navy">
-              <input className="mr-2" defaultChecked name="repeatMode" type="radio" value="none" />
+              <input className="mr-2" defaultChecked={defaultRepeatMode === "none"} name="repeatMode" type="radio" value="none" />
               Once-off lesson
               <span className="mt-1 block text-xs font-normal leading-5 text-slate-600">Use the one-off start and end fields.</span>
             </label>
             <label className="rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-court-navy">
-              <input className="mr-2" name="repeatMode" type="radio" value="weekly" />
+              <input className="mr-2" defaultChecked={defaultRepeatMode === "weekly"} name="repeatMode" type="radio" value="weekly" />
               Recurring weekly lesson
               <span className="mt-1 block text-xs font-normal leading-5 text-slate-600">Use the weekly repeat settings below.</span>
             </label>
@@ -913,28 +998,23 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
               </select>
             </label>
           ) : (
-            <label className="text-sm font-semibold text-slate-700">
-              Coach profile ID
-              <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="coachId" placeholder="Coach profile UUID" required />
-            </label>
+            <div className="ui-empty-card">No active coaches are available for this organisation. Add or activate a coach before creating a lesson.</div>
           )}
 
-          <label className="text-sm font-semibold text-slate-700">
-            Player
-            {playerOptions.length > 0 ? (
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="playerId" required>
-                <option value="">Choose player</option>
-                {playerOptions.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profileDisplayName(profile)}
-                    {profile.is_junior ? " (junior)" : ""}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="playerId" placeholder="Player profile UUID" required />
-            )}
-          </label>
+          {studentSelectorOptions.length > 0 ? (
+            <CoachRStudentSelector defaultValue={defaultPlayerId} options={studentSelectorOptions} />
+          ) : (
+            <div className="ui-empty-card">
+              {options.studentLoadError === "load_failed"
+                ? "Students could not be loaded. Check the active organisation or try again."
+                : coachOnly
+                  ? "No students are assigned to this coach yet."
+                  : options.pendingPlayerInvitationCount > 0
+                    ? "Student invitations are awaiting approval."
+                    : "No students are connected to this academy yet."}
+              <div className="mt-3"><Link className="btn-secondary inline-flex" href="/dashboard/coachr/students">Open Students</Link></div>
+            </div>
+          )}
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-black text-court-navy">Weekly repeat settings</p>
@@ -942,11 +1022,11 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <label className="text-sm font-semibold text-slate-700">
                 Start date
-                <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={serialDateInput(defaultCreateSerial)} name="recurrenceStartDate" type="date" />
+                <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={proposalStartDate} name="recurrenceStartDate" type="date" />
               </label>
               <label className="text-sm font-semibold text-slate-700">
                 End date
-                <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={serialDateInput(defaultRecurrenceEndSerial)} name="recurrenceEndDate" type="date" />
+                <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultRecurrenceEndDate} name="recurrenceEndDate" type="date" />
               </label>
               <label className="text-sm font-semibold text-slate-700">
                 Day
@@ -963,11 +1043,11 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-sm font-semibold text-slate-700">
                   Start time
-                  <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="14:00" name="lessonStartTime" type="time" />
+                  <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={proposalStartTime} name="lessonStartTime" type="time" />
                 </label>
                 <label className="text-sm font-semibold text-slate-700">
                   End time
-                  <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="15:00" name="lessonEndTime" type="time" />
+                  <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={proposalEndTime} name="lessonEndTime" type="time" />
                 </label>
               </div>
             </div>
@@ -976,18 +1056,18 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700">
               One-off start
-              <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={dateTimeLocalFromSerial(defaultCreateSerial, 14)} name="startTime" required type="datetime-local" />
+              <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={`${proposalStartDate}T${proposalStartTime}`} name="startTime" required type="datetime-local" />
             </label>
             <label className="text-sm font-semibold text-slate-700">
               One-off end
-              <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={dateTimeLocalFromSerial(defaultCreateSerial, 15)} name="endTime" required type="datetime-local" />
+              <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={`${proposalStartDate}T${proposalEndTime}`} name="endTime" required type="datetime-local" />
             </label>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700">
               Type
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="lessonType">
+              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={proposedLessonType} name="lessonType">
                 {coachLessonTypes.map((type) => (
                   <option key={type} value={type}>
                     {formatLabel(type)}
@@ -997,11 +1077,18 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             </label>
           </div>
 
-          <CoachRCourtPicker canManageAccess={canManageCourtAccess} courts={options.courts} externalVenues={options.externalVenues} organisationId={defaultVenueId} />
+          <CoachRCourtPicker
+            canManageAccess={canManageCourtAccess}
+            courts={options.courts}
+            defaultCustomLocation={proposalText(proposal, "venue")}
+            defaultLocationType={proposalText(proposal, "venue") ? "custom" : "managed_court"}
+            externalVenues={options.externalVenues}
+            organisationId={defaultVenueId}
+          />
 
           <label className="text-sm font-semibold text-slate-700">
             Title
-            <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue="Coaching lesson" name="title" required />
+            <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={selectedStudent ? `${profileDisplayName(selectedStudent.profile)} coaching` : "Coaching lesson"} name="title" required />
           </label>
 
           <label className="text-sm font-semibold text-slate-700">
@@ -1009,7 +1096,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             <textarea className="mt-2 min-h-20 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="notes" placeholder="Optional lesson notes" />
           </label>
 
-          <button className="btn-primary" type="submit">
+          <button className="btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!defaultCoachId || studentSelectorOptions.length === 0} type="submit">
             Create Lesson
           </button>
         </form>

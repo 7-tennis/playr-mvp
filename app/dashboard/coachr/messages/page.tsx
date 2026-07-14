@@ -84,8 +84,8 @@ export default async function CoachRMessagesPage({ searchParams }: CoachRMessage
       {messages.length > 0 ? (
         <section className="grid gap-3">
           {messages.map((message) => (
-            <article className={`rounded-lg border bg-white p-4 shadow-sm ${message.read_at ? "border-slate-200" : "border-court-teal/40 ring-2 ring-court-mist"}`} key={message.id}>
-              <div className="flex items-start gap-3">
+            <details className={`ui-collapsible rounded-lg border bg-white p-4 shadow-sm ${message.read_at ? "border-slate-200" : "border-court-teal/40 ring-2 ring-court-mist"}`} key={message.id}>
+              <summary className="flex cursor-pointer items-start gap-3">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded bg-court-mist text-court-teal">
                   <BellIcon size={20} />
                 </span>
@@ -95,18 +95,20 @@ export default async function CoachRMessagesPage({ searchParams }: CoachRMessage
                     <span className={`ui-chip ${message.read_at ? "ui-chip-muted" : "ui-chip-brand"}`}>{message.read_at ? "Read" : "Unread"}</span>
                     <span className="ui-chip ui-chip-muted">{formatLabel(message.type)}</span>
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-700">{message.message}</p>
                   <p className="mt-2 flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-slate-500">
                     <TimeIcon size={13} /> {formatDateTime(message.created_at)}
                   </p>
                 </div>
+              </summary>
+              <div className="mt-3 border-t border-slate-100 pt-3 sm:pl-14">
+                <p className="text-sm leading-6 text-slate-700">{message.message}</p>
                 {message.href ? (
-                  <Link className="btn-secondary shrink-0 px-3 py-2" href={message.href}>
+                  <Link className="btn-secondary mt-3 inline-flex px-3 py-2" href={message.href}>
                     Open
                   </Link>
                 ) : null}
               </div>
-            </article>
+            </details>
           ))}
         </section>
       ) : (

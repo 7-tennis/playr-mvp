@@ -1,5 +1,7 @@
 import type { PermissionContext } from "@/lib/permissions";
+import { activeAcademyStudentName, activeCoachRVenueId, loadActiveAcademyStudents } from "@/lib/academy-students";
 import type {
+  ActiveAcademyStudent,
   CoachLesson,
   CoachLessonAttendance,
   CoachLessonAttendanceStatus,
@@ -49,9 +51,22 @@ export type CoachLessonWithRelations = CoachLesson & {
 export type CoachLessonOptionData = {
   coachProfiles: CoachLessonProfile[];
   playerProfiles: CoachLessonProfile[];
+  studentOptions: CoachLessonStudentOption[];
+  studentLoadError: "missing_organisation" | "load_failed" | null;
+  pendingPlayerInvitationCount: number;
   courts: CoachLessonCourt[];
   externalVenues: CoachLessonExternalVenue[];
   venues: CoachLessonVenue[];
+};
+
+export type CoachLessonStudentOption = {
+  profile: CoachLessonProfile;
+  parentName: string | null;
+  assignedCoachNames: string[];
+  assignedCoachIds: string[];
+  connectionContext: ActiveAcademyStudent["connectionContext"];
+  proposalStatus: ActiveAcademyStudent["proposalStatus"];
+  searchText: string;
 };
 
 type AuthenticatedContext = Extract<PermissionContext, { kind: "authenticated" }>;
@@ -197,9 +212,12 @@ export async function loadCoachLessonsForRange(context: AuthenticatedContext, st
 }
 
 export async function loadCoachLessonOptions(context: AuthenticatedContext): Promise<CoachLessonOptionData> {
+  const selectedVenueId = activeCoachRVenueId(context);
   const coachRoleQuery =
     context.role === "platform_admin"
-      ? context.supabase.from("admin_users").select("user_id,venue_id,role").in("role", ["coach", "head_coach"]).is("deactivated_at", null).limit(160)
+      ? selectedVenueId
+        ? context.supabase.from("admin_users").select("user_id,venue_id,role").in("role", ["coach", "head_coach"]).eq("venue_id", selectedVenueId).is("deactivated_at", null).limit(160)
+        : null
       : context.venueId
         ? context.supabase
             .from("admin_users")
@@ -211,12 +229,15 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
         : null;
   const coachMembershipQuery =
     context.role === "platform_admin"
-      ? context.supabase
+      ? selectedVenueId
+        ? context.supabase
           .from("organisation_memberships")
           .select("profile_id,user_id,venue_id,role,status")
           .in("role", ["head_coach", "coach", "assistant_coach"])
           .eq("status", "active")
+          .eq("venue_id", selectedVenueId)
           .limit(220)
+        : null
       : context.venueId
         ? context.supabase
             .from("organisation_memberships")
@@ -226,24 +247,7 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
             .eq("venue_id", context.venueId)
             .limit(220)
         : null;
-  const linkedPlayerQuery =
-    context.role === "platform_admin"
-      ? null
-      : context.role === "coach"
-        ? null
-        : context.venueId
-        ? context.supabase.from("organisation_player_links").select("player_profile_id").eq("venue_id", context.venueId).eq("status", "active").limit(240)
-        : null;
-  const assignedPlayerQuery =
-    context.role === "platform_admin"
-      ? null
-      : context.role === "coach" && context.adultProfileId && context.venueId
-        ? context.supabase.from("coach_player_assignments").select("player_profile_id").eq("coach_profile_id", context.adultProfileId).eq("venue_id", context.venueId).eq("status", "active").limit(240)
-        : context.venueId
-          ? context.supabase.from("coach_player_assignments").select("player_profile_id").eq("venue_id", context.venueId).eq("status", "active").limit(240)
-          : null;
-
-  const [ownCoachProfileResult, coachRolesResult, coachMembershipsResult, linkedPlayersResult, assignedPlayersResult, authorisedCourtsResult, venuesResult, externalVenuesResult] = await Promise.all([
+  const [ownCoachProfileResult, coachRolesResult, coachMembershipsResult, activeStudentsResult, pendingInvitationsResult, authorisedCourtsResult, venuesResult, externalVenuesResult] = await Promise.all([
     context.adultProfileId
       ? context.supabase
           .from("profiles")
@@ -254,19 +258,26 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
       : Promise.resolve({ data: null, error: null }),
     coachRoleQuery ?? Promise.resolve({ data: [], error: null }),
     coachMembershipQuery ?? Promise.resolve({ data: [], error: null }),
-    linkedPlayerQuery ?? Promise.resolve({ data: [], error: null }),
-    assignedPlayerQuery ?? Promise.resolve({ data: [], error: null }),
-    context.venueId
-      ? context.supabase.rpc("coachr_authorised_courts", { p_organisation_id: context.venueId })
+    loadActiveAcademyStudents(context),
+    selectedVenueId
+      ? context.supabase
+          .from("organisation_invitations")
+          .select("id", { count: "exact", head: true })
+          .eq("venue_id", selectedVenueId)
+          .in("invitation_kind", ["player", "player_junior"])
+          .eq("status", "pending")
+      : Promise.resolve({ count: 0, error: null }),
+    selectedVenueId
+      ? context.supabase.rpc("coachr_authorised_courts", { p_organisation_id: selectedVenueId })
       : Promise.resolve({ data: [], error: null }),
     context.venueId && context.role !== "platform_admin"
       ? context.supabase.from("venues").select("id,name").eq("id", context.venueId).order("name", { ascending: true })
       : context.supabase.from("venues").select("id,name").eq("status", "active").order("name", { ascending: true }),
-    context.venueId
+    selectedVenueId
       ? context.supabase
           .from("organisation_external_venues")
           .select("id,name,address,court_names")
-          .eq("organisation_id", context.venueId)
+          .eq("organisation_id", selectedVenueId)
           .eq("status", "active")
           .order("name", { ascending: true })
       : Promise.resolve({ data: [], error: null })
@@ -286,15 +297,15 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
     venue_id: court.owner_venue_id
   }));
 
-  if (authorisedCourtsResult.error && context.venueId) {
+  if (authorisedCourtsResult.error && selectedVenueId) {
     console.warn("CoachR shared courts RPC unavailable; using owned-court compatibility query", {
       code: authorisedCourtsResult.error.code,
-      venueId: context.venueId
+      venueId: selectedVenueId
     });
     const ownedCourtsResult = await context.supabase
       .from("courts")
       .select("id,name,venue_id,venue:venue_id(name)")
-      .eq("venue_id", context.venueId)
+      .eq("venue_id", selectedVenueId)
       .eq("status", "active")
       .order("sort_order", { ascending: true });
 
@@ -334,31 +345,36 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
             .order("first_name", { ascending: true })
             .limit(220)
         : { data: [], error: null };
-  const playerProfileIds = Array.from(
-    new Set([
-      ...(((linkedPlayersResult.data ?? []) as { player_profile_id: string | null }[]).map((row) => row.player_profile_id).filter(Boolean) as string[]),
-      ...(((assignedPlayersResult.data ?? []) as { player_profile_id: string | null }[]).map((row) => row.player_profile_id).filter(Boolean) as string[])
-    ])
-  );
-  const playerProfilesResult =
-    context.role === "platform_admin"
-      ? await context.supabase
-          .from("profiles")
-          .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
-          .order("first_name", { ascending: true })
-          .limit(160)
-      : playerProfileIds.length > 0
-        ? await context.supabase
-            .from("profiles")
-            .select("id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level")
-            .in("id", playerProfileIds)
-            .order("first_name", { ascending: true })
-            .limit(220)
-        : { data: [], error: null };
+  const studentOptions = activeStudentsResult.students.map((student): CoachLessonStudentOption => {
+    const profile: CoachLessonProfile = {
+      first_name: student.firstName,
+      id: student.playerProfileId,
+      is_junior: student.isJunior,
+      junior_stage: student.juniorStage,
+      last_name: student.lastName,
+      parent_profile_id: student.parentProfileId,
+      player_level: student.playerLevel ?? "unknown",
+      user_id: null
+    };
+    const assignedCoachNames = student.assignedCoaches.map((coach) => coach.coachName);
+
+    return {
+      assignedCoachIds: student.assignedCoaches.map((coach) => coach.coachProfileId),
+      assignedCoachNames,
+      connectionContext: student.connectionContext,
+      parentName: student.parentName,
+      profile,
+      proposalStatus: student.proposalStatus,
+      searchText: [activeAcademyStudentName(student), student.parentName, ...assignedCoachNames].filter(Boolean).join(" ")
+    };
+  });
 
   return {
     coachProfiles: ((coachProfilesResult.data ?? []) as CoachLessonProfile[]) ?? [],
-    playerProfiles: ((playerProfilesResult.data ?? []) as CoachLessonProfile[]) ?? [],
+    playerProfiles: studentOptions.map((student) => student.profile),
+    pendingPlayerInvitationCount: pendingInvitationsResult.count ?? 0,
+    studentLoadError: activeStudentsResult.error,
+    studentOptions,
     courts,
     externalVenues: ((externalVenuesResult.data ?? []) as CoachLessonExternalVenue[]) ?? [],
     venues: ((venuesResult.data ?? []) as CoachLessonVenue[]) ?? []

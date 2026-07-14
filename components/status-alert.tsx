@@ -1,6 +1,6 @@
 type StatusAlertProps = {
   message: string | null | undefined;
-  tone?: "success" | "error" | "info";
+  tone?: "success" | "warning" | "error" | "info";
   className?: string;
 };
 
@@ -11,6 +11,7 @@ export function StatusAlert({ message, tone = "info", className = "" }: StatusAl
 
   const styles = {
     success: "border-emerald-200 bg-emerald-50 text-emerald-950",
+    warning: "border-amber-200 bg-amber-50 text-amber-950",
     error: "border-amber-200 bg-amber-50 text-amber-950",
     info: "border-slate-200 bg-white text-slate-700"
   };

@@ -1,5 +1,11 @@
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { CoachRPlayerConnectionSearch } from "@/components/coachr-player-connection-search";
+import {
+  academyStudentProposal,
+  activeAcademyStudentName,
+  loadActiveAcademyStudents
+} from "@/lib/academy-students";
 import {
   attendanceResultLabel,
   coachLessonTypes,
@@ -11,9 +17,14 @@ import {
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
 import { invitationLink } from "@/lib/organisations";
-import type { CoachLessonAttendanceResult, CoachPlayerAssignment, OrganisationInvitation } from "@/types/courtside";
+import type { ActiveAcademyStudent, CoachLessonAttendanceResult, OrganisationInvitation } from "@/types/courtside";
 import { CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "../coachr-shared";
-import { cancelPlayerLinkRequest, requestAdultPlayerLink, requestPlayerLink } from "./actions";
+import {
+  assignStudentCoach,
+  cancelPlayerLinkRequest,
+  requestAdultPlayerLink,
+  requestPlayerLink
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +40,6 @@ type CoachRStudentsPageProps = {
   };
 };
 
-type CoachPlayerAssignmentWithProfiles = Pick<CoachPlayerAssignment, "id" | "coach_profile_id" | "player_profile_id" | "venue_id" | "status" | "assigned_at"> & {
-  coach: CoachLessonProfile | null;
-  player: CoachLessonProfile | null;
-};
 type PlayerLinkInvitation = Pick<OrganisationInvitation, "id" | "invitation_kind" | "invited_email" | "invited_name" | "status" | "token" | "expires_at" | "metadata" | "created_at">;
 
 type StudentSummary = {
@@ -42,6 +49,10 @@ type StudentSummary = {
   stage: string;
   assignedCoach: string;
   assignedCoachId: string;
+  assignedCoachIds: string[];
+  parentName: string | null;
+  proposal: Record<string, unknown> | null;
+  proposalStatus: string;
   lessonTypes: string[];
   totalLessons: number;
   attendedLessons: number;
@@ -92,34 +103,38 @@ function stageLabel(profile: CoachLessonProfile | null) {
   return profile.is_junior ? formatLabel(profile.junior_stage ?? "not_sure") : formatLabel(profile.player_level ?? "unknown");
 }
 
-function upsertStudent(studentMap: Map<string, StudentSummary>, profile: CoachLessonProfile | null, profileId: string, lesson: CoachLessonWithRelations) {
-  const existing = studentMap.get(profileId);
+function studentSummary(student: ActiveAcademyStudent): StudentSummary {
+  const primaryCoach = student.assignedCoaches[0] ?? null;
+  const profile: CoachLessonProfile = {
+    first_name: student.firstName,
+    id: student.playerProfileId,
+    is_junior: student.isJunior,
+    junior_stage: student.juniorStage,
+    last_name: student.lastName,
+    parent_profile_id: student.parentProfileId,
+    player_level: student.playerLevel ?? "unknown",
+    user_id: null
+  };
 
-  if (existing) {
-    if (!existing.lessonTypes.includes(lesson.lesson_type)) {
-      existing.lessonTypes.push(lesson.lesson_type);
-    }
-    return existing;
-  }
-
-  const summary: StudentSummary = {
+  return {
     affectedLessons: 0,
     attendedLessons: 0,
-    assignedCoach: profileDisplayName(lesson.coach),
-    assignedCoachId: lesson.coach_id,
-    id: profileId,
-    isJunior: Boolean(profile?.is_junior),
-    lessonTypes: [lesson.lesson_type],
+    assignedCoach: student.assignedCoaches.length > 0 ? student.assignedCoaches.map((coach) => coach.coachName).join(", ") : "Unassigned",
+    assignedCoachId: primaryCoach?.coachProfileId ?? "",
+    assignedCoachIds: student.assignedCoaches.map((coach) => coach.coachProfileId),
+    id: student.playerProfileId,
+    isJunior: student.isJunior,
+    lessonTypes: [],
     missedLessons: 0,
-    name: profileDisplayName(profile),
+    name: activeAcademyStudentName(student),
     nextLesson: null,
+    parentName: student.parentName,
+    proposal: academyStudentProposal(student),
+    proposalStatus: student.proposalStatus,
     recentHistory: [],
     stage: stageLabel(profile),
     totalLessons: 0
   };
-
-  studentMap.set(profileId, summary);
-  return summary;
 }
 
 function addStudentLesson(summary: StudentSummary, lesson: CoachLessonWithRelations, status: CoachLessonAttendanceResult | "scheduled") {
@@ -149,6 +164,8 @@ function statusMessage(value?: string) {
       return "Player link request created. The invited account will see an action notification when its PlayR profile is available; the secure link remains available for manual sharing.";
     case "player_invite_cancelled":
       return "Player link request cancelled.";
+    case "coach_assigned":
+      return "Coach assignment saved.";
     default:
       return null;
   }
@@ -162,6 +179,15 @@ function errorMessage(value?: string) {
       return "A pending player request already exists for that email.";
     case "missing_fields":
       return "Add the required player or parent details before sending.";
+    case "already_connected":
+      return "That player is already connected to this academy.";
+    case "invalid_coach":
+    case "assignment_failed":
+      return "The coach assignment could not be saved for this academy.";
+    case "parent_contact_missing":
+      return "That junior does not have a parent email available for approval.";
+    case "player_contact_missing":
+      return "That player does not have an email available for approval.";
     case "player_invite_failed":
       return "Player link request could not be created.";
     case "player_invite_cancel_failed":
@@ -190,56 +216,26 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
   }
 
   const coachOnly = access.context.role === "coach";
-  const assignmentsQuery =
-    access.context.role === "platform_admin"
-      ? access.context.supabase
-          .from("coach_player_assignments")
-          .select("id,coach_profile_id,player_profile_id,venue_id,status,assigned_at,coach:coach_profile_id(id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level),player:player_profile_id(id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level)")
-          .eq("status", "active")
-          .limit(220)
-      : access.context.role === "coach" && access.context.adultProfileId
-        ? access.context.supabase
-            .from("coach_player_assignments")
-            .select("id,coach_profile_id,player_profile_id,venue_id,status,assigned_at,coach:coach_profile_id(id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level),player:player_profile_id(id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level)")
-            .eq("coach_profile_id", access.context.adultProfileId)
-            .eq("venue_id", access.context.venueId ?? "00000000-0000-0000-0000-000000000000")
-            .eq("status", "active")
-            .limit(220)
-        : access.context.venueId
-          ? access.context.supabase
-              .from("coach_player_assignments")
-              .select("id,coach_profile_id,player_profile_id,venue_id,status,assigned_at,coach:coach_profile_id(id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level),player:player_profile_id(id,user_id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level)")
-              .eq("venue_id", access.context.venueId)
-              .eq("status", "active")
-              .limit(220)
-          : Promise.resolve({ data: [], error: null });
+  const canManageStudents = !coachOnly;
+  const activeVenueId = access.context.venueId ?? access.context.activeOrganisationMembership?.venue_id ?? null;
   const playerInvitationQuery =
-    access.context.role === "platform_admin"
+    activeVenueId
       ? access.context.supabase
           .from("organisation_invitations")
           .select("id,invitation_kind,invited_email,invited_name,status,token,expires_at,metadata,created_at")
+          .eq("venue_id", activeVenueId)
           .in("invitation_kind", ["player", "player_junior"])
           .eq("status", "pending")
           .order("created_at", { ascending: false })
-          .limit(120)
-      : access.context.venueId
-        ? access.context.supabase
-            .from("organisation_invitations")
-            .select("id,invitation_kind,invited_email,invited_name,status,token,expires_at,metadata,created_at")
-            .eq("venue_id", access.context.venueId)
-            .in("invitation_kind", ["player", "player_junior"])
-            .eq("status", "pending")
-            .order("created_at", { ascending: false })
-            .limit(80)
-        : Promise.resolve({ data: [], error: null });
-  const [lessons, options, assignmentResult, playerInvitationsResult] = await Promise.all([
+          .limit(80)
+      : Promise.resolve({ data: [], error: null });
+  const [activeStudentsResult, lessons, options, playerInvitationsResult] = await Promise.all([
+    loadActiveAcademyStudents(access.context, activeVenueId),
     loadCoachLessons(access.context, 160),
     loadCoachLessonOptions(access.context),
-    assignmentsQuery,
     playerInvitationQuery
   ]);
-  const studentMap = new Map<string, StudentSummary>();
-  const assignments = ((assignmentResult.data ?? []) as unknown as CoachPlayerAssignmentWithProfiles[]) ?? [];
+  const studentMap = new Map(activeStudentsResult.students.map((student) => [student.playerProfileId, studentSummary(student)]));
   const playerInvitations = ((playerInvitationsResult.data ?? []) as PlayerLinkInvitation[]) ?? [];
 
   lessons.forEach((lesson) => {
@@ -247,26 +243,18 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
 
     if (attendanceRows.length > 0) {
       attendanceRows.forEach((row) => {
-        const summary = upsertStudent(studentMap, row.player ?? row.junior, row.player_profile_id, lesson);
+        const summary = studentMap.get(row.player_profile_id);
+        if (!summary) return;
+        if (!summary.lessonTypes.includes(lesson.lesson_type)) summary.lessonTypes.push(lesson.lesson_type);
         addStudentLesson(summary, lesson, row.attendance_status);
       });
       return;
     }
 
-    const summary = upsertStudent(studentMap, lesson.player, lesson.player_id, lesson);
+    const summary = studentMap.get(lesson.player_id);
+    if (!summary) return;
+    if (!summary.lessonTypes.includes(lesson.lesson_type)) summary.lessonTypes.push(lesson.lesson_type);
     addStudentLesson(summary, lesson, fallbackAttendanceResult(lesson));
-  });
-
-  assignments.forEach((assignment) => {
-    const summary = upsertStudent(studentMap, assignment.player, assignment.player_profile_id, {
-      coach: assignment.coach,
-      coach_id: assignment.coach_profile_id,
-      lesson_type: "private"
-    } as CoachLessonWithRelations);
-
-    if (!summary.recentHistory.some((item) => item.date === assignment.assigned_at && item.status === "Assigned")) {
-      summary.recentHistory.push({ date: assignment.assigned_at, status: "Assigned" });
-    }
   });
 
   const query = (searchParams?.q ?? "").trim().toLowerCase();
@@ -283,13 +271,23 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
         .slice(0, 3)
     }))
     .filter((student) => (query ? student.name.toLowerCase().includes(query) : true))
-    .filter((student) => (canFilterCoach && selectedCoach ? student.assignedCoachId === selectedCoach : true))
+    .filter((student) => (canFilterCoach && selectedCoach ? student.assignedCoachIds.includes(selectedCoach) : true))
     .filter((student) => (selectedStage ? student.stage === selectedStage : true))
     .filter((student) => (selectedLessonType ? student.lessonTypes.includes(selectedLessonType) : true))
     .sort((left, right) => left.name.localeCompare(right.name));
   const allStudents = Array.from(studentMap.values());
   const privateStudentCount = allStudents.filter((student) => student.lessonTypes.includes("private")).length;
-  const assignedStudentCount = new Set(assignments.map((assignment) => assignment.player_profile_id)).size;
+  const assignedStudentCount = allStudents.filter((student) => student.assignedCoachIds.length > 0).length;
+  const canViewDiagnostics = access.context.role === "platform_admin" || ["organisation_admin", "club_manager"].includes(access.context.activeOrganisationRole ?? "");
+  const emptyStudentMessage = activeStudentsResult.error
+    ? "Students could not be loaded. Check the active organisation or try again."
+    : query || selectedCoach || selectedStage || selectedLessonType
+      ? "No active students match these filters."
+      : coachOnly
+        ? "No students are assigned to this coach yet. A Head Coach can assign an active academy student."
+        : playerInvitations.length > 0
+          ? "Student invitations are awaiting approval. Lessons can be created once a player connection is accepted."
+          : "No students are connected to this academy yet. Invite a student or request access to an existing PlayR profile.";
 
   return (
     <CoachRPageFrame context={access.context} subtitle="Search, filter and open student coaching cards without leaving CoachR." title="Students">
@@ -313,6 +311,12 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
         <CoachRSummaryCard helper="coach assigned" label="Assigned" value={assignedStudentCount} />
         <CoachRSummaryCard helper="parent approval" href="#pending-links" label="Pending" value={playerInvitations.length} />
       </CoachRCompactGrid>
+
+      {canViewDiagnostics ? (
+        <div className="mb-5 flex justify-end">
+          <a className="text-sm font-black text-court-teal hover:text-court-navy" href="/dashboard/coachr/students/diagnostics">Connection Diagnostics</a>
+        </div>
+      ) : null}
 
       <CollapsibleCard
         defaultOpen={searchParams?.q !== undefined}
@@ -368,9 +372,13 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
 
       <CollapsibleCard
         eyebrow="Add"
-        summary="Invite an adult directly, or request parent approval for a junior."
-        title="Request Player Link"
+        summary="Find an existing player, or send a private approval invitation."
+        title="Connect a student"
       >
+        {canManageStudents ? (
+          <CoachRPlayerConnectionSearch coaches={options.coachProfiles.map((coach) => ({ id: coach.id, name: profileDisplayName(coach) }))} />
+        ) : null}
+
         <section className="mb-5 rounded-lg border border-court-teal/20 bg-court-mist p-4">
           <p className="text-sm font-black text-court-navy">Adult player</p>
           <p className="mt-1 text-xs font-semibold leading-5 text-slate-600">The adult approves the connection from their own PlayR account.</p>
@@ -426,25 +434,8 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
             Send Approval Request
           </button>
         </form>
-        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-          <label className="text-sm font-semibold text-slate-700">
-            Existing PlayR profile
-            <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="profilePreview">
-              <option value="">Choose profile</option>
-              {options.playerProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profileDisplayName(profile)}
-                  {profile.is_junior ? " (junior)" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <a className="btn-primary text-center" href="/dashboard/coachr/schedule?new=1#new-lesson">
-            Place on Schedule
-          </a>
-        </div>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          CoachR does not create duplicate profiles. Use the request first when a junior is not yet approved for this organisation.
+          CoachR reuses PlayR profiles. A junior connection always stays pending until the parent or guardian accepts it.
         </p>
       </CollapsibleCard>
 
@@ -506,35 +497,61 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
             {students.map((student) => (
               <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" key={student.id}>
                 <div className="flex flex-wrap gap-2 text-xs font-bold">
+                  <span className="ui-chip ui-chip-success">Connected</span>
                   <span className="ui-chip ui-chip-muted">{student.isJunior ? "Junior" : "Player"}</span>
                   <span className="ui-chip ui-chip-muted">{student.stage}</span>
-                  <span className="ui-chip ui-chip-brand">{student.totalLessons} lessons</span>
-                  <span className="ui-chip ui-chip-success">{student.attendedLessons} attended</span>
-                  <span className="ui-chip bg-rose-50 text-rose-700">{student.missedLessons} missed</span>
-                  <span className="ui-chip ui-chip-warning">{student.affectedLessons} rain/cancelled</span>
                 </div>
                 <details className="ui-collapsible mt-2">
                   <summary className="flex cursor-pointer items-start justify-between gap-3">
                     <span>
                       <span className="block font-black text-court-navy">{student.name}</span>
                       <span className="mt-1 block text-sm text-slate-600">
-                        {student.nextLesson ? `Next: ${formatDateTime(student.nextLesson)}` : "No upcoming lesson scheduled"}
+                        {student.assignedCoach} · {student.nextLesson ? `Next ${formatDateTime(student.nextLesson)}` : "No lesson scheduled"}
                       </span>
                     </span>
                     <span className="text-sm font-black text-court-teal">Open</span>
                   </summary>
                   <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3">
+                    <div className="flex flex-wrap gap-2 text-xs font-bold">
+                      <span className="ui-chip ui-chip-brand">{student.totalLessons} lessons</span>
+                      <span className="ui-chip ui-chip-success">{student.attendedLessons} attended</span>
+                      <span className="ui-chip bg-rose-50 text-rose-700">{student.missedLessons} missed</span>
+                      <span className="ui-chip ui-chip-warning">{student.affectedLessons} rain/cancelled</span>
+                    </div>
                     <div className="grid gap-2 text-sm font-semibold text-slate-600 sm:grid-cols-2">
                       <p>Coach: <span className="font-black text-court-navy">{student.assignedCoach}</span></p>
+                      {student.isJunior ? <p>Parent: <span className="font-black text-court-navy">{student.parentName ?? "Linked guardian"}</span></p> : null}
                       <p>Stage: <span className="font-black text-court-navy">{student.stage}</span></p>
                       <p>Normal slot: <span className="font-black text-court-navy">{student.nextLesson ? formatDateTime(student.nextLesson) : "To be placed"}</span></p>
-                      <p>Notifications: <span className="font-black text-court-navy">In-app ready</span></p>
                     </div>
+                    {student.proposal ? (
+                      <details className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <summary className="cursor-pointer text-sm font-black text-court-navy">Proposed lesson details</summary>
+                        <div className="mt-2 grid gap-1 text-xs font-semibold text-slate-600 sm:grid-cols-2">
+                          {Object.entries(student.proposal).filter(([, value]) => typeof value === "string" || typeof value === "number").map(([key, value]) => (
+                            <p key={key}>{formatLabel(key)}: <span className="font-black text-court-navy">{String(value)}</span></p>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+                    {canManageStudents && options.coachProfiles.length > 0 ? (
+                      <form action={assignStudentCoach} className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                        <input name="playerProfileId" type="hidden" value={student.id} />
+                        <label className="text-sm font-semibold text-slate-700">
+                          Add coach assignment
+                          <select className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-2 focus-ring" defaultValue={student.assignedCoachId} name="coachProfileId" required>
+                            <option value="">Choose coach</option>
+                            {options.coachProfiles.map((coach) => <option key={coach.id} value={coach.id}>{profileDisplayName(coach)}</option>)}
+                          </select>
+                        </label>
+                        <button className="btn-secondary px-3 py-2" type="submit">Assign Coach</button>
+                      </form>
+                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       <a className="btn-secondary px-3 py-2" href={`/dashboard/players/${student.id}`}>
                         View MyPlayR
                       </a>
-                      <a className="btn-primary px-3 py-2" href="/dashboard/coachr/schedule?new=1#new-lesson">
+                      <a className="btn-primary px-3 py-2" href={`/dashboard/coachr/schedule?new=1&player=${student.id}${student.assignedCoachId ? `&coach=${student.assignedCoachId}` : ""}#new-lesson`}>
                         Schedule Lesson
                       </a>
                     </div>
@@ -549,7 +566,7 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
             ))}
           </div>
         ) : (
-          <div className="ui-empty-card mt-5">No lesson-linked students found yet.</div>
+          <div className="ui-empty-card mt-5">{emptyStudentMessage}</div>
         )}
       </section>
     </CoachRPageFrame>

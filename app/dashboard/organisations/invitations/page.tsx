@@ -17,6 +17,7 @@ type InvitationsPageProps = {
     error?: string;
     message?: string;
     token?: string;
+    warning?: string;
   };
 };
 
@@ -30,11 +31,31 @@ function statusMessage(value?: string) {
   switch (value) {
     case "accepted":
       return "Invitation accepted. Your organisation access is ready.";
+    case "connection_accepted":
+      return "Connection accepted. The academy can now add this player to lessons.";
+    case "connection_already_accepted":
+      return "This academy connection is already active.";
     case "declined":
       return "Invitation declined.";
     default:
       return null;
   }
+}
+
+function warningMessage(value?: string) {
+  if (!value) {
+    return null;
+  }
+
+  if (value.includes("intended_coach_unavailable") || value.includes("coach_assignment_failed")) {
+    return "The academy connection is active, but the proposed coach could not be assigned. An academy leader can assign a coach from Students.";
+  }
+
+  if (value.includes("active_organisation_not_updated")) {
+    return "The connection is active, but your last-used organisation preference could not be updated.";
+  }
+
+  return "The connection is active, with a non-blocking follow-up item for the academy.";
 }
 
 function errorMessage(value?: string) {
@@ -53,6 +74,8 @@ function errorMessage(value?: string) {
       return "This invitation has expired.";
     case "accept_failed":
       return "The invitation could not be accepted.";
+    case "accepted_connection_missing":
+      return "The invitation is marked accepted, but its academy connection needs administrator review.";
     case "decline_failed":
       return "The invitation could not be declined.";
     default:
@@ -153,6 +176,7 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
   return (
     <PageShell eyebrow="PlayR" subtitle="Accept organisation access and player-link requests after signing in." title="Organisation Invitations">
       <StatusAlert message={statusMessage(searchParams?.message)} tone="success" />
+      <StatusAlert className="mt-3" message={warningMessage(searchParams?.warning)} tone="warning" />
       <StatusAlert className="mt-3" message={errorMessage(searchParams?.error)} tone="error" />
 
       <section className="mt-5 grid gap-3">
@@ -175,7 +199,12 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
                       {invitation.invited_email}
                     </p>
                   </div>
-                  <span className="ui-chip ui-chip-brand">{organisationRoleLabel(invitation.intended_role)}</span>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="ui-chip ui-chip-brand">{organisationRoleLabel(invitation.intended_role)}</span>
+                    <span className={`ui-chip ${invitation.status === "accepted" ? "ui-chip-success" : invitation.status === "pending" ? "ui-chip-warning" : "ui-chip-muted"}`}>
+                      {invitation.status === "accepted" ? "Connected" : formatLabel(invitation.status)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-600 sm:grid-cols-2">
@@ -199,9 +228,11 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
                 ) : null}
 
                 {isPlayerConnection ? (
-                  <section className="mt-4 rounded-lg border border-court-teal/20 bg-court-mist p-4">
-                    <p className="section-kicker">Academy connection</p>
-                    <p className="mt-1 text-sm font-black text-court-navy">{invitation.venue?.name ?? "Academy"} would like to connect with this player.</p>
+                  <details className="ui-collapsible mt-4 rounded-lg border border-court-teal/20 bg-court-mist p-4">
+                    <summary className="flex cursor-pointer items-center justify-between gap-3">
+                      <span><span className="section-kicker block">Academy connection</span><span className="mt-1 block text-sm font-black text-court-navy">{invitation.venue?.name ?? "Academy"} would like to connect with this player.</span></span>
+                      <span className="text-xs font-black text-court-teal">Review details</span>
+                    </summary>
                     {proposal ? (
                       <div className="mt-4 border-t border-court-teal/15 pt-4">
                         <p className="text-sm font-black text-court-navy">Lesson proposal</p>
@@ -216,10 +247,10 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
                         <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">Accepting the academy connection does not confirm payment or a recurring lesson. The proposal remains informational until agreed separately.</p>
                       </div>
                     ) : <p className="mt-2 text-xs font-semibold text-slate-600">No lesson has been proposed yet.</p>}
-                  </section>
+                  </details>
                 ) : null}
 
-                {adultProfile ? (
+                {invitation.status === "pending" && adultProfile ? (
                   <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
                     <form action={acceptOrganisationInvitation} className="grid gap-3 md:grid-cols-[1fr_auto]">
                       <input name="token" type="hidden" value={invitation.token} />
@@ -249,7 +280,7 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
                       </button>
                     </form>
                   </div>
-                ) : (
+                ) : invitation.status === "pending" ? (
                   <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
                     Create your private PlayR profile before accepting this invitation.
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -263,6 +294,12 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
                         </button>
                       </form>
                     </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+                    {invitation.status === "accepted"
+                      ? "This academy connection has been accepted. Refreshing or returning through a notification will not create a duplicate connection."
+                      : `This invitation is ${formatLabel(invitation.status).toLowerCase()} and no longer needs a response.`}
                   </div>
                 )}
               </article>
