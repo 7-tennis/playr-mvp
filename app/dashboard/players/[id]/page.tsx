@@ -37,11 +37,34 @@ import type {
   MatchInviteStatus,
   MatchInviteType,
   MatchVerificationStatus,
+  OrganisationLinkStatus,
   Profile,
   Rating,
   RatingChange,
   Venue
 } from "@/types/courtside";
+
+type AcademyDetailLink = {
+  id: string;
+  status: OrganisationLinkStatus;
+  connection_context: Record<string, unknown>;
+  proposal_status: string;
+  venue: Pick<Venue, "id" | "name" | "status"> | null;
+};
+
+type AcademyDetailAssignment = {
+  organisation_player_link_id: string | null;
+  coach: Pick<Profile, "id" | "first_name" | "last_name"> | null;
+};
+
+type AcademyDetailLesson = {
+  id: string;
+  venue_id: string;
+  start_time: string;
+  custom_location: string | null;
+  court: Pick<Court, "name"> | null;
+  external_venue: { name: string } | null;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -273,7 +296,10 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
     { data: inviteData, error: inviteError },
     { data: matchData, error: matchError },
     { data: achievementData, error: achievementError },
-    { data: juniorHistoryData, error: juniorHistoryError }
+    { data: juniorHistoryData, error: juniorHistoryError },
+    { data: academyLinkData },
+    { data: academyAssignmentData },
+    { data: academyLessonData }
   ] = await Promise.all([
     supabase.from("ratings").select("*").eq("profile_id", player.id).maybeSingle(),
     supabase.from("rating_changes").select("*").eq("profile_id", player.id).order("created_at", { ascending: false }).limit(5),
@@ -302,7 +328,25 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
           .eq("player_id", player.id)
           .order("created_at", { ascending: false })
           .limit(5)
-      : Promise.resolve({ data: [], error: null })
+      : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from("organisation_player_links")
+      .select("id,status,connection_context,proposal_status,venue:venue_id(id,name,status)")
+      .eq("player_profile_id", player.id)
+      .in("status", ["pending", "active", "suspended"])
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("coach_player_assignments")
+      .select("organisation_player_link_id,coach:coach_profile_id(id,first_name,last_name)")
+      .eq("player_profile_id", player.id)
+      .eq("status", "active"),
+    supabase
+      .from("coach_lessons")
+      .select("id,venue_id,start_time,custom_location,court:court_id(name),external_venue:external_venue_id(name)")
+      .eq("player_id", player.id)
+      .eq("status", "scheduled")
+      .gte("start_time", now)
+      .order("start_time", { ascending: true })
   ]);
 
   if (ratingError) {
@@ -350,6 +394,14 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
   const juniorHistory = juniorHistoryError
     ? []
     : ((juniorHistoryData ?? []) as Pick<JuniorRatingHistory, "id" | "previous_rating" | "new_rating" | "change_amount" | "reason" | "created_at">[]);
+  const academyLinks = (academyLinkData ?? []) as unknown as AcademyDetailLink[];
+  const academyAssignments = (academyAssignmentData ?? []) as unknown as AcademyDetailAssignment[];
+  const academyAssignmentByLink = new Map(academyAssignments.filter((assignment) => assignment.organisation_player_link_id).map((assignment) => [assignment.organisation_player_link_id as string, assignment]));
+  const academyLessons = (academyLessonData ?? []) as unknown as AcademyDetailLesson[];
+  const academyLessonByVenue = new Map<string, AcademyDetailLesson>();
+  academyLessons.forEach((lesson) => {
+    if (!academyLessonByVenue.has(lesson.venue_id)) academyLessonByVenue.set(lesson.venue_id, lesson);
+  });
 
   const clubName = bookings[0]?.courts?.venues?.name ?? upcomingEntries.find((entry) => entry.events?.location)?.events?.location ?? null;
   const playerType = player.is_junior ? playrJuniorStageLabel(player.junior_stage) : parentProfile.id === player.id && parentProfile.parent_profile_id === null ? "Parent / Member" : "Member";
@@ -375,6 +427,9 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
         </a>
         <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#membership">
           Membership
+        </a>
+        <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#academies">
+          Academies
         </a>
         <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#private-details">
           Private Details
@@ -455,6 +510,29 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
           </div>
         </SectionCard>
       </div>
+
+      <section className="surface-card mt-5 p-4 sm:p-5" id="academies">
+        <div className="flex items-start justify-between gap-3"><div><p className="section-kicker">Connected organisations</p><h2 className="mt-1 text-lg font-black text-court-navy">Academies</h2></div><ClubIcon className="text-court-teal" size={20} /></div>
+        {academyLinks.length > 0 ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {academyLinks.map((link) => {
+              const assignment = academyAssignmentByLink.get(link.id);
+              const lesson = link.venue?.id ? academyLessonByVenue.get(link.venue.id) : null;
+              const proposalValue = link.connection_context.proposal;
+              const proposal = proposalValue && typeof proposalValue === "object" && !Array.isArray(proposalValue) ? proposalValue as Record<string, unknown> : null;
+              const schedule = proposal ? [proposal.day, proposal.startTime].filter((value) => typeof value === "string" && value).join(" · ") : "";
+              return (
+                <article className="rounded-lg border border-court-teal/25 bg-court-mist p-4" key={link.id}>
+                  <div className="flex items-start justify-between gap-2"><h3 className="font-black text-court-navy">{link.venue?.name ?? "Academy"}</h3><span className={`ui-chip ${link.status === "active" && link.venue?.status !== "inactive" ? "ui-chip-success" : "ui-chip-warning"}`}>{link.venue?.status === "inactive" ? "Organisation inactive" : link.status === "active" ? "Connection active" : link.status === "suspended" ? "Connection paused" : "Invitation pending"}</span></div>
+                  <p className="mt-3 text-sm font-semibold text-slate-700">Coach: {assignment?.coach ? playerName(assignment.coach) : "To be assigned"}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-700">Lesson: {lesson ? formatDateTime(lesson.start_time) : schedule || (link.proposal_status === "proposed" ? "Proposal details to be confirmed" : "No lesson scheduled yet")}</p>
+                  {lesson ? <p className="mt-1 text-sm text-slate-600">Venue: {lesson.external_venue?.name ?? lesson.court?.name ?? lesson.custom_location ?? "To be confirmed"}</p> : proposal && typeof proposal.venue === "string" ? <p className="mt-1 text-sm text-slate-600">Venue: {proposal.venue}</p> : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : <EmptyState text="No academy connections yet." />}
+      </section>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <CollapsibleCard

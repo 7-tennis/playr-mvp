@@ -18,6 +18,7 @@ import {
   profileDisplayName,
   type CoachLessonAttendanceWithProfile,
   type CoachLessonCourt,
+  type CoachLessonExternalVenue,
   type CoachLessonProfile,
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
@@ -97,6 +98,8 @@ function errorMessage(value?: string) {
       return "This organisation no longer has access to that court.";
     case "custom_location":
       return "Enter the off-site lesson location.";
+    case "external_venue":
+      return "Choose an active external venue saved for this academy.";
     case "coach_venue":
       return "Choose a coach linked to the selected venue.";
     case "player_profile":
@@ -457,6 +460,7 @@ function AttendanceButtons({
 function LessonCard({
   canManageCourtAccess,
   courts,
+  externalVenues,
   lesson,
   organisationId,
   playerOptions,
@@ -465,6 +469,7 @@ function LessonCard({
 }: {
   canManageCourtAccess: boolean;
   courts: CoachLessonCourt[];
+  externalVenues: CoachLessonExternalVenue[];
   lesson: CoachLessonWithRelations;
   organisationId: string;
   playerOptions: CoachLessonProfile[];
@@ -495,7 +500,7 @@ function LessonCard({
             </span>
             <span className="ui-chip ui-chip-brand">{formatLabel(lesson.lesson_type)}</span>
             <span className={`ui-chip ${attendanceMarked ? "ui-chip-success" : "ui-chip-muted"}`}>{attendanceSummary(lesson)}</span>
-            <span className="ui-chip ui-chip-muted">{lesson.location_type === "custom" ? lesson.custom_location ?? "Off-site" : lesson.location_type === "none" ? "No court" : lesson.court ? `${lesson.court.owner?.name ? `${lesson.court.owner.name} — ` : ""}${lesson.court.name}` : "Court TBC"}</span>
+            <span className="ui-chip ui-chip-muted">{lesson.external_venue ? `${lesson.external_venue.name} · External` : lesson.location_type === "custom" ? lesson.custom_location ?? "Off-site" : lesson.location_type === "none" ? "No court" : lesson.court ? `${lesson.court.owner?.name ? `${lesson.court.owner.name} — ` : ""}${lesson.court.name}` : "Court TBC"}</span>
           </span>
         </span>
         <span className="ui-collapsible-chevron grid h-8 w-8 shrink-0 place-items-center rounded bg-court-mist text-court-teal">
@@ -679,8 +684,10 @@ function LessonCard({
             courts={courts}
             defaultCourtId={lesson.court_id ?? ""}
             defaultCustomLocation={lesson.custom_location ?? ""}
+            defaultExternalVenueId={lesson.external_venue_id ?? ""}
             defaultLocationType={lesson.location_type ?? (lesson.court_id ? "managed_court" : "none")}
             excludeLessonId={lesson.id}
+            externalVenues={externalVenues}
             organisationId={organisationId}
           />
 
@@ -990,7 +997,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             </label>
           </div>
 
-          <CoachRCourtPicker canManageAccess={canManageCourtAccess} courts={options.courts} organisationId={defaultVenueId} />
+          <CoachRCourtPicker canManageAccess={canManageCourtAccess} courts={options.courts} externalVenues={options.externalVenues} organisationId={defaultVenueId} />
 
           <label className="text-sm font-semibold text-slate-700">
             Title
@@ -1044,6 +1051,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
                       <LessonCard
                         canManageCourtAccess={canManageCourtAccess}
                         courts={options.courts}
+                        externalVenues={options.externalVenues}
                         key={lesson.id}
                         lesson={lesson}
                         organisationId={lesson.venue_id}

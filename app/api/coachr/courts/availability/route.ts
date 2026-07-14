@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveCourtReadiness } from "@/lib/court-readiness";
 import { getPermissionContext } from "@/lib/permissions";
 
 function uuid(value: string | null) {
@@ -22,17 +23,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "access" }, { status: 403 });
   }
 
-  const { data, error } = await context.supabase.rpc("coachr_available_courts", {
-    p_end_time: end,
-    p_exclude_lesson_id: lessonId,
-    p_organisation_id: organisationId,
-    p_start_time: start
+  const { data: authorised, error } = await context.supabase.rpc("coachr_authorised_courts", { p_organisation_id: organisationId });
+  if (error) return NextResponse.json({ error: "availability_failed" }, { status: 500 });
+
+  const ownerIds = Array.from(new Set(((authorised ?? []) as { owner_venue_id: string }[]).map((court) => court.owner_venue_id)));
+  const readiness = await Promise.all(ownerIds.map((ownerVenueId) => resolveCourtReadiness({
+    academyVenueId: organisationId,
+    endTime: end,
+    excludeLessonId: lessonId,
+    ownerVenueId,
+    startTime: start,
+    supabase: context.supabase
+  })));
+  const courts = readiness.flatMap((result) => result.available_courts);
+
+  return NextResponse.json({
+    courts,
+    readiness: readiness.map((result) => ({ next_action: result.next_action, reason: result.reason, status: result.status }))
   });
-
-  if (error) {
-    console.error("CoachR court availability failed", { code: error.code, organisationId });
-    return NextResponse.json({ error: "availability_failed" }, { status: 500 });
-  }
-
-  return NextResponse.json({ courts: data ?? [] });
 }

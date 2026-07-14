@@ -76,6 +76,41 @@ function slugify(value: string) {
     .slice(0, 80);
 }
 
+export async function delegateOrganisation(formData: FormData) {
+  const { supabase } = await requirePlatformAdmin();
+  const venueId = text(formData, "venueId") || null;
+  const organisationName = text(formData, "organisationName");
+  const organisationType = allowedValue<Venue["organisation_type"]>(text(formData, "organisationType"), organisationTypes, "club");
+  const profileId = text(formData, "profileId");
+  const leaderRole = allowedValue<OrganisationRole>(
+    text(formData, "leaderRole"),
+    ["organisation_admin", "club_manager", "head_coach", "sports_coordinator"],
+    "organisation_admin"
+  );
+
+  if ((!venueId && !organisationName) || !profileId) {
+    redirect("/admin/organisations?error=missing_fields");
+  }
+
+  const { data: delegatedVenueId, error } = await supabase.rpc("platform_delegate_organisation", {
+    p_leader_role: leaderRole,
+    p_organisation_name: organisationName || null,
+    p_organisation_type: organisationType,
+    p_profile_id: profileId,
+    p_venue_id: venueId
+  });
+
+  if (error || !delegatedVenueId) {
+    console.error("Organisation delegation failed", { code: error?.code, organisationType, leaderRole, venueId });
+    redirect(`/admin/organisations?error=${rpcErrorCode(error, "assign_failed")}`);
+  }
+
+  revalidateAccessSurfaces();
+  revalidatePath("/dashboard/setup/clubr");
+  revalidatePath("/dashboard/setup/coachr");
+  redirect("/admin/organisations?message=onboarding_assigned");
+}
+
 export async function createOrganisation(formData: FormData) {
   const { supabase } = await requirePlatformAdmin();
   const name = text(formData, "name");

@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { SetupReminderCard } from "@/components/organisation-setup-wizard";
 import { ArrowRightIcon, BookingIcon, EntriesIcon, MatchIcon, NotificationIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
+import { loadOrganisationSetup } from "@/lib/organisation-setup";
 import {
   lessonHasAttendanceResult,
   lessonNeedsAttendance,
@@ -100,6 +102,11 @@ export default async function CoachRPage() {
   if (access.context.kind !== "authenticated") {
     return null;
   }
+
+  const canManageSetup = ["organisation_admin", "club_manager", "head_coach"].includes(access.context.activeOrganisationRole ?? "");
+  const setupSnapshot = canManageSetup && access.context.venueId
+    ? await loadOrganisationSetup(access.context.supabase, access.context.venueId, "coachr")
+    : null;
 
   const activeStudentsQuery =
     access.context.role === "coach" && access.context.adultProfileId
@@ -245,6 +252,7 @@ export default async function CoachRPage() {
   return (
     <CoachRPageFrame context={access.context} subtitle="Today, your next lesson and the coaching work that needs attention." title="MyCoachR">
       <CoachRRoleSummary context={access.context} />
+      {setupSnapshot ? <SetupReminderCard organisationName={access.context.activeOrganisationMembership?.venue?.name ?? "your academy"} snapshot={setupSnapshot} /> : null}
 
       <section className="mb-5 overflow-hidden rounded-lg bg-court-navy text-white shadow-court">
         <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-end sm:p-5">

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getPermissionContext } from "@/lib/permissions";
-import { productForOrganisationRole } from "@/lib/organisations";
+import { productForOrganisationMembership } from "@/lib/organisations";
+import { loadOrganisationSetup, productSetupPath } from "@/lib/organisation-setup";
 import type { ProductContext } from "@/types/courtside";
 
 function text(formData: FormData, key: string) {
@@ -48,7 +49,7 @@ export async function switchActiveOrganisation(formData: FormData) {
     redirect("/dashboard?organisation=restricted");
   }
 
-  const productContext = productForOrganisationRole(membership.role);
+  const productContext = productForOrganisationMembership(membership);
   const { error } = await context.supabase.from("user_active_organisations").upsert(
     {
       product_context: productContext,
@@ -65,5 +66,13 @@ export async function switchActiveOrganisation(formData: FormData) {
   }
 
   revalidateOrganisationSurfaces();
+  if (productContext === "clubr" || productContext === "coachr") {
+    const setup = await loadOrganisationSetup(context.supabase, membership.venue_id, productContext);
+
+    if (setup.migrationReady && setup.setup.status !== "complete") {
+      redirect(productSetupPath(productContext, setup.setup.current_step));
+    }
+  }
+
   redirect(productLanding(productContext));
 }

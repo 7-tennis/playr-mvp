@@ -66,6 +66,11 @@ export type OrganisationLinkStatus = "pending" | "active" | "declined" | "suspen
 export type OrganisationAssignmentStatus = "active" | "suspended" | "removed";
 export type OrganisationProgramRole = "coach" | "assistant_coach" | "player" | "manager" | "viewer";
 export type ProductContext = "playr" | "coachr" | "clubr" | "teamr";
+export type OrganisationSetupProduct = "coachr" | "clubr" | "teamr";
+export type OrganisationSetupStatus = "not_started" | "in_progress" | "complete" | "skipped" | "needs_review";
+export type CourtAccessReadinessStatus = "active" | "pending" | "no_courts_shared" | "unavailable" | "expired" | "revoked" | "invalid_context";
+export type CourtAccessRequestStatus = "pending" | "active" | "declined" | "cancelled" | "expired";
+export type CoachingProposalStatus = "not_specified" | "proposed" | "confirmed" | "declined";
 
 export interface Profile {
   id: string;
@@ -171,6 +176,11 @@ export interface Court {
   id: string;
   venue_id: string | null;
   operator_venue_id: string | null;
+  court_number: string | null;
+  surface: string | null;
+  lighting_available: boolean;
+  opening_time: string | null;
+  closing_time: string | null;
   name: string;
   status: CourtStatus;
   sort_order: number;
@@ -188,6 +198,7 @@ export interface Venue {
   logo_url: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  main_contact_name: string | null;
   address: string | null;
   description: string | null;
   primary_admin_profile_id: string | null;
@@ -250,6 +261,8 @@ export interface OrganisationPlayerLink {
   declined_at: string | null;
   removed_at: string | null;
   notes: string | null;
+  connection_context: Record<string, unknown>;
+  proposal_status: CoachingProposalStatus;
   created_at: string;
   updated_at: string;
 }
@@ -337,6 +350,83 @@ export interface OrganisationCourtAccess {
   updated_at: string;
 }
 
+export interface OrganisationProductSetup {
+  id: string;
+  venue_id: string;
+  product_context: OrganisationSetupProduct;
+  status: OrganisationSetupStatus;
+  current_step: string;
+  completed_steps: string[];
+  skipped_steps: string[];
+  metadata: Record<string, unknown>;
+  completed_by_user_id: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationBookingSettings {
+  venue_id: string;
+  slot_minutes: number;
+  opening_time: string;
+  closing_time: string;
+  member_booking_enabled: boolean;
+  non_member_booking_enabled: boolean;
+  non_member_price_cents: number | null;
+  advance_booking_days: number;
+  max_active_bookings: number;
+  no_courts: boolean;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationCoachingSettings {
+  venue_id: string;
+  default_lesson_duration_minutes: number;
+  default_lesson_type: CoachLessonType;
+  default_external_venue_id: string | null;
+  private_lessons_enabled: boolean;
+  group_lessons_enabled: boolean;
+  no_default_venue: boolean;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationExternalVenue {
+  id: string;
+  organisation_id: string;
+  name: string;
+  address: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  court_count: number | null;
+  court_names: string[];
+  notes: string | null;
+  status: "active" | "inactive";
+  linked_venue_id: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganisationCourtAccessRequest {
+  id: string;
+  requester_venue_id: string;
+  owner_venue_id: string;
+  requested_court_ids: string[];
+  status: CourtAccessRequestStatus;
+  request_notes: string | null;
+  response_notes: string | null;
+  requested_by_user_id: string;
+  responded_by_user_id: string | null;
+  responded_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MatchInvite {
   id: string;
   booking_id: string | null;
@@ -376,6 +466,7 @@ export interface CoachLesson {
   court_booking_id: string | null;
   location_type: CoachLessonLocationType;
   custom_location: string | null;
+  external_venue_id: string | null;
   lesson_type: CoachLessonType;
   title: string;
   start_time: string;

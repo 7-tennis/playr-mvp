@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
-import { ClubIcon, EntriesIcon, PrivateIcon, StatusIcon } from "@/components/playr-icons";
+import { ClubIcon, EntriesIcon, LocationIcon, PrivateIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import { invitationKindLabel, organisationRoleLabel } from "@/lib/organisations";
 import { getPermissionContext } from "@/lib/permissions";
@@ -63,6 +63,16 @@ function errorMessage(value?: string) {
 function metadataText(metadata: Record<string, unknown>, key: string) {
   const value = metadata[key];
   return typeof value === "string" ? value : "";
+}
+
+function metadataObject(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function proposalValue(proposal: Record<string, unknown>, key: string) {
+  const value = proposal[key];
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
 function profileName(profile: Pick<Profile, "first_name" | "last_name">) {
@@ -134,6 +144,12 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
     console.error("Organisation invitations could not be loaded", { error, userId: context.user.id.slice(0, 8) });
   }
 
+  const coachIds = Array.from(new Set(invitations.map((invitation) => metadataText(invitation.metadata, "coachProfileId")).filter(Boolean)));
+  const coachResult = coachIds.length > 0
+    ? await context.supabase.from("profiles").select("id,first_name,last_name").in("id", coachIds)
+    : { data: [] };
+  const coachNames = new Map(((coachResult.data ?? []) as Pick<Profile, "id" | "first_name" | "last_name">[]).map((profile) => [profile.id, profileName(profile)]));
+
   return (
     <PageShell eyebrow="PlayR" subtitle="Accept organisation access and player-link requests after signing in." title="Organisation Invitations">
       <StatusAlert message={statusMessage(searchParams?.message)} tone="success" />
@@ -144,6 +160,9 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
           invitations.map((invitation) => {
             const playerFirstName = metadataText(invitation.metadata, "playerFirstName");
             const playerLastName = metadataText(invitation.metadata, "playerLastName");
+            const proposal = metadataObject(invitation.metadata, "proposal");
+            const coachId = metadataText(invitation.metadata, "coachProfileId");
+            const isPlayerConnection = invitation.invitation_kind === "player" || invitation.invitation_kind === "player_junior";
 
             return (
               <article className="surface-card p-4 sm:p-5" key={invitation.id}>
@@ -179,6 +198,27 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
                   </div>
                 ) : null}
 
+                {isPlayerConnection ? (
+                  <section className="mt-4 rounded-lg border border-court-teal/20 bg-court-mist p-4">
+                    <p className="section-kicker">Academy connection</p>
+                    <p className="mt-1 text-sm font-black text-court-navy">{invitation.venue?.name ?? "Academy"} would like to connect with this player.</p>
+                    {proposal ? (
+                      <div className="mt-4 border-t border-court-teal/15 pt-4">
+                        <p className="text-sm font-black text-court-navy">Lesson proposal</p>
+                        <div className="mt-3 grid gap-2 text-sm font-semibold text-slate-700 sm:grid-cols-2">
+                          <p className="flex items-center gap-2"><EntriesIcon size={15} /> Coach: {coachNames.get(coachId) ?? "To be confirmed"}</p>
+                          <p className="flex items-center gap-2"><StatusIcon size={15} /> {proposalValue(proposal, "lessonType") ? formatLabel(proposalValue(proposal, "lessonType")) : "Lesson type to be confirmed"}</p>
+                          <p className="flex items-center gap-2"><TimeIcon size={15} /> {[proposalValue(proposal, "day"), proposalValue(proposal, "startTime"), proposalValue(proposal, "durationMinutes") ? `${proposalValue(proposal, "durationMinutes")} min` : ""].filter(Boolean).join(" · ") || "Schedule to be confirmed"}</p>
+                          <p className="flex items-center gap-2"><LocationIcon size={15} /> {proposalValue(proposal, "venue") || "Venue to be confirmed"}</p>
+                        </div>
+                        {proposalValue(proposal, "startDate") ? <p className="mt-2 text-xs font-semibold text-slate-600">Proposed start: {proposalValue(proposal, "startDate")}</p> : null}
+                        {proposalValue(proposal, "notes") ? <p className="mt-2 text-xs leading-5 text-slate-600">{proposalValue(proposal, "notes")}</p> : null}
+                        <p className="mt-3 text-xs font-semibold leading-5 text-slate-600">Accepting the academy connection does not confirm payment or a recurring lesson. The proposal remains informational until agreed separately.</p>
+                      </div>
+                    ) : <p className="mt-2 text-xs font-semibold text-slate-600">No lesson has been proposed yet.</p>}
+                  </section>
+                ) : null}
+
                 {adultProfile ? (
                   <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
                     <form action={acceptOrganisationInvitation} className="grid gap-3 md:grid-cols-[1fr_auto]">
@@ -199,7 +239,7 @@ export default async function OrganisationInvitationsPage({ searchParams }: Invi
                         <input name="profileId" type="hidden" value={adultProfile.id} />
                       )}
                       <button className="btn-primary" type="submit">
-                        Accept
+                        {isPlayerConnection ? "Accept Academy Connection" : "Accept"}
                       </button>
                     </form>
                     <form action={declineOrganisationInvitation}>

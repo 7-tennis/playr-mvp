@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import {
-  appRoleForOrganisationRole,
+  appRoleForOrganisationMembership,
   loadActiveOrganisationPreference,
   loadAllOrganisationMembershipsForUser,
   pickActiveOrganisationMembership,
@@ -320,7 +320,7 @@ export async function getPermissionContext(): Promise<PermissionContext> {
   const derivedRole: UserRole = linkedJuniorCount > 0 ? "parent" : "player";
   const activeOrganisationMembership = pickActiveOrganisationMembership(organisationMemberships, activeOrganisationPreference);
   const activeOrganisationRole = activeOrganisationMembership?.role ?? null;
-  const membershipRole = activeOrganisationMembership ? appRoleForOrganisationRole(activeOrganisationMembership.role) : null;
+  const membershipRole = activeOrganisationMembership ? appRoleForOrganisationMembership(activeOrganisationMembership) : null;
   const storedRole = normalizeStoredRole(roleRow?.role, derivedRole);
   const legacyVenueSuppressed = Boolean(
     roleRow?.venue_id &&

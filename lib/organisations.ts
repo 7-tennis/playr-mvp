@@ -129,6 +129,35 @@ export function productForOrganisationRole(role: OrganisationRole | string | nul
   }
 }
 
+export function productForOrganisationMembership(membership: Pick<OrganisationMembershipWithVenue, "role" | "venue">): ProductContext {
+  const organisationType = membership.venue?.organisation_type;
+
+  if (membership.role === "sports_coordinator" || membership.role === "team_manager") {
+    return "teamr";
+  }
+
+  if (
+    organisationType === "academy" ||
+    membership.role === "head_coach" ||
+    membership.role === "coach" ||
+    membership.role === "assistant_coach"
+  ) {
+    return "coachr";
+  }
+
+  return productForOrganisationRole(membership.role);
+}
+
+export function appRoleForOrganisationMembership(membership: Pick<OrganisationMembershipWithVenue, "role" | "venue">): UserRole {
+  const product = productForOrganisationMembership(membership);
+
+  if (product === "coachr" && (membership.role === "organisation_admin" || membership.role === "club_manager")) {
+    return "head_coach";
+  }
+
+  return appRoleForOrganisationRole(membership.role);
+}
+
 export function productLabelForOrganisationRole(role: OrganisationRole | string | null | undefined) {
   switch (appRoleForOrganisationRole(role)) {
     case "club_admin":

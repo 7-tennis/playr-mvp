@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getPermissionContext } from "@/lib/permissions";
+import { loadOrganisationSetup, productDashboardPath, productSetupPath } from "@/lib/organisation-setup";
+import type { OrganisationRole, OrganisationSetupProduct, OrganisationType } from "@/types/courtside";
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -51,7 +53,7 @@ export async function acceptOrganisationInvitation(formData: FormData) {
 
   const invitationResult = await context.supabase
     .from("organisation_invitations")
-    .select("invitation_kind")
+    .select("invitation_kind,intended_role,venue_id,venue:venue_id(organisation_type)")
     .eq("token", token)
     .maybeSingle();
   const { error } = invitationResult.data?.invitation_kind === "player"
@@ -68,6 +70,28 @@ export async function acceptOrganisationInvitation(formData: FormData) {
   }
 
   revalidateInvitationSurfaces();
+
+  const invitation = invitationResult.data as {
+    invitation_kind: string;
+    intended_role: OrganisationRole;
+    venue_id: string;
+    venue: { organisation_type: OrganisationType } | null;
+  } | null;
+  const leaderRoles: OrganisationRole[] = ["organisation_admin", "club_manager", "head_coach", "sports_coordinator", "team_manager"];
+
+  if (invitation && leaderRoles.includes(invitation.intended_role)) {
+    const setupProduct: OrganisationSetupProduct = invitation.intended_role === "sports_coordinator" || invitation.intended_role === "team_manager"
+      ? "teamr"
+      : invitation.venue?.organisation_type === "academy" || invitation.intended_role === "head_coach"
+        ? "coachr"
+        : "clubr";
+
+    if (setupProduct !== "teamr") {
+      const setup = await loadOrganisationSetup(context.supabase, invitation.venue_id, setupProduct);
+      redirect(setup.setup.status === "complete" ? productDashboardPath(setupProduct) : productSetupPath(setupProduct, setup.setup.current_step));
+    }
+  }
+
   redirect("/dashboard/organisations/invitations?message=accepted");
 }
 

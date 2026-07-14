@@ -80,6 +80,7 @@ function lessonErrorValue(error: { code?: string; message?: string } | null | un
       "court_venue",
       "court_access",
       "custom_location",
+      "external_venue",
       "invalid_lesson",
       "invalid_student",
       "missing_rpc",
@@ -202,7 +203,15 @@ export async function createCoachLesson(formData: FormData) {
   const playerId = optionalUuid(formData, "playerId");
   const courtId = optionalUuid(formData, "courtId");
   const locationType = allowedValue<CoachLessonLocationType>(text(formData, "locationType"), locationTypes, "managed_court");
-  const customLocation = nullableText(formData, "customLocation");
+  const externalVenueId = optionalUuid(formData, "externalVenueId");
+  let customLocation = nullableText(formData, "customLocation");
+  if (externalVenueId) {
+    let externalQuery = context.supabase.from("organisation_external_venues").select("id,name,organisation_id,status").eq("id", externalVenueId).eq("status", "active");
+    if (context.role !== "platform_admin" && venueId) externalQuery = externalQuery.eq("organisation_id", venueId);
+    const externalResult = await externalQuery.maybeSingle();
+    if (externalResult.error || !externalResult.data) redirectWithParam(returnTo, "lesson_error", "external_venue");
+    customLocation = externalResult.data.name;
+  }
   const startTime = datetimeValue(formData, "startTime");
   const endTime = datetimeValue(formData, "endTime");
   const lessonType = allowedValue<CoachLessonType>(text(formData, "lessonType"), coachLessonTypes, "private");
@@ -255,12 +264,13 @@ export async function createCoachLesson(formData: FormData) {
     redirectWithParam(returnTo, "lesson_error", "time_order");
   }
 
-  const { error } = await context.supabase.rpc("coachr_create_lesson_plan", {
+  const { error } = await context.supabase.rpc("coachr_create_lesson_plan_with_location", {
     p_coach_id: coachId,
     p_court_id: courtId,
     p_custom_location: customLocation,
     p_day_of_week: dayOfWeek,
     p_end_time: repeatMode === "none" ? endTime : null,
+    p_external_venue_id: externalVenueId,
     p_lesson_type: lessonType,
     p_location_type: locationType,
     p_notes: nullableText(formData, "notes"),
@@ -301,7 +311,15 @@ export async function updateCoachLesson(formData: FormData) {
   const playerId = optionalUuid(formData, "playerId");
   const courtId = optionalUuid(formData, "courtId");
   const locationType = allowedValue<CoachLessonLocationType>(text(formData, "locationType"), locationTypes, "managed_court");
-  const customLocation = nullableText(formData, "customLocation");
+  const externalVenueId = optionalUuid(formData, "externalVenueId");
+  let customLocation = nullableText(formData, "customLocation");
+  if (externalVenueId) {
+    let externalQuery = context.supabase.from("organisation_external_venues").select("id,name,organisation_id,status").eq("id", externalVenueId).eq("status", "active");
+    if (context.role !== "platform_admin" && context.venueId) externalQuery = externalQuery.eq("organisation_id", context.venueId);
+    const externalResult = await externalQuery.maybeSingle();
+    if (externalResult.error || !externalResult.data) redirectWithParam(returnTo, "lesson_error", "external_venue");
+    customLocation = externalResult.data.name;
+  }
   const editScope = allowedValue<SeriesScope>(text(formData, "editScope"), [...seriesScopes], "single");
 
   if (!playerId || !startTime || !endTime || (locationType === "managed_court" && !courtId) || (locationType === "custom" && !customLocation)) {
@@ -312,10 +330,11 @@ export async function updateCoachLesson(formData: FormData) {
     redirectWithParam(returnTo, "lesson_error", "time_order");
   }
 
-  const { error } = await context.supabase.rpc("coachr_update_lesson_plan", {
+  const { error } = await context.supabase.rpc("coachr_update_lesson_plan_with_location", {
     p_court_id: courtId,
     p_custom_location: customLocation,
     p_end_time: endTime,
+    p_external_venue_id: externalVenueId,
     p_lesson_id: lessonId,
     p_lesson_type: lessonType,
     p_location_type: locationType,

@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { SetupReminderCard } from "@/components/organisation-setup-wizard";
 import { BookingIcon, ClubIcon, EntriesIcon, EventIcon, MembershipIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { clubRScopeLabel, dayRange, loadClubRVenue, weekRange } from "@/lib/clubr";
 import { loadClubRBookings, loadClubRCourts, loadClubREntriesForEvents, loadClubREvents, loadClubRMembers } from "@/lib/clubr-data";
-import { formatDateTime, formatLabel } from "@/lib/courtside-format";
-import { roleLabel } from "@/lib/permissions";
+import { formatDateTime } from "@/lib/courtside-format";
+import { loadOrganisationSetup } from "@/lib/organisation-setup";
 import { ClubRActionCard, ClubRPageFrame, ClubRStatCard, getProtectedClubRPage } from "./clubr-shared";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,10 @@ export default async function ClubRPage() {
     loadClubRMembers(context),
     loadClubREvents(context, venue)
   ]);
-  const eventEntries = await loadClubREntriesForEvents(context, events.map((event) => event.id));
+  const [eventEntries, setupSnapshot] = await Promise.all([
+    loadClubREntriesForEvents(context, events.map((event) => event.id)),
+    venue ? loadOrganisationSetup(context.supabase, venue.id, "clubr") : Promise.resolve(null)
+  ]);
   const nowMs = now.getTime();
   const confirmedToday = todayBookings.filter((booking) => booking.status === "confirmed");
   const courtsInUse = new Set(
@@ -45,15 +49,9 @@ export default async function ClubRPage() {
   const coachingBookings = weekBookings.filter((booking) => booking.booking_type === "lesson");
   const activeMembers = members.filter((member) => member.member_status === "member");
   const pendingMembers = members.filter((member) => member.member_status === "pending");
-  const setupChecks = [
-    venue ? "Venue linked" : "Venue to be linked",
-    activeCourts.length > 0 ? "Courts active" : "Courts need setup",
-    context.role === "platform_admin" || context.venueId ? "Access scoped" : "Access needs venue",
-    members.length > 0 ? "Member activity found" : "Member links pending"
-  ];
-
   return (
     <ClubRPageFrame context={context} subtitle={`${clubRScopeLabel(context, venue)} management at a glance.`} title="MyClubR" venue={venue}>
+      {setupSnapshot && venue ? <SetupReminderCard organisationName={venue.name} snapshot={setupSnapshot} /> : null}
       <section className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <ClubRStatCard helper="Confirmed bookings today" icon={<BookingIcon size={20} />} label="Today" value={confirmedToday.length} />
         <ClubRStatCard helper="Courts currently occupied" icon={<TimeIcon size={20} />} label="Courts in use" value={courtsInUse} />
@@ -129,36 +127,11 @@ export default async function ClubRPage() {
             <ClubIcon className="text-court-teal" size={22} />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link className="btn-secondary" href="/admin/courts">
-              Court Management
+            <Link className="btn-secondary" href="/dashboard/clubr/settings">
+              Court Settings
             </Link>
           </div>
         </article>
-      </section>
-
-      <section className="mb-5 surface-card p-4 sm:p-5">
-        <p className="section-kicker">Club Setup</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded bg-slate-50 p-3 text-sm font-semibold text-slate-600">
-            Club <span className="block font-black text-court-navy">{venue?.name ?? "All venues"}</span>
-          </div>
-          <div className="rounded bg-slate-50 p-3 text-sm font-semibold text-slate-600">
-            Admin <span className="block font-black text-court-navy">{roleLabel(context.role)}</span>
-          </div>
-          <div className="rounded bg-slate-50 p-3 text-sm font-semibold text-slate-600">
-            Type <span className="block font-black text-court-navy">{venue?.organisation_type ? formatLabel(venue.organisation_type) : "Global"}</span>
-          </div>
-          <div className="rounded bg-slate-50 p-3 text-sm font-semibold text-slate-600">
-            Status <span className="block font-black text-court-navy">{setupChecks.filter((check) => !check.includes("need") && !check.includes("pending")).length} / {setupChecks.length}</span>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {setupChecks.map((check) => (
-            <span className={`ui-chip ${check.includes("need") || check.includes("pending") ? "ui-chip-warning" : "ui-chip-success"}`} key={check}>
-              {check}
-            </span>
-          ))}
-        </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

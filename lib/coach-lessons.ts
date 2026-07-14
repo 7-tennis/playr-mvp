@@ -9,6 +9,7 @@ import type {
   CoachLessonType,
   Court,
   CourtBooking,
+  OrganisationExternalVenue,
   Profile,
   Venue
 } from "@/types/courtside";
@@ -27,6 +28,7 @@ export type CoachLessonCourt = Pick<Court, "id" | "name" | "venue_id"> & {
   owner?: { name: string } | null;
 };
 export type CoachLessonBooking = Pick<CourtBooking, "id" | "start_time" | "end_time" | "status">;
+export type CoachLessonExternalVenue = Pick<OrganisationExternalVenue, "id" | "name" | "address" | "court_names">;
 export type CoachLessonAttendanceWithProfile = CoachLessonAttendance & {
   player: CoachLessonProfile | null;
   junior: CoachLessonProfile | null;
@@ -40,6 +42,7 @@ export type CoachLessonWithRelations = CoachLesson & {
   court: CoachLessonCourt | null;
   venue: CoachLessonVenue | null;
   court_booking: CoachLessonBooking | null;
+  external_venue: CoachLessonExternalVenue | null;
   attendance: CoachLessonAttendanceWithProfile[] | null;
 };
 
@@ -47,6 +50,7 @@ export type CoachLessonOptionData = {
   coachProfiles: CoachLessonProfile[];
   playerProfiles: CoachLessonProfile[];
   courts: CoachLessonCourt[];
+  externalVenues: CoachLessonExternalVenue[];
   venues: CoachLessonVenue[];
 };
 
@@ -63,6 +67,7 @@ const coachLessonSelect = `
   court_booking_id,
   location_type,
   custom_location,
+  external_venue_id,
   lesson_type,
   title,
   start_time,
@@ -86,6 +91,7 @@ const coachLessonSelect = `
   court:court_id(id,name,venue_id,owner:venue_id(name)),
   venue:venue_id(id,name),
   court_booking:court_booking_id(id,start_time,end_time,status),
+  external_venue:external_venue_id(id,name,address,court_names),
   attendance:coach_lesson_attendance(
     id,
     lesson_id,
@@ -237,7 +243,7 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
           ? context.supabase.from("coach_player_assignments").select("player_profile_id").eq("venue_id", context.venueId).eq("status", "active").limit(240)
           : null;
 
-  const [ownCoachProfileResult, coachRolesResult, coachMembershipsResult, linkedPlayersResult, assignedPlayersResult, authorisedCourtsResult, venuesResult] = await Promise.all([
+  const [ownCoachProfileResult, coachRolesResult, coachMembershipsResult, linkedPlayersResult, assignedPlayersResult, authorisedCourtsResult, venuesResult, externalVenuesResult] = await Promise.all([
     context.adultProfileId
       ? context.supabase
           .from("profiles")
@@ -255,7 +261,15 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
       : Promise.resolve({ data: [], error: null }),
     context.venueId && context.role !== "platform_admin"
       ? context.supabase.from("venues").select("id,name").eq("id", context.venueId).order("name", { ascending: true })
-      : context.supabase.from("venues").select("id,name").eq("status", "active").order("name", { ascending: true })
+      : context.supabase.from("venues").select("id,name").eq("status", "active").order("name", { ascending: true }),
+    context.venueId
+      ? context.supabase
+          .from("organisation_external_venues")
+          .select("id,name,address,court_names")
+          .eq("organisation_id", context.venueId)
+          .eq("status", "active")
+          .order("name", { ascending: true })
+      : Promise.resolve({ data: [], error: null })
   ]);
 
   let courts: CoachLessonCourt[] = ((authorisedCourtsResult.data ?? []) as {
@@ -346,6 +360,7 @@ export async function loadCoachLessonOptions(context: AuthenticatedContext): Pro
     coachProfiles: ((coachProfilesResult.data ?? []) as CoachLessonProfile[]) ?? [],
     playerProfiles: ((playerProfilesResult.data ?? []) as CoachLessonProfile[]) ?? [],
     courts,
+    externalVenues: ((externalVenuesResult.data ?? []) as CoachLessonExternalVenue[]) ?? [],
     venues: ((venuesResult.data ?? []) as CoachLessonVenue[]) ?? []
   };
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
-import { ArrowRightIcon, BookingIcon, ClubIcon, EventIcon, InviteIcon, RatingIcon, SchoolIcon } from "@/components/playr-icons";
+import { ArrowRightIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, InviteIcon, RatingIcon, SchoolIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
@@ -15,10 +15,37 @@ import type {
   EntryStatus,
   MatchInviteStatus,
   MatchInviteType,
+  OrganisationLinkStatus,
   Profile,
   Rating,
   Venue
 } from "@/types/courtside";
+
+type AcademyLinkRow = {
+  id: string;
+  venue_id: string;
+  player_profile_id: string;
+  status: OrganisationLinkStatus;
+  connection_context: Record<string, unknown>;
+  proposal_status: string;
+  venue: Pick<Venue, "id" | "name" | "status" | "organisation_type"> | null;
+};
+
+type AcademyAssignmentRow = {
+  organisation_player_link_id: string | null;
+  player_profile_id: string;
+  coach: Pick<Profile, "id" | "first_name" | "last_name"> | null;
+};
+
+type AcademyLessonRow = {
+  id: string;
+  venue_id: string;
+  player_id: string;
+  start_time: string;
+  custom_location: string | null;
+  court: Pick<Court, "name"> | null;
+  external_venue: { name: string } | null;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +118,44 @@ function CounterPill({ icon, count, label }: { icon: ReactNode; count: number; l
       <span>{count}</span>
       <span className="hidden truncate sm:inline">{label}</span>
     </div>
+  );
+}
+
+function academyProposal(context: Record<string, unknown>) {
+  const value = context.proposal;
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function proposalText(proposal: Record<string, unknown> | null) {
+  if (!proposal) return null;
+  const value = (key: string) => typeof proposal[key] === "string" || typeof proposal[key] === "number" ? String(proposal[key]) : "";
+  return [value("day"), value("startTime"), value("durationMinutes") ? `${value("durationMinutes")} min` : ""].filter(Boolean).join(" · ") || null;
+}
+
+function AcademyConnectionCard({ assignment, lesson, link, player }: { assignment: AcademyAssignmentRow | null; lesson: AcademyLessonRow | null; link: AcademyLinkRow; player: Pick<Profile, "id" | "first_name" | "last_name"> }) {
+  const proposal = academyProposal(link.connection_context);
+  const schedule = proposalText(proposal);
+  const connectionLabel = link.status === "active" ? "Connection active" : link.status === "suspended" ? "Connection paused" : "Invitation pending";
+  const organisationInactive = link.venue?.status === "inactive";
+
+  return (
+    <Link className="group block rounded-lg focus-ring" href={`/dashboard/players/${player.id}#academies`}>
+      <article className="overflow-hidden rounded-lg border border-court-teal/35 bg-white shadow-sm transition group-hover:-translate-y-0.5 group-hover:shadow-court">
+        <div className="h-1.5 bg-court-navy" />
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div><p className="section-kicker">Academy</p><h3 className="mt-1 text-lg font-black text-court-navy">{link.venue?.name ?? "Academy"}</h3><p className="mt-1 text-sm font-semibold text-slate-600">{playerName(player)}</p></div>
+            <span className={`ui-chip ${organisationInactive || link.status === "suspended" ? "ui-chip-warning" : link.status === "active" ? "ui-chip-success" : "ui-chip-muted"}`}>{organisationInactive ? "Organisation inactive" : connectionLabel}</span>
+          </div>
+          <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-700 sm:grid-cols-2">
+            <p className="flex items-center gap-2"><EntriesIcon size={15} /> Coach: {assignment?.coach ? playerName(assignment.coach) : "To be assigned"}</p>
+            {lesson ? <p className="flex items-center gap-2"><EventIcon size={15} /> Next: {new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Johannesburg" }).format(new Date(lesson.start_time))}</p> : schedule ? <p className="flex items-center gap-2"><EventIcon size={15} /> Proposed: {schedule}</p> : <p className="flex items-center gap-2 text-slate-500"><EventIcon size={15} /> No lesson scheduled yet</p>}
+            {lesson ? <p className="flex items-center gap-2 sm:col-span-2"><ClubIcon size={15} /> {lesson.external_venue?.name ?? lesson.court?.name ?? lesson.custom_location ?? "Venue to be confirmed"}</p> : proposal && typeof proposal.venue === "string" ? <p className="flex items-center gap-2 sm:col-span-2"><ClubIcon size={15} /> {proposal.venue}</p> : null}
+          </div>
+          <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-black text-court-navy"><span>Open Academy Context</span><ArrowRightIcon size={16} /></div>
+        </div>
+      </article>
+    </Link>
   );
 }
 
@@ -277,6 +342,38 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     console.error("CourtSide dashboard bookings load failed", { userId: user.id, error: bookingError });
   }
 
+  const [academyLinksResult, academyAssignmentsResult, academyLessonsResult] = profileIds.length > 0
+    ? await Promise.all([
+        supabase
+          .from("organisation_player_links")
+          .select("id,venue_id,player_profile_id,status,connection_context,proposal_status,venue:venue_id(id,name,status,organisation_type)")
+          .in("player_profile_id", profileIds)
+          .in("status", ["pending", "active", "suspended"])
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("coach_player_assignments")
+          .select("organisation_player_link_id,player_profile_id,coach:coach_profile_id(id,first_name,last_name)")
+          .in("player_profile_id", profileIds)
+          .eq("status", "active"),
+        supabase
+          .from("coach_lessons")
+          .select("id,venue_id,player_id,start_time,custom_location,court:court_id(name),external_venue:external_venue_id(name)")
+          .in("player_id", profileIds)
+          .eq("status", "scheduled")
+          .gte("start_time", now)
+          .order("start_time", { ascending: true })
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }];
+  const academyLinks = (academyLinksResult.data ?? []) as unknown as AcademyLinkRow[];
+  const academyAssignments = (academyAssignmentsResult.data ?? []) as unknown as AcademyAssignmentRow[];
+  const academyLessons = (academyLessonsResult.data ?? []) as unknown as AcademyLessonRow[];
+  const academyAssignmentByLink = new Map(academyAssignments.filter((assignment) => assignment.organisation_player_link_id).map((assignment) => [assignment.organisation_player_link_id as string, assignment]));
+  const academyLessonByPlayer = new Map<string, AcademyLessonRow>();
+  academyLessons.forEach((lesson) => {
+    const key = `${lesson.player_id}:${lesson.venue_id}`;
+    if (!academyLessonByPlayer.has(key)) academyLessonByPlayer.set(key, lesson);
+  });
+
   const activityByProfileId = new Map<string, ActivityCounts>();
   profileIds.forEach((profileId) => {
     activityByProfileId.set(profileId, emptyActivity());
@@ -325,6 +422,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   const totalPendingInvites = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.invites, 0);
   const totalUpcomingEvents = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.events, 0);
   const totalUpcomingBookings = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.bookings, 0);
+  const playerById = new Map<string, Pick<Profile, "id" | "first_name" | "last_name">>();
+  if (profile) playerById.set(profile.id, profile);
+  juniorRows.forEach((junior) => playerById.set(junior.id, junior));
 
   return (
     <PageShell eyebrow="MyPlayR" subtitle="Your players, progress and upcoming tennis activity." title="MyPlayR">
@@ -384,6 +484,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           ) : null}
         </div>
       </section>
+
+      {academyLinks.length > 0 ? (
+        <section className="mb-6" id="academies">
+          <div className="mb-4"><p className="section-kicker">Connected organisations</p><h2 className="mt-2 text-2xl font-black text-court-navy">My Academies</h2></div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {academyLinks.map((link) => {
+              const linkedPlayer = playerById.get(link.player_profile_id);
+              if (!linkedPlayer) return null;
+              return <AcademyConnectionCard assignment={academyAssignmentByLink.get(link.id) ?? null} key={link.id} lesson={academyLessonByPlayer.get(`${link.player_profile_id}:${link.venue_id}`) ?? null} link={link} player={linkedPlayer} />;
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/book-court">

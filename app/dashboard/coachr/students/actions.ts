@@ -19,6 +19,27 @@ function invitationError(error: { message?: string } | null | undefined, fallbac
   return fallback;
 }
 
+function proposal(formData: FormData) {
+  const values: Record<string, string | number> = {};
+  const fields = [
+    ["lessonType", "lessonType"],
+    ["proposedDay", "day"],
+    ["proposedStartTime", "startTime"],
+    ["proposedStartDate", "startDate"],
+    ["proposalRecurrence", "recurrence"],
+    ["proposalVenue", "venue"],
+    ["proposalNotes", "notes"]
+  ] as const;
+
+  fields.forEach(([formKey, metadataKey]) => {
+    const value = text(formData, formKey);
+    if (value) values[metadataKey] = value;
+  });
+  const duration = Number.parseInt(text(formData, "proposedDuration"), 10);
+  if (Number.isFinite(duration) && duration > 0) values.durationMinutes = duration;
+  return values;
+}
+
 function revalidateStudentSurfaces() {
   revalidatePath("/dashboard/coachr/students");
   revalidatePath("/dashboard/coachr");
@@ -34,11 +55,12 @@ export async function requestAdultPlayerLink(formData: FormData) {
     redirect("/dashboard/coachr/students?error=missing_fields");
   }
 
-  const { data: token, error } = await context.supabase.rpc("create_adult_player_invitation", {
+  const { data: token, error } = await context.supabase.rpc("create_adult_player_invitation_with_context", {
     p_coach_profile_id: text(formData, "coachProfileId") || context.adultProfileId,
     p_invited_email: playerEmail,
     p_invited_name: text(formData, "playerName") || null,
     p_invited_phone: text(formData, "playerPhone") || null,
+    p_proposal: proposal(formData),
     p_venue_id: context.venueId
   });
 
@@ -74,7 +96,8 @@ export async function requestPlayerLink(formData: FormData) {
     p_metadata: {
       coachProfileId,
       playerFirstName,
-      playerLastName
+      playerLastName,
+      ...(Object.keys(proposal(formData)).length > 0 ? { proposal: proposal(formData) } : {})
     },
     p_parent_profile_id: null,
     p_target_junior_profile_id: null,

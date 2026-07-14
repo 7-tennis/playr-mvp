@@ -55,6 +55,9 @@ export default async function CoachRMorePage() {
           <CoachRActionCard href="/dashboard/coachr/students" icon={<EntriesIcon size={18} />} text="Students and attendance history." title="Attendance History" />
           <CoachRActionCard href="/dashboard/coachr" icon={<MatchIcon size={18} />} text="Programme mix from lesson types." title="Programmes" />
           <CoachRActionCard href="/dashboard/coachr/messages" icon={<NotificationIcon size={18} />} text="Lesson updates and future feedback messages." title="Notifications" />
+          {context.activeOrganisationRole === "organisation_admin" || context.activeOrganisationRole === "club_manager" || context.activeOrganisationRole === "head_coach" ? (
+            <CoachRActionCard href="/dashboard/coachr/settings" icon={<ClubIcon size={18} />} text="Academy details, venues, coaches and lesson defaults." title="Academy Settings" />
+          ) : null}
           <CoachRActionCard href="/dashboard/coachr/more" icon={<PrivateIcon size={18} />} text="CoachR help and configuration status." title="Help" />
         </CoachRCompactGrid>
       </section>

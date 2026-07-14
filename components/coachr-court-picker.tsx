@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BookingIcon, ClubIcon, LocationIcon, StatusIcon } from "@/components/playr-icons";
+import type { CoachLessonExternalVenue } from "@/lib/coach-lessons";
 import type { CoachLessonLocationType } from "@/types/courtside";
+
+type CoachLessonLocationMode = CoachLessonLocationType | "external";
 
 type CourtOption = {
   access_kind?: "owned" | "shared";
@@ -26,20 +29,24 @@ export function CoachRCourtPicker({
   courts,
   defaultCourtId = "",
   defaultCustomLocation = "",
+  defaultExternalVenueId = "",
   defaultLocationType = "managed_court",
   excludeLessonId = null,
+  externalVenues = [],
   organisationId
 }: {
   canManageAccess?: boolean;
   courts: CourtOption[];
   defaultCourtId?: string;
   defaultCustomLocation?: string;
+  defaultExternalVenueId?: string;
   defaultLocationType?: CoachLessonLocationType;
   excludeLessonId?: string | null;
+  externalVenues?: CoachLessonExternalVenue[];
   organisationId: string;
 }) {
   const selectRef = useRef<HTMLSelectElement>(null);
-  const [locationType, setLocationType] = useState<CoachLessonLocationType>(defaultLocationType);
+  const [locationMode, setLocationMode] = useState<CoachLessonLocationMode>(defaultExternalVenueId ? "external" : defaultLocationType);
   const [availability, setAvailability] = useState<Map<string, boolean> | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -51,7 +58,7 @@ export function CoachRCourtPicker({
     const venueInput = form?.elements.namedItem("venueId") as HTMLInputElement | HTMLSelectElement | null;
     const repeatInput = form?.querySelector<HTMLInputElement>('input[name="repeatMode"]:checked');
 
-    if (!form || locationType !== "managed_court" || repeatInput?.value === "weekly") {
+    if (!form || locationMode !== "managed_court" || repeatInput?.value === "weekly") {
       setAvailability(null);
       return;
     }
@@ -79,7 +86,7 @@ export function CoachRCourtPicker({
     } finally {
       setLoading(false);
     }
-  }, [excludeLessonId, locationType, organisationId]);
+  }, [excludeLessonId, locationMode, organisationId]);
 
   useEffect(() => {
     const form = selectRef.current?.form;
@@ -101,15 +108,17 @@ export function CoachRCourtPicker({
       </div>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        {(["managed_court", "custom", "none"] as CoachLessonLocationType[]).map((type) => (
-          <label className={`rounded-lg border p-3 text-sm font-bold ${locationType === type ? "border-court-teal bg-court-mist text-court-navy" : "border-slate-200 bg-white text-slate-700"}`} key={type}>
-            <input checked={locationType === type} className="mr-2" name="locationType" onChange={() => setLocationType(type)} type="radio" value={type} />
-            {type === "managed_court" ? "PlayR court" : type === "custom" ? "Off-site" : "No court"}
+        {(["managed_court", "external", "custom", "none"] as CoachLessonLocationMode[]).map((type) => (
+          <label className={`rounded-lg border p-3 text-sm font-bold ${locationMode === type ? "border-court-teal bg-court-mist text-court-navy" : "border-slate-200 bg-white text-slate-700"}`} key={type}>
+            <input checked={locationMode === type} className="mr-2" name="locationMode" onChange={() => setLocationMode(type)} type="radio" value={type} />
+            {type === "managed_court" ? "PlayR court" : type === "external" ? "External venue" : type === "custom" ? "Other location" : "No court"}
           </label>
         ))}
       </div>
 
-      {locationType === "managed_court" ? (
+      <input name="locationType" type="hidden" value={locationMode === "external" ? "custom" : locationMode} />
+
+      {locationMode === "managed_court" ? (
         <div className="mt-3">
           <label className="text-sm font-semibold text-slate-700">Court
             <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultCourtId} name="courtId" ref={selectRef} required>
@@ -122,7 +131,7 @@ export function CoachRCourtPicker({
           </label>
           {courts.length === 0 ? (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
-              No courts are configured or shared with this organisation. {canManageAccess ? <a className="font-black underline" href="/dashboard/coachr/courts">Manage court access</a> : "Contact your organisation administrator or head coach to configure court access."}
+              Your academy has not connected an available PlayR court yet. {canManageAccess ? <a className="font-black underline" href="/dashboard/coachr/settings">Manage coaching venues</a> : "Contact your academy leader to configure coaching venues."}
             </div>
           ) : availability && availableCount === 0 ? (
             <p className="mt-2 flex items-center gap-2 text-xs font-bold text-amber-800"><StatusIcon size={14} /> No courts are available for the selected time.</p>
@@ -131,8 +140,18 @@ export function CoachRCourtPicker({
           )}
           {loadError ? <p className="mt-2 text-xs font-semibold text-amber-800">Live availability could not be refreshed. The server will check again before saving.</p> : null}
         </div>
-      ) : locationType === "custom" ? (
-        <label className="mt-3 block text-sm font-semibold text-slate-700">Off-site location<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultCustomLocation} name="customLocation" placeholder="Away venue or school event" required /></label>
+      ) : locationMode === "external" ? (
+        <div className="mt-3">
+          <label className="block text-sm font-semibold text-slate-700">External venue
+            <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultExternalVenueId} name="externalVenueId" required>
+              <option value="">Choose external venue</option>
+              {externalVenues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}{venue.address ? ` — ${venue.address}` : ""}</option>)}
+            </select>
+          </label>
+          {externalVenues.length === 0 ? <p className="mt-2 text-xs font-semibold text-amber-800">No external venues saved yet. <a className="font-black underline" href="/dashboard/coachr/settings">Add one in Academy Settings</a>.</p> : <p className="mt-2 text-xs font-semibold text-slate-600">Availability is managed outside PlayR. No court booking will be created.</p>}
+        </div>
+      ) : locationMode === "custom" ? (
+        <label className="mt-3 block text-sm font-semibold text-slate-700">Other location<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultCustomLocation} name="customLocation" placeholder="Player home court or municipal venue" required /></label>
       ) : (
         <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-600"><ClubIcon size={15} /> No court reservation will be created.</p>
       )}

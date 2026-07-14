@@ -51,6 +51,25 @@ type StudentSummary = {
   recentHistory: { date: string; status: string }[];
 };
 
+function ProposalFields() {
+  return (
+    <details className="rounded-lg border border-slate-200 bg-white p-3 md:col-span-2">
+      <summary className="cursor-pointer font-black text-court-navy">Lesson proposal <span className="text-xs font-semibold text-slate-500">Optional</span></summary>
+      <p className="mt-2 text-xs leading-5 text-slate-600">This explains the proposed arrangement. Accepting the academy connection does not confirm a paid or recurring lesson.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="text-sm font-semibold text-slate-700">Lesson type<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="lessonType"><option value="">Not specified</option>{coachLessonTypes.map((type) => <option key={type} value={type}>{formatLabel(type)}</option>)}</select></label>
+        <label className="text-sm font-semibold text-slate-700">Day<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="proposedDay" placeholder="Tuesday" /></label>
+        <label className="text-sm font-semibold text-slate-700">Start time<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="proposedStartTime" type="time" /></label>
+        <label className="text-sm font-semibold text-slate-700">Duration<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="proposedDuration"><option value="">Not specified</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option><option value="90">90 minutes</option></select></label>
+        <label className="text-sm font-semibold text-slate-700">Proposed start date<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="proposedStartDate" type="date" /></label>
+        <label className="text-sm font-semibold text-slate-700">Frequency<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="proposalRecurrence"><option value="">Not specified</option><option value="once">Once-off</option><option value="weekly">Weekly proposal</option></select></label>
+        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Venue or location<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="proposalVenue" placeholder="Kenmare Tennis Club or private estate court" /></label>
+        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Proposal notes<textarea className="mt-2 min-h-20 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="proposalNotes" /></label>
+      </div>
+    </details>
+  );
+}
+
 function fallbackAttendanceResult(lesson: CoachLessonWithRelations): CoachLessonAttendanceResult | "scheduled" {
   if (lesson.status === "completed" || lesson.attendance_status === "attended") {
     return "attended";
@@ -362,6 +381,7 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
             {!coachOnly && options.coachProfiles.length > 0 ? (
               <label className="text-sm font-semibold text-slate-700">Coach assignment<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="coachProfileId"><option value="">Assign after acceptance</option>{options.coachProfiles.map((coach) => <option key={coach.id} value={coach.id}>{profileDisplayName(coach)}</option>)}</select></label>
             ) : null}
+            <ProposalFields />
             <button className="btn-primary md:col-span-2" type="submit">Send Adult Invitation</button>
           </form>
         </section>
@@ -401,6 +421,7 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
               </select>
             </label>
           ) : null}
+          <ProposalFields />
           <button className="btn-primary md:col-span-2" type="submit">
             Send Approval Request
           </button>
