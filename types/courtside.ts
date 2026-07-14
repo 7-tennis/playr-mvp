@@ -15,6 +15,8 @@ export type CourtStatus = "active" | "inactive";
 export type CourtBookingStatus = "confirmed" | "cancelled";
 export type CourtBookingType = "player_booking" | "lesson" | "maintenance" | "club_programme" | "competition" | "americano";
 export type CoachLessonLocationType = "managed_court" | "custom" | "none";
+export type CoachLessonSeriesEndMode = "until_cancelled" | "until_date" | "occurrence_count";
+export type CoachLessonSeriesStatus = "active" | "ended" | "cancelled";
 export type OrganisationCourtAccessStatus = "active" | "inactive" | "revoked";
 export type MatchInviteType = "casual" | "verified";
 export type MatchInviteStatus = "pending" | "accepted" | "declined" | "cancelled";
@@ -382,6 +384,8 @@ export interface CourtBooking {
   owner_organisation_id: string | null;
   coach_lesson_id: string | null;
   booking_purpose: string | null;
+  coach_profile_id: string | null;
+  source_product: string | null;
 }
 
 export interface OrganisationCourtAccess {
@@ -523,6 +527,7 @@ export interface CoachLesson {
   end_time: string;
   repeat_rule: string | null;
   recurring_group_id: string | null;
+  recurrence_date: string | null;
   status: CoachLessonStatus;
   attendance_status: CoachLessonAttendanceStatus;
   feedback_status: CoachLessonFeedbackStatus;
@@ -531,6 +536,51 @@ export interface CoachLesson {
   updated_by_user_id: string | null;
   cancelled_at: string | null;
   cancelled_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachLessonSeries {
+  id: string;
+  venue_id: string;
+  coach_id: string;
+  player_id: string;
+  junior_profile_id: string | null;
+  parent_id: string | null;
+  lesson_type: CoachLessonType;
+  title: string;
+  frequency: "weekly";
+  weekday: number;
+  start_local_time: string;
+  duration_minutes: number;
+  start_date: string;
+  end_mode: CoachLessonSeriesEndMode;
+  end_date: string | null;
+  occurrence_count: number | null;
+  generated_through: string | null;
+  generated_occurrence_count: number;
+  status: CoachLessonSeriesStatus;
+  location_type: CoachLessonLocationType;
+  court_id: string | null;
+  external_venue_id: string | null;
+  custom_location: string | null;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  ended_by_user_id: string | null;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+  exceptions?: CoachLessonSeriesException[] | null;
+}
+
+export interface CoachLessonSeriesException {
+  id: string;
+  series_id: string;
+  occurrence_date: string;
+  lesson_id: string | null;
+  status: "conflict" | "cancelled" | "edited";
+  reason: string | null;
   created_at: string;
   updated_at: string;
 }

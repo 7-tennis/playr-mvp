@@ -25,7 +25,23 @@ function shortId(value: string | null) {
 }
 
 type DiagnosticsPageProps = {
-  searchParams?: { venue?: string };
+  searchParams?: { lesson?: string; venue?: string };
+};
+
+type ReservationDiagnostic = {
+  lesson_id: string;
+  series_id: string | null;
+  selected_court_id: string | null;
+  linked_booking_id: string | null;
+  booking_status: string | null;
+  booking_start: string | null;
+  booking_end: string | null;
+  owner_organisation_id: string | null;
+  booking_organisation_id: string | null;
+  player_availability_blocked: boolean;
+  reservation_valid: boolean;
+  recurrence_end_mode: string | null;
+  next_generation_boundary: string | null;
 };
 
 export default async function CoachRConnectionDiagnosticsPage({ searchParams }: DiagnosticsPageProps) {
@@ -34,7 +50,8 @@ export default async function CoachRConnectionDiagnosticsPage({ searchParams }: 
   if (content) return content;
   if (access.context.kind !== "authenticated") return null;
 
-  const canView = access.context.role === "platform_admin" || ["organisation_admin", "club_manager"].includes(access.context.activeOrganisationRole ?? "");
+  const canView = ["platform_admin", "head_coach", "club_admin"].includes(access.context.role)
+    || ["organisation_admin", "club_manager", "head_coach"].includes(access.context.activeOrganisationRole ?? "");
   const platformVenuesResult = access.context.role === "platform_admin"
     ? await access.context.supabase.from("venues").select("id,name").eq("status", "active").order("name", { ascending: true }).limit(200)
     : { data: [] };
@@ -57,6 +74,13 @@ export default async function CoachRConnectionDiagnosticsPage({ searchParams }: 
     p_venue_id: venueId
   });
   const diagnostics = ((data ?? []) as ConnectionDiagnostic[]) ?? [];
+  const requestedLessonId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(searchParams?.lesson ?? "")
+    ? searchParams?.lesson ?? null
+    : null;
+  const reservationResult = requestedLessonId
+    ? await access.context.supabase.rpc("coachr_lesson_reservation_diagnostics", { p_lesson_id: requestedLessonId })
+    : { data: [], error: null };
+  const reservation = ((reservationResult.data?.[0] ?? null) as ReservationDiagnostic | null);
 
   if (error) {
     console.error("CoachR connection diagnostics could not be loaded", {
@@ -82,6 +106,38 @@ export default async function CoachRConnectionDiagnosticsPage({ searchParams }: 
         ) : <span />}
         <a className="btn-secondary" href="/dashboard/coachr/students">Back to Students</a>
       </div>
+
+      {requestedLessonId ? (
+        <section className="surface-card mb-5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="section-kicker">Court reservation</p>
+              <h2 className="section-title mt-1">Lesson {shortId(requestedLessonId)}</h2>
+            </div>
+            <span className={`ui-chip ${reservation?.reservation_valid ? "ui-chip-success" : "ui-chip-warning"}`}>
+              {reservation?.reservation_valid ? "Reservation valid" : "Needs review"}
+            </span>
+          </div>
+          {reservationResult.error ? (
+            <p className="mt-3 text-sm font-semibold text-amber-800">Reservation diagnostics could not be loaded for this lesson.</p>
+          ) : reservation ? (
+            <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-600 sm:grid-cols-2">
+              <p>Series: <span className="font-black text-court-navy">{shortId(reservation.series_id)}</span></p>
+              <p>Court: <span className="font-black text-court-navy">{shortId(reservation.selected_court_id)}</span></p>
+              <p>Booking: <span className="font-black text-court-navy">{shortId(reservation.linked_booking_id)}</span></p>
+              <p>Status: <span className="font-black text-court-navy">{reservation.booking_status ? formatLabel(reservation.booking_status) : "Not linked"}</span></p>
+              <p>Owner organisation: <span className="font-black text-court-navy">{shortId(reservation.owner_organisation_id)}</span></p>
+              <p>Booking organisation: <span className="font-black text-court-navy">{shortId(reservation.booking_organisation_id)}</span></p>
+              <p>Player availability: <span className="font-black text-court-navy">{reservation.player_availability_blocked ? "Blocked" : "Available"}</span></p>
+              <p>Recurrence: <span className="font-black text-court-navy">{reservation.recurrence_end_mode ? formatLabel(reservation.recurrence_end_mode) : "Once-off"}</span></p>
+              <p>Booking time: <span className="font-black text-court-navy">{reservation.booking_start ? formatDateTime(reservation.booking_start) : "Not set"}</span></p>
+              <p>Generation boundary: <span className="font-black text-court-navy">{reservation.next_generation_boundary ?? "Not recurring"}</span></p>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm font-semibold text-amber-800">No permitted lesson reservation was found.</p>
+          )}
+        </section>
+      ) : null}
 
       {error ? (
         <section className="empty-state">Diagnostics could not be loaded. Confirm the latest migration is applied.</section>

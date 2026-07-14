@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CoachRCourtPicker } from "@/components/coachr-court-picker";
+import { CoachRRecurrenceControls } from "@/components/coachr-recurrence-controls";
 import { CoachRStudentSelector } from "@/components/coachr-student-selector";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { ArrowRightIcon, BookingIcon, ChevronDownIcon, EntriesIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
@@ -93,7 +94,7 @@ function errorMessage(value?: string) {
     case "coach_conflict":
       return "This coach already has another lesson at this time.";
     case "recurrence_range":
-      return "Choose a weekly recurrence range with at least one matching day and no more than 12 months.";
+      return "Choose a valid weekly start, end option and at least one matching lesson date.";
     case "court_venue":
       return "That court is not linked to the selected venue.";
     case "court_access":
@@ -111,6 +112,10 @@ function errorMessage(value?: string) {
       return "No active academy student was selected. Open Students to connect or assign a player first.";
     case "missing_rpc":
       return "CoachR lesson setup is missing a required database function. Run the latest Supabase migrations.";
+    case "managed_lesson_booking_required":
+      return "The lesson was not saved because its managed court could not be reserved.";
+    case "invalid_series":
+      return "That recurring lesson series could not be found.";
     case "access":
       return "Your role cannot manage that lesson scope.";
     case "attendance_confirm":
@@ -268,7 +273,14 @@ function isoDayOfWeek(serial: number) {
   return day === 0 ? 7 : day;
 }
 
-function repeatRuleSummary(rule: string | null) {
+function repeatRuleSummary(lesson: CoachLessonWithRelations) {
+  if (lesson.series) {
+    if (lesson.series.end_mode === "until_cancelled") return "Weekly · Ongoing";
+    if (lesson.series.end_mode === "until_date") return `Weekly · Through ${lesson.series.end_date ?? "selected date"}`;
+    return `Weekly · ${lesson.series.occurrence_count ?? 0} lessons`;
+  }
+
+  const rule = lesson.repeat_rule;
   if (!rule?.startsWith("weekly")) {
     return null;
   }
@@ -507,6 +519,7 @@ function AttendanceButtons({
 
 function LessonCard({
   canManageCourtAccess,
+  coachOptions,
   courts,
   externalVenues,
   lesson,
@@ -516,6 +529,7 @@ function LessonCard({
   showCoach
 }: {
   canManageCourtAccess: boolean;
+  coachOptions: CoachLessonProfile[];
   courts: CoachLessonCourt[];
   externalVenues: CoachLessonExternalVenue[];
   lesson: CoachLessonWithRelations;
@@ -524,8 +538,9 @@ function LessonCard({
   returnTo: string;
   showCoach: boolean;
 }) {
-  const seriesSummary = repeatRuleSummary(lesson.repeat_rule);
+  const seriesSummary = repeatRuleSummary(lesson);
   const isRecurring = Boolean(lesson.recurring_group_id);
+  const seriesConflicts = lesson.series?.exceptions?.filter((exception) => exception.status === "conflict") ?? [];
   const roster = attendanceRoster(lesson);
   const groupAttendance = isGroupAttendanceLesson(lesson);
   const recordedAt = latestAttendanceRecordedAt(lesson);
@@ -540,7 +555,7 @@ function LessonCard({
           <span className="flex flex-wrap items-center gap-2">
             <span className="truncate font-black text-court-navy">{profileDisplayName(lesson.player)}</span>
             <span className={`ui-chip ${lessonStatusTone(lesson.status)}`}>{formatLabel(lesson.status)}</span>
-            {isRecurring ? <span className="ui-chip ui-chip-navy">Weekly</span> : null}
+            {isRecurring ? <span className="ui-chip ui-chip-navy">{lesson.series?.end_mode === "until_cancelled" ? "Ongoing" : "Weekly"}</span> : null}
           </span>
           <span className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
             <span className="ui-chip ui-chip-muted">
@@ -566,11 +581,18 @@ function LessonCard({
             {showCoach && lesson.venue?.name ? ` | ${lesson.venue.name}` : ""}
           </p>
           {seriesSummary ? <p className="font-bold text-court-teal">{seriesSummary}</p> : null}
+          {seriesConflicts.length > 0 ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900">
+              <p className="font-black">{seriesConflicts.length} future {seriesConflicts.length === 1 ? "conflict" : "conflicts"}</p>
+              <p className="mt-1">{seriesConflicts.slice(0, 3).map((exception) => exception.occurrence_date).join(" · ")}</p>
+            </div>
+          ) : null}
           <p className="flex flex-wrap gap-2">
             <span className="ui-chip ui-chip-muted">
               <BookingIcon size={13} /> Booking {lesson.court_booking?.status ? formatLabel(lesson.court_booking.status) : "Not linked yet"}
             </span>
             <span className="ui-chip ui-chip-brand">{lesson.location_type === "managed_court" ? "Court reserved when confirmed" : "No managed court booking"}</span>
+            {showCoach ? <Link className="ui-chip ui-chip-muted" href={`/dashboard/coachr/students/diagnostics?lesson=${lesson.id}`}>Reservation diagnostics</Link> : null}
           </p>
           {lesson.notes ? <p className="rounded bg-slate-50 p-3 font-medium">{lesson.notes}</p> : null}
         </div>
@@ -665,6 +687,16 @@ function LessonCard({
           <input name="returnTo" type="hidden" value={returnTo} />
           <input name="lessonId" type="hidden" value={lesson.id} />
           <input name="title" type="hidden" value={lesson.title} />
+          {showCoach ? (
+            <label className="text-sm font-semibold text-slate-700">
+              Coach
+              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={lesson.coach_id} name="coachId" required>
+                {coachOptions.map((profile) => <option key={profile.id} value={profile.id}>{profileDisplayName(profile)}</option>)}
+              </select>
+            </label>
+          ) : (
+            <input name="coachId" type="hidden" value={lesson.coach_id} />
+          )}
           {isRecurring ? (
             <label className="text-sm font-semibold text-slate-700">
               Apply changes to
@@ -750,14 +782,13 @@ function LessonCard({
         </form>
 
         {lesson.status === "scheduled" ? (
-          <form action={cancelCoachLesson} className="mt-3 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:flex-row">
+          <form action={cancelCoachLesson} className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:grid-cols-2">
             <input name="returnTo" type="hidden" value={returnTo} />
             <input name="lessonId" type="hidden" value={lesson.id} />
             {isRecurring ? (
               <select className="rounded border border-amber-300 bg-white px-3 py-2 text-sm font-semibold focus-ring" defaultValue="single" name="cancelScope">
                 <option value="single">This lesson only</option>
                 <option value="future">This and future lessons</option>
-                <option value="series">Entire series</option>
               </select>
             ) : (
               <input name="cancelScope" type="hidden" value="single" />
@@ -767,6 +798,13 @@ function LessonCard({
               <option value="rain">Rain</option>
               <option value="sick">Sick</option>
             </select>
+            {isRecurring ? (
+              <label className="text-xs font-bold leading-5 text-amber-900 sm:col-span-2">
+                Optional final date
+                <input className="mt-1 w-full rounded border border-amber-300 bg-white px-3 py-2 text-sm focus-ring" name="effectiveEndDate" type="date" />
+                <span className="mt-1 block font-semibold">Leave blank to stop before this occurrence. Choose a date to keep lessons through that day.</span>
+              </label>
+            ) : null}
             <button className="rounded bg-amber-600 px-3 py-2 text-sm font-black text-white transition hover:bg-amber-700" type="submit">
               Cancel Lesson
             </button>
@@ -839,6 +877,10 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
   const proposedLessonType = coachLessonTypes.includes(proposalText(proposal, "lessonType") as (typeof coachLessonTypes)[number])
     ? proposalText(proposal, "lessonType")
     : "private";
+  const proposedVenue = proposalText(proposal, "venue");
+  const proposedManagedCourt = proposedVenue
+    ? options.courts.find((court) => court.owner_name?.trim().toLowerCase() === proposedVenue.trim().toLowerCase()) ?? null
+    : null;
   const studentSelectorOptions = options.studentOptions.map((student) => ({
     context: [
       student.profile.is_junior ? "Junior" : "Adult",
@@ -954,19 +996,16 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             </div>
           ) : null}
 
-          <fieldset className="grid gap-2 sm:grid-cols-2">
-            <legend className="mb-2 text-sm font-black text-court-navy">Lesson plan</legend>
-            <label className="rounded-lg border border-court-teal bg-court-mist p-3 text-sm font-semibold text-court-navy">
-              <input className="mr-2" defaultChecked={defaultRepeatMode === "none"} name="repeatMode" type="radio" value="none" />
-              Once-off lesson
-              <span className="mt-1 block text-xs font-normal leading-5 text-slate-600">Use the one-off start and end fields.</span>
-            </label>
-            <label className="rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-court-navy">
-              <input className="mr-2" defaultChecked={defaultRepeatMode === "weekly"} name="repeatMode" type="radio" value="weekly" />
-              Recurring weekly lesson
-              <span className="mt-1 block text-xs font-normal leading-5 text-slate-600">Use the weekly repeat settings below.</span>
-            </label>
-          </fieldset>
+          <CoachRRecurrenceControls
+            defaultDayOfWeek={defaultDayOfWeek}
+            defaultOneOffEnd={`${proposalStartDate}T${proposalEndTime}`}
+            defaultOneOffStart={`${proposalStartDate}T${proposalStartTime}`}
+            defaultRecurrenceEndDate={defaultRecurrenceEndDate}
+            defaultRecurrenceStartDate={proposalStartDate}
+            defaultRepeatMode={defaultRepeatMode}
+            defaultWeeklyEndTime={proposalEndTime}
+            defaultWeeklyStartTime={proposalStartTime}
+          />
 
           {access.context.role !== "platform_admin" && access.context.venueId ? (
             <input name="venueId" type="hidden" value={access.context.venueId} />
@@ -1016,54 +1055,6 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             </div>
           )}
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-black text-court-navy">Weekly repeat settings</p>
-            <p className="mt-1 text-xs leading-5 text-slate-600">Used only when Repeat is set to Every week. PlayR creates one lesson and one court booking for every matching date.</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="text-sm font-semibold text-slate-700">
-                Start date
-                <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={proposalStartDate} name="recurrenceStartDate" type="date" />
-              </label>
-              <label className="text-sm font-semibold text-slate-700">
-                End date
-                <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultRecurrenceEndDate} name="recurrenceEndDate" type="date" />
-              </label>
-              <label className="text-sm font-semibold text-slate-700">
-                Day
-                <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultDayOfWeek} name="dayOfWeek">
-                  <option value="1">Monday</option>
-                  <option value="2">Tuesday</option>
-                  <option value="3">Wednesday</option>
-                  <option value="4">Thursday</option>
-                  <option value="5">Friday</option>
-                  <option value="6">Saturday</option>
-                  <option value="7">Sunday</option>
-                </select>
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="text-sm font-semibold text-slate-700">
-                  Start time
-                  <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={proposalStartTime} name="lessonStartTime" type="time" />
-                </label>
-                <label className="text-sm font-semibold text-slate-700">
-                  End time
-                  <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={proposalEndTime} name="lessonEndTime" type="time" />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-semibold text-slate-700">
-              One-off start
-              <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={`${proposalStartDate}T${proposalStartTime}`} name="startTime" required type="datetime-local" />
-            </label>
-            <label className="text-sm font-semibold text-slate-700">
-              One-off end
-              <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={`${proposalStartDate}T${proposalEndTime}`} name="endTime" required type="datetime-local" />
-            </label>
-          </div>
-
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-semibold text-slate-700">
               Type
@@ -1080,8 +1071,9 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
           <CoachRCourtPicker
             canManageAccess={canManageCourtAccess}
             courts={options.courts}
-            defaultCustomLocation={proposalText(proposal, "venue")}
-            defaultLocationType={proposalText(proposal, "venue") ? "custom" : "managed_court"}
+            defaultCourtId={proposedManagedCourt?.id ?? ""}
+            defaultCustomLocation={proposedManagedCourt ? "" : proposedVenue}
+            defaultLocationType={proposedVenue && !proposedManagedCourt ? "custom" : "managed_court"}
             externalVenues={options.externalVenues}
             organisationId={defaultVenueId}
           />
@@ -1137,6 +1129,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
                     {dayLessons.map((lesson) => (
                       <LessonCard
                         canManageCourtAccess={canManageCourtAccess}
+                        coachOptions={options.coachProfiles}
                         courts={options.courts}
                         externalVenues={options.externalVenues}
                         key={lesson.id}

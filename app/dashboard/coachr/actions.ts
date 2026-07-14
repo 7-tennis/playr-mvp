@@ -7,10 +7,12 @@ import { assertCoachRAccess } from "@/lib/permissions";
 import type { CoachLessonAttendanceResult, CoachLessonLocationType, CoachLessonStatus, CoachLessonType } from "@/types/courtside";
 
 const repeatModes = ["none", "weekly"] as const;
+const recurrenceEndModes = ["until_cancelled", "until_date", "occurrence_count"] as const;
 const seriesScopes = ["single", "future", "series"] as const;
 const locationTypes: CoachLessonLocationType[] = ["managed_court", "custom", "none"];
 
 type RepeatMode = (typeof repeatModes)[number];
+type RecurrenceEndMode = (typeof recurrenceEndModes)[number];
 type SeriesScope = (typeof seriesScopes)[number];
 type AuthenticatedCoachRContext = Awaited<ReturnType<typeof assertCoachRAccess>> & { kind: "authenticated" };
 
@@ -42,6 +44,11 @@ function dateValue(formData: FormData, key: string) {
 function timeValue(formData: FormData, key: string) {
   const value = text(formData, key);
   return /^\d{2}:\d{2}$/.test(value) ? value : "";
+}
+
+function integerValue(formData: FormData, key: string) {
+  const value = Number.parseInt(text(formData, key), 10);
+  return Number.isInteger(value) ? value : null;
 }
 
 function allowedValue<T extends string>(value: string, allowed: T[], fallback: T) {
@@ -82,7 +89,9 @@ function lessonErrorValue(error: { code?: string; message?: string } | null | un
       "custom_location",
       "external_venue",
       "invalid_lesson",
+      "invalid_series",
       "invalid_student",
+      "managed_lesson_booking_required",
       "missing_rpc",
       "no_active_courts",
       "no_students",
@@ -236,21 +245,30 @@ export async function createCoachLesson(formData: FormData) {
   }
 
   const recurrenceStartDate = repeatMode === "weekly" ? dateValue(formData, "recurrenceStartDate") : null;
+  const recurrenceEndMode = repeatMode === "weekly"
+    ? allowedValue<RecurrenceEndMode>(text(formData, "recurrenceEndMode"), [...recurrenceEndModes], "until_cancelled")
+    : null;
   const recurrenceEndDate = repeatMode === "weekly" ? dateValue(formData, "recurrenceEndDate") : null;
+  const recurrenceOccurrenceCount = repeatMode === "weekly" ? integerValue(formData, "recurrenceOccurrenceCount") : null;
   const dayOfWeek = repeatMode === "weekly" ? Number(text(formData, "dayOfWeek")) : null;
   const lessonStartTime = repeatMode === "weekly" ? timeValue(formData, "lessonStartTime") : null;
   const lessonEndTime = repeatMode === "weekly" ? timeValue(formData, "lessonEndTime") : null;
 
   if (repeatMode === "weekly") {
-    if (!venueId || !coachId || !playerId || !recurrenceStartDate || !recurrenceEndDate || !lessonStartTime || !lessonEndTime || !Number.isInteger(dayOfWeek)) {
+    if (!venueId || !coachId || !playerId || !recurrenceStartDate || !recurrenceEndMode || !lessonStartTime || !lessonEndTime || !Number.isInteger(dayOfWeek)) {
       redirectWithParam(returnTo, "lesson_error", "missing_fields");
     }
 
-    if ((dayOfWeek ?? 0) < 1 || (dayOfWeek ?? 0) > 7 || new Date(`${recurrenceEndDate}T00:00:00Z`).getTime() < new Date(`${recurrenceStartDate}T00:00:00Z`).getTime()) {
+    if (
+      (dayOfWeek ?? 0) < 1
+      || (dayOfWeek ?? 0) > 7
+      || (recurrenceEndMode === "until_date" && (!recurrenceEndDate || new Date(`${recurrenceEndDate}T00:00:00Z`).getTime() < new Date(`${recurrenceStartDate}T00:00:00Z`).getTime()))
+      || (recurrenceEndMode === "occurrence_count" && (!recurrenceOccurrenceCount || recurrenceOccurrenceCount < 1 || recurrenceOccurrenceCount > 104))
+    ) {
       redirectWithParam(returnTo, "lesson_error", "recurrence_range");
     }
 
-    if (new Date(`${recurrenceEndDate}T00:00:00Z`).getTime() > new Date(`${recurrenceStartDate}T00:00:00Z`).getTime() + 366 * 24 * 60 * 60 * 1000) {
+    if (recurrenceEndMode === "until_date" && recurrenceEndDate && new Date(`${recurrenceEndDate}T00:00:00Z`).getTime() > new Date(`${recurrenceStartDate}T00:00:00Z`).getTime() + 366 * 24 * 60 * 60 * 1000) {
       redirectWithParam(returnTo, "lesson_error", "recurrence_range");
     }
 
@@ -268,7 +286,7 @@ export async function createCoachLesson(formData: FormData) {
     redirectWithParam(returnTo, "lesson_error", "time_order");
   }
 
-  const { error } = await context.supabase.rpc("coachr_create_lesson_plan_with_location", {
+  const { error } = await context.supabase.rpc("coachr_create_lesson_plan_v2", {
     p_coach_id: coachId,
     p_court_id: courtId,
     p_custom_location: customLocation,
@@ -280,7 +298,9 @@ export async function createCoachLesson(formData: FormData) {
     p_notes: nullableText(formData, "notes"),
     p_player_id: playerId,
     p_recurrence_end_date: recurrenceEndDate,
+    p_recurrence_end_mode: recurrenceEndMode,
     p_recurrence_end_time: lessonEndTime,
+    p_recurrence_occurrence_count: recurrenceOccurrenceCount,
     p_recurrence_start_date: recurrenceStartDate,
     p_recurrence_start_time: lessonStartTime,
     p_repeat_mode: repeatMode,
@@ -308,6 +328,7 @@ export async function updateCoachLesson(formData: FormData) {
   }
 
   const status = allowedValue<CoachLessonStatus>(text(formData, "status"), coachLessonStatuses, "scheduled");
+  const coachId = context.role === "coach" ? context.adultProfileId : optionalUuid(formData, "coachId");
   const title = text(formData, "title");
   const startTime = datetimeValue(formData, "startTime");
   const endTime = datetimeValue(formData, "endTime");
@@ -326,7 +347,7 @@ export async function updateCoachLesson(formData: FormData) {
   }
   const editScope = allowedValue<SeriesScope>(text(formData, "editScope"), [...seriesScopes], "single");
 
-  if (!playerId || !startTime || !endTime || (locationType === "managed_court" && !courtId) || (locationType === "custom" && !customLocation)) {
+  if (!coachId || !playerId || !startTime || !endTime || (locationType === "managed_court" && !courtId) || (locationType === "custom" && !customLocation)) {
     redirectWithParam(returnTo, "lesson_error", "missing_fields");
   }
 
@@ -334,7 +355,8 @@ export async function updateCoachLesson(formData: FormData) {
     redirectWithParam(returnTo, "lesson_error", "time_order");
   }
 
-  const { error } = await context.supabase.rpc("coachr_update_lesson_plan_with_location", {
+  const { error } = await context.supabase.rpc("coachr_update_lesson_plan_v2", {
+    p_coach_id: coachId,
     p_court_id: courtId,
     p_custom_location: customLocation,
     p_end_time: endTime,
@@ -365,13 +387,15 @@ export async function cancelCoachLesson(formData: FormData) {
   const lessonId = optionalUuid(formData, "lessonId");
   const cancelStatus = allowedValue<CoachLessonStatus>(text(formData, "cancelStatus"), ["cancelled", "rain", "sick"], "cancelled");
   const cancelScope = allowedValue<SeriesScope>(text(formData, "cancelScope"), [...seriesScopes], "single");
+  const effectiveEndDate = dateValue(formData, "effectiveEndDate") || null;
 
   if (context.kind !== "authenticated" || !lessonId) {
     redirectWithParam(returnTo, "lesson_error", "invalid_lesson");
   }
 
-  const { error } = await context.supabase.rpc("coachr_cancel_lesson_series_with_booking", {
-    p_cancel_status: cancelStatus,
+  const { error } = await context.supabase.rpc("coachr_cancel_lesson_plan_v2", {
+    p_cancel_status: cancelScope === "single" ? cancelStatus : "cancelled",
+    p_effective_end_date: effectiveEndDate,
     p_lesson_id: lessonId,
     p_scope: cancelScope,
     p_notes: nullableText(formData, "notes")
@@ -382,9 +406,9 @@ export async function cancelCoachLesson(formData: FormData) {
     redirectWithParam(returnTo, "lesson_error", lessonErrorValue(error, "cancel_failed"));
   }
 
-  const { error: notificationError } = await context.supabase.rpc("coachr_notify_lesson_cancellation", {
-    p_lesson_id: lessonId
-  });
+  const { error: notificationError } = cancelScope === "single"
+    ? await context.supabase.rpc("coachr_notify_lesson_cancellation", { p_lesson_id: lessonId })
+    : { error: null };
 
   if (notificationError) {
     console.error("CoachR lesson cancellation notification failed", {

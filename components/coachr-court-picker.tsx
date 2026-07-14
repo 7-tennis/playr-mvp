@@ -91,11 +91,10 @@ export function CoachRCourtPicker({
   useEffect(() => {
     const form = selectRef.current?.form;
     if (!form) return;
-    const inputs = ["startTime", "endTime", "repeatMode"].flatMap((name) => Array.from(form.querySelectorAll<HTMLElement>(`[name="${name}"]`)));
-    const handleChange = () => void refreshAvailability();
-    inputs.forEach((input) => input.addEventListener("change", handleChange));
+    const handleChange = () => window.setTimeout(() => void refreshAvailability(), 0);
+    form.addEventListener("change", handleChange);
     void refreshAvailability();
-    return () => inputs.forEach((input) => input.removeEventListener("change", handleChange));
+    return () => form.removeEventListener("change", handleChange);
   }, [refreshAvailability]);
 
   const availableCount = availability ? courts.filter((court) => availability.get(court.id) !== false).length : courts.length;

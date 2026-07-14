@@ -57,12 +57,7 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
   const [activeSlot, setActiveSlot] = useState<Slot | null>(null);
   const selectedCourt = courts.find((court) => court.id === selectedCourtId) ?? courts[0];
 
-  const bookingBySlot = new Map<string, BookingBlock>();
-  bookings
-    .filter((booking) => booking.court_id === selectedCourtId)
-    .forEach((booking) => {
-      bookingBySlot.set(new Date(booking.start_time).toISOString(), booking);
-    });
+  const selectedCourtBookings = bookings.filter((booking) => booking.court_id === selectedCourtId);
 
   return (
     <div>
@@ -100,7 +95,13 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {slots.map((slot) => {
-            const booking = bookingBySlot.get(new Date(slot.startTime).toISOString());
+            const slotStart = new Date(slot.startTime).getTime();
+            const slotEnd = new Date(slot.endTime).getTime();
+            const booking = selectedCourtBookings.find((item) => {
+              const bookingStart = new Date(item.start_time).getTime();
+              const bookingEnd = new Date(item.end_time).getTime();
+              return bookingStart < slotEnd && bookingEnd > slotStart;
+            });
             const isPast = new Date(slot.startTime).getTime() <= Date.now();
             const isUserBooking = Boolean(booking?.player_profile_id && userProfileIds.includes(booking.player_profile_id));
             const isBlock = Boolean(booking && booking.booking_type !== "player_booking");

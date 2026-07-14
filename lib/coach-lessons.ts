@@ -8,6 +8,7 @@ import type {
   CoachLessonAttendanceResult,
   CoachLessonFeedbackStatus,
   CoachLessonStatus,
+  CoachLessonSeries,
   CoachLessonType,
   Court,
   CourtBooking,
@@ -46,6 +47,7 @@ export type CoachLessonWithRelations = CoachLesson & {
   court_booking: CoachLessonBooking | null;
   external_venue: CoachLessonExternalVenue | null;
   attendance: CoachLessonAttendanceWithProfile[] | null;
+  series: CoachLessonSeries | null;
 };
 
 export type CoachLessonOptionData = {
@@ -71,6 +73,35 @@ export type CoachLessonStudentOption = {
 
 type AuthenticatedContext = Extract<PermissionContext, { kind: "authenticated" }>;
 
+function johannesburgDate(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Africa/Johannesburg",
+    year: "numeric"
+  }).formatToParts(value);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+async function topUpLessonSeries(context: AuthenticatedContext, throughDate: string) {
+  const organisationId = context.venueId ?? context.activeOrganisationMembership?.venue_id ?? null;
+  if (!organisationId) return;
+
+  const { error } = await context.supabase.rpc("coachr_top_up_lesson_series", {
+    p_organisation_id: organisationId,
+    p_through_date: throughDate
+  });
+
+  if (error && error.code !== "PGRST202") {
+    console.warn("CoachR rolling lesson generation could not run", {
+      code: error.code,
+      role: context.role,
+      venueId: organisationId
+    });
+  }
+}
+
 const coachLessonSelect = `
   id,
   venue_id,
@@ -89,6 +120,7 @@ const coachLessonSelect = `
   end_time,
   repeat_rule,
   recurring_group_id,
+  recurrence_date,
   status,
   attendance_status,
   feedback_status,
@@ -107,6 +139,48 @@ const coachLessonSelect = `
   venue:venue_id(id,name),
   court_booking:court_booking_id(id,start_time,end_time,status),
   external_venue:external_venue_id(id,name,address,court_names),
+  series:recurring_group_id(
+    id,
+    venue_id,
+    coach_id,
+    player_id,
+    junior_profile_id,
+    parent_id,
+    lesson_type,
+    title,
+    frequency,
+    weekday,
+    start_local_time,
+    duration_minutes,
+    start_date,
+    end_mode,
+    end_date,
+    occurrence_count,
+    generated_through,
+    generated_occurrence_count,
+    status,
+    location_type,
+    court_id,
+    external_venue_id,
+    custom_location,
+    notes,
+    created_by_user_id,
+    updated_by_user_id,
+    ended_by_user_id,
+    ended_at,
+    created_at,
+    updated_at,
+    exceptions:coach_lesson_series_exceptions(
+      id,
+      series_id,
+      occurrence_date,
+      lesson_id,
+      status,
+      reason,
+      created_at,
+      updated_at
+    )
+  ),
   attendance:coach_lesson_attendance(
     id,
     lesson_id,
@@ -148,6 +222,8 @@ export async function loadCoachLessons(context: AuthenticatedContext, limit = 40
     return [] as CoachLessonWithRelations[];
   }
 
+  await topUpLessonSeries(context, johannesburgDate(new Date(Date.now() + 83 * 24 * 60 * 60 * 1000)));
+
   let query = context.supabase
     .from("coach_lessons")
     .select(coachLessonSelect)
@@ -180,6 +256,8 @@ export async function loadCoachLessonsForRange(context: AuthenticatedContext, st
   if (context.role !== "platform_admin" && !context.venueId) {
     return [] as CoachLessonWithRelations[];
   }
+
+  await topUpLessonSeries(context, johannesburgDate(new Date(endTime)));
 
   let query = context.supabase
     .from("coach_lessons")
