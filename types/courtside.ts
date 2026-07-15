@@ -27,6 +27,11 @@ export type CoachLessonStatus = "scheduled" | "completed" | "missed" | "cancelle
 export type CoachLessonAttendanceStatus = "not_marked" | "attended" | "partial" | "missed" | "excused";
 export type CoachLessonAttendanceResult = "attended" | "missed" | "cancelled" | "rain" | "sick";
 export type CoachLessonFeedbackStatus = "not_started" | "draft" | "shared" | "completed";
+export type CoachSessionType = "private" | "semi_private" | "squad";
+export type CoachSessionStatus = "active" | "paused" | "ended" | "cancelled";
+export type CoachSessionParticipantStatus = "active" | "pending" | "paused" | "removed";
+export type CoachSessionOccurrenceStatus = "scheduled" | "completed" | "cancelled" | "rain" | "sick";
+export type CoachSessionAttendanceStatus = "present" | "absent" | "excused" | "late" | "not_recorded";
 export type NotificationType =
   | "match_invite_received"
   | "match_invite_accepted"
@@ -386,6 +391,7 @@ export interface CourtBooking {
   booking_purpose: string | null;
   coach_profile_id: string | null;
   source_product: string | null;
+  coach_session_occurrence_id: string | null;
 }
 
 export interface OrganisationCourtAccess {
@@ -536,6 +542,86 @@ export interface CoachLesson {
   updated_by_user_id: string | null;
   cancelled_at: string | null;
   cancelled_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachSession {
+  id: string;
+  venue_id: string;
+  session_type: CoachSessionType;
+  name: string;
+  description: string | null;
+  primary_coach_id: string;
+  capacity: number;
+  status: CoachSessionStatus;
+  repeat_mode: "none" | "weekly";
+  weekday: number | null;
+  start_local_time: string;
+  duration_minutes: number;
+  start_date: string;
+  end_mode: CoachLessonSeriesEndMode | null;
+  end_date: string | null;
+  occurrence_count: number | null;
+  generated_through: string | null;
+  location_type: CoachLessonLocationType;
+  external_venue_id: string | null;
+  custom_location: string | null;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  ended_by_user_id: string | null;
+  ended_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachSessionCoach {
+  id: string;
+  session_id: string;
+  coach_profile_id: string;
+  role: "primary" | "assistant";
+  status: "active" | "removed";
+  added_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachSessionParticipant {
+  id: string;
+  session_id: string;
+  player_profile_id: string;
+  parent_profile_id: string | null;
+  status: CoachSessionParticipantStatus;
+  joined_on: string;
+  ends_on: string | null;
+  added_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachSessionOccurrence {
+  id: string;
+  session_id: string;
+  occurrence_date: string;
+  start_time: string;
+  end_time: string;
+  status: CoachSessionOccurrenceStatus;
+  cancellation_reason: string | null;
+  cancelled_at: string | null;
+  cancelled_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachSessionAttendance {
+  id: string;
+  occurrence_id: string;
+  player_profile_id: string;
+  attendance_status: CoachSessionAttendanceStatus;
+  recorded_by_user_id: string | null;
+  recorded_at: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }

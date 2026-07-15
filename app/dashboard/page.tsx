@@ -47,6 +47,18 @@ type AcademyLessonRow = {
   external_venue: { name: string } | null;
 };
 
+type DashboardAcademySessionRow = {
+  player_profile_id: string;
+  session_id: string;
+  academy_id: string;
+  academy_name: string;
+  session_name: string;
+  session_type: "private" | "semi_private" | "squad";
+  coach_name: string;
+  next_start_time: string | null;
+  location_name: string | null;
+};
+
 export const dynamic = "force-dynamic";
 
 type BookingRow = Pick<CourtBooking, "id" | "player_profile_id" | "start_time"> & {
@@ -132,11 +144,12 @@ function proposalText(proposal: Record<string, unknown> | null) {
   return [value("day"), value("startTime"), value("durationMinutes") ? `${value("durationMinutes")} min` : ""].filter(Boolean).join(" · ") || null;
 }
 
-function AcademyConnectionCard({ assignment, lesson, link, player }: { assignment: AcademyAssignmentRow | null; lesson: AcademyLessonRow | null; link: AcademyLinkRow; player: Pick<Profile, "id" | "first_name" | "last_name"> }) {
+function AcademyConnectionCard({ assignment, lesson, link, player, sessions }: { assignment: AcademyAssignmentRow | null; lesson: AcademyLessonRow | null; link: AcademyLinkRow; player: Pick<Profile, "id" | "first_name" | "last_name">; sessions: DashboardAcademySessionRow[] }) {
   const proposal = academyProposal(link.connection_context);
   const schedule = proposalText(proposal);
   const connectionLabel = link.status === "active" ? "Connection active" : link.status === "suspended" ? "Connection paused" : "Invitation pending";
   const organisationInactive = link.venue?.status === "inactive";
+  const nextSession = sessions.find((session) => session.next_start_time) ?? sessions[0];
 
   return (
     <Link className="group block rounded-lg focus-ring" href={`/dashboard/players/${player.id}#academies`}>
@@ -149,8 +162,8 @@ function AcademyConnectionCard({ assignment, lesson, link, player }: { assignmen
           </div>
           <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-700 sm:grid-cols-2">
             <p className="flex items-center gap-2"><EntriesIcon size={15} /> Coach: {assignment?.coach ? playerName(assignment.coach) : "To be assigned"}</p>
-            {lesson ? <p className="flex items-center gap-2"><EventIcon size={15} /> Next: {new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Johannesburg" }).format(new Date(lesson.start_time))}</p> : schedule ? <p className="flex items-center gap-2"><EventIcon size={15} /> Proposed: {schedule}</p> : <p className="flex items-center gap-2 text-slate-500"><EventIcon size={15} /> No lesson scheduled yet</p>}
-            {lesson ? <p className="flex items-center gap-2 sm:col-span-2"><ClubIcon size={15} /> {lesson.external_venue?.name ?? lesson.court?.name ?? lesson.custom_location ?? "Venue to be confirmed"}</p> : proposal && typeof proposal.venue === "string" ? <p className="flex items-center gap-2 sm:col-span-2"><ClubIcon size={15} /> {proposal.venue}</p> : null}
+            {nextSession?.next_start_time ? <p className="flex items-center gap-2"><EventIcon size={15} /> Next: {new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Johannesburg" }).format(new Date(nextSession.next_start_time))}</p> : lesson ? <p className="flex items-center gap-2"><EventIcon size={15} /> Next: {new Intl.DateTimeFormat("en-ZA", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Johannesburg" }).format(new Date(lesson.start_time))}</p> : schedule ? <p className="flex items-center gap-2"><EventIcon size={15} /> Proposed: {schedule}</p> : <p className="flex items-center gap-2 text-slate-500"><EventIcon size={15} /> No session scheduled yet</p>}
+            {nextSession ? <p className="flex items-center gap-2 sm:col-span-2"><ClubIcon size={15} /> {nextSession.location_name ?? "Venue to be confirmed"} · {sessions.length} active session{sessions.length === 1 ? "" : "s"}</p> : lesson ? <p className="flex items-center gap-2 sm:col-span-2"><ClubIcon size={15} /> {lesson.external_venue?.name ?? lesson.court?.name ?? lesson.custom_location ?? "Venue to be confirmed"}</p> : proposal && typeof proposal.venue === "string" ? <p className="flex items-center gap-2 sm:col-span-2"><ClubIcon size={15} /> {proposal.venue}</p> : null}
           </div>
           <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-black text-court-navy"><span>Open Academy Context</span><ArrowRightIcon size={16} /></div>
         </div>
@@ -367,6 +380,16 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   const academyLinks = (academyLinksResult.data ?? []) as unknown as AcademyLinkRow[];
   const academyAssignments = (academyAssignmentsResult.data ?? []) as unknown as AcademyAssignmentRow[];
   const academyLessons = (academyLessonsResult.data ?? []) as unknown as AcademyLessonRow[];
+  const privateSessionResults = profileIds.length > 0
+    ? await Promise.all(profileIds.map(async (profileId) => {
+        const { data, error } = await supabase.rpc("coachr_private_player_sessions", { p_player_profile_id: profileId });
+        if (error && error.code !== "PGRST202") {
+          console.error("CourtSide dashboard academy sessions load failed", { code: error.code, profileId, userId: user.id });
+        }
+        return error ? [] : ((data ?? []) as Omit<DashboardAcademySessionRow, "player_profile_id">[]).map((session) => ({ ...session, player_profile_id: profileId }));
+      }))
+    : [];
+  const privateAcademySessions = privateSessionResults.flat();
   const academyAssignmentByLink = new Map(academyAssignments.filter((assignment) => assignment.organisation_player_link_id).map((assignment) => [assignment.organisation_player_link_id as string, assignment]));
   const academyLessonByPlayer = new Map<string, AcademyLessonRow>();
   academyLessons.forEach((lesson) => {
@@ -492,7 +515,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             {academyLinks.map((link) => {
               const linkedPlayer = playerById.get(link.player_profile_id);
               if (!linkedPlayer) return null;
-              return <AcademyConnectionCard assignment={academyAssignmentByLink.get(link.id) ?? null} key={link.id} lesson={academyLessonByPlayer.get(`${link.player_profile_id}:${link.venue_id}`) ?? null} link={link} player={linkedPlayer} />;
+              return <AcademyConnectionCard assignment={academyAssignmentByLink.get(link.id) ?? null} key={link.id} lesson={academyLessonByPlayer.get(`${link.player_profile_id}:${link.venue_id}`) ?? null} link={link} player={linkedPlayer} sessions={privateAcademySessions.filter((session) => session.player_profile_id === link.player_profile_id && session.academy_id === link.venue_id)} />;
             })}
           </div>
         </section>

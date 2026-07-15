@@ -52,6 +52,7 @@ export default async function CoachRMorePage() {
         <CoachRCompactGrid>
           <CoachRActionCard href="/dashboard/coachr/availability" icon={<StatusIcon size={18} />} text="Availability windows and future gaps." title="Availability" />
           <CoachRActionCard href="/dashboard/coachr/schedule" icon={<BookingIcon size={18} />} text="Weekly lessons, attendance and changes." title="Lesson History" />
+          <CoachRActionCard href="/dashboard/coachr/sessions" icon={<MatchIcon size={18} />} text="Private, semi-private and squad rosters." title="Groups & Squads" />
           <CoachRActionCard href="/dashboard/coachr/students" icon={<EntriesIcon size={18} />} text="Students and attendance history." title="Attendance History" />
           <CoachRActionCard href="/dashboard/coachr" icon={<MatchIcon size={18} />} text="Programme mix from lesson types." title="Programmes" />
           <CoachRActionCard href="/dashboard/coachr/messages" icon={<NotificationIcon size={18} />} text="Lesson updates and future feedback messages." title="Notifications" />

@@ -7,6 +7,7 @@ import {
   BadgeIcon,
   BookingIcon,
   ChallengeIcon,
+  ChevronDownIcon,
   ClubIcon,
   ConfidenceIcon,
   DistrictIcon,
@@ -64,6 +65,18 @@ type AcademyDetailLesson = {
   custom_location: string | null;
   court: Pick<Court, "name"> | null;
   external_venue: { name: string } | null;
+};
+
+type PrivateAcademySessionRow = {
+  session_id: string;
+  academy_id: string;
+  academy_name: string;
+  session_name: string;
+  session_type: "private" | "semi_private" | "squad";
+  coach_name: string;
+  next_start_time: string | null;
+  location_name: string | null;
+  participant_status: "active" | "pending" | "paused" | "removed";
 };
 
 export const dynamic = "force-dynamic";
@@ -299,7 +312,8 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
     { data: juniorHistoryData, error: juniorHistoryError },
     { data: academyLinkData },
     { data: academyAssignmentData },
-    { data: academyLessonData }
+    { data: academyLessonData },
+    { data: privateAcademySessionData, error: privateAcademySessionError }
   ] = await Promise.all([
     supabase.from("ratings").select("*").eq("profile_id", player.id).maybeSingle(),
     supabase.from("rating_changes").select("*").eq("profile_id", player.id).order("created_at", { ascending: false }).limit(5),
@@ -346,7 +360,8 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
       .eq("player_id", player.id)
       .eq("status", "scheduled")
       .gte("start_time", now)
-      .order("start_time", { ascending: true })
+      .order("start_time", { ascending: true }),
+    supabase.rpc("coachr_private_player_sessions", { p_player_profile_id: player.id })
   ]);
 
   if (ratingError) {
@@ -373,6 +388,9 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
   if (juniorHistoryError) {
     console.error("CourtSide player detail junior history load failed", { userId: user.id, playerId: player.id, error: juniorHistoryError });
   }
+  if (privateAcademySessionError && privateAcademySessionError.code !== "PGRST202") {
+    console.error("CourtSide private academy sessions load failed", { userId: user.id, playerId: player.id, code: privateAcademySessionError.code });
+  }
 
   const accent = accentFor(player);
   const rating = ratingError ? null : ((ratingData ?? null) as Rating | null);
@@ -398,6 +416,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
   const academyAssignments = (academyAssignmentData ?? []) as unknown as AcademyDetailAssignment[];
   const academyAssignmentByLink = new Map(academyAssignments.filter((assignment) => assignment.organisation_player_link_id).map((assignment) => [assignment.organisation_player_link_id as string, assignment]));
   const academyLessons = (academyLessonData ?? []) as unknown as AcademyDetailLesson[];
+  const privateAcademySessions = privateAcademySessionError ? [] : (privateAcademySessionData ?? []) as PrivateAcademySessionRow[];
   const academyLessonByVenue = new Map<string, AcademyDetailLesson>();
   academyLessons.forEach((lesson) => {
     if (!academyLessonByVenue.has(lesson.venue_id)) academyLessonByVenue.set(lesson.venue_id, lesson);
@@ -518,6 +537,7 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
             {academyLinks.map((link) => {
               const assignment = academyAssignmentByLink.get(link.id);
               const lesson = link.venue?.id ? academyLessonByVenue.get(link.venue.id) : null;
+              const linkedSessions = link.venue?.id ? privateAcademySessions.filter((session) => session.academy_id === link.venue?.id) : [];
               const proposalValue = link.connection_context.proposal;
               const proposal = proposalValue && typeof proposalValue === "object" && !Array.isArray(proposalValue) ? proposalValue as Record<string, unknown> : null;
               const schedule = proposal ? [proposal.day, proposal.startTime].filter((value) => typeof value === "string" && value).join(" · ") : "";
@@ -527,6 +547,20 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
                   <p className="mt-3 text-sm font-semibold text-slate-700">Coach: {assignment?.coach ? playerName(assignment.coach) : "To be assigned"}</p>
                   <p className="mt-1 text-sm font-semibold text-slate-700">Lesson: {lesson ? formatDateTime(lesson.start_time) : schedule || (link.proposal_status === "proposed" ? "Proposal details to be confirmed" : "No lesson scheduled yet")}</p>
                   {lesson ? <p className="mt-1 text-sm text-slate-600">Venue: {lesson.external_venue?.name ?? lesson.court?.name ?? lesson.custom_location ?? "To be confirmed"}</p> : proposal && typeof proposal.venue === "string" ? <p className="mt-1 text-sm text-slate-600">Venue: {proposal.venue}</p> : null}
+                  {linkedSessions.length > 0 ? (
+                    <details className="ui-collapsible mt-4 border-t border-court-teal/20 pt-3">
+                      <summary className="flex cursor-pointer items-center justify-between gap-3 text-sm font-black text-court-navy"><span>My Academy Sessions · {linkedSessions.length}</span><span className="ui-collapsible-chevron"><ChevronDownIcon size={16} /></span></summary>
+                      <div className="mt-3 divide-y divide-court-teal/15">
+                        {linkedSessions.map((session) => (
+                          <div className="py-3 first:pt-0 last:pb-0" key={session.session_id}>
+                            <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-black text-court-navy">{session.session_name}</p><span className="ui-chip ui-chip-brand">{formatLabel(session.session_type)}</span></div>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">{session.next_start_time ? formatDateTime(session.next_start_time) : "No upcoming occurrence"}</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">{session.coach_name} · {session.location_name ?? "Venue to be confirmed"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
                 </article>
               );
             })}

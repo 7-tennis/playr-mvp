@@ -16,6 +16,7 @@ import {
   type CoachLessonProfile,
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
+import { loadCoachSessionOccurrencesForRange, loadCoachSessions } from "@/lib/coach-sessions";
 import { invitationLink } from "@/lib/organisations";
 import type { ActiveAcademyStudent, CoachLessonAttendanceResult, OrganisationInvitation } from "@/types/courtside";
 import { CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "../coachr-shared";
@@ -54,6 +55,7 @@ type StudentSummary = {
   proposal: Record<string, unknown> | null;
   proposalStatus: string;
   lessonTypes: string[];
+  sessionNames: string[];
   totalLessons: number;
   attendedLessons: number;
   missedLessons: number;
@@ -132,6 +134,7 @@ function studentSummary(student: ActiveAcademyStudent): StudentSummary {
     proposal: academyStudentProposal(student),
     proposalStatus: student.proposalStatus,
     recentHistory: [],
+    sessionNames: [],
     stage: stageLabel(profile),
     totalLessons: 0
   };
@@ -229,9 +232,11 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
           .order("created_at", { ascending: false })
           .limit(80)
       : Promise.resolve({ data: [], error: null });
-  const [activeStudentsResult, lessons, options, playerInvitationsResult] = await Promise.all([
+  const [activeStudentsResult, lessons, sessions, sessionOccurrences, options, playerInvitationsResult] = await Promise.all([
     loadActiveAcademyStudents(access.context, activeVenueId),
     loadCoachLessons(access.context, 160),
+    loadCoachSessions(access.context),
+    loadCoachSessionOccurrencesForRange(access.context, new Date(Date.now() - 366 * 24 * 60 * 60 * 1000).toISOString(), new Date(Date.now() + 91 * 24 * 60 * 60 * 1000).toISOString(), 1000),
     loadCoachLessonOptions(access.context),
     playerInvitationQuery
   ]);
@@ -255,6 +260,34 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
     if (!summary) return;
     if (!summary.lessonTypes.includes(lesson.lesson_type)) summary.lessonTypes.push(lesson.lesson_type);
     addStudentLesson(summary, lesson, fallbackAttendanceResult(lesson));
+  });
+
+  sessions.forEach((session) => {
+    session.participants.filter((participant) => participant.status === "active").forEach((participant) => {
+      const summary = studentMap.get(participant.player_profile_id);
+      if (!summary) return;
+      if (!summary.lessonTypes.includes(session.session_type)) summary.lessonTypes.push(session.session_type);
+      if (!summary.sessionNames.includes(session.name)) summary.sessionNames.push(session.name);
+    });
+  });
+
+  sessionOccurrences.forEach((occurrence) => {
+    const session = occurrence.session;
+    if (!session) return;
+    const attendanceByPlayer = new Map(occurrence.attendance.map((row) => [row.player_profile_id, row.attendance_status]));
+    session.participants.filter((participant) => participant.status === "active").forEach((participant) => {
+      const summary = studentMap.get(participant.player_profile_id);
+      if (!summary) return;
+      const attendance = attendanceByPlayer.get(participant.player_profile_id) ?? "not_recorded";
+      summary.totalLessons += 1;
+      if (attendance === "present" || attendance === "late") summary.attendedLessons += 1;
+      if (attendance === "absent") summary.missedLessons += 1;
+      if (occurrence.status === "cancelled" || occurrence.status === "rain" || occurrence.status === "sick") summary.affectedLessons += 1;
+      if (occurrence.status === "scheduled" && (!summary.nextLesson || occurrence.start_time < summary.nextLesson)) summary.nextLesson = occurrence.start_time;
+      if (attendance !== "not_recorded" || occurrence.status !== "scheduled") {
+        summary.recentHistory.push({ date: occurrence.start_time, status: attendance === "not_recorded" ? formatLabel(occurrence.status) : formatLabel(attendance) });
+      }
+    });
   });
 
   const query = (searchParams?.q ?? "").trim().toLowerCase();
@@ -506,7 +539,8 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
                     <span>
                       <span className="block font-black text-court-navy">{student.name}</span>
                       <span className="mt-1 block text-sm text-slate-600">
-                        {student.assignedCoach} · {student.nextLesson ? `Next ${formatDateTime(student.nextLesson)}` : "No lesson scheduled"}
+                        {student.sessionNames.length > 0 ? student.sessionNames.slice(0, 2).join(" + ") : student.lessonTypes.map((type) => type === "semi_private" ? "Semi-private" : type === "squad" ? "Squad" : formatLabel(type)).slice(0, 2).join(" + ") || "No active session"}
+                        {student.nextLesson ? ` · Next ${formatDateTime(student.nextLesson)}` : " · No session scheduled"}
                       </span>
                     </span>
                     <span className="text-sm font-black text-court-teal">Open</span>
@@ -551,8 +585,8 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
                       <a className="btn-secondary px-3 py-2" href={`/dashboard/players/${student.id}`}>
                         View MyPlayR
                       </a>
-                      <a className="btn-primary px-3 py-2" href={`/dashboard/coachr/schedule?new=1&player=${student.id}${student.assignedCoachId ? `&coach=${student.assignedCoachId}` : ""}#new-lesson`}>
-                        Schedule Lesson
+                      <a className="btn-primary px-3 py-2" href="/dashboard/coachr/sessions/new">
+                        Create Session
                       </a>
                     </div>
                     {student.recentHistory.map((item) => (

@@ -11,13 +11,20 @@ function text(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function redirectWithError(error: string): never {
-  redirect(`/dashboard/book-court?error=${encodeURIComponent(error)}`);
+function safeReturnTo(formData: FormData) {
+  const candidate = text(formData, "returnTo");
+  return candidate.startsWith("/dashboard/book-court") ? candidate : "/dashboard/book-court";
 }
 
-function isWithinUserBookingWindow(start: Date) {
+function redirectWithError(error: string, returnTo = "/dashboard/book-court"): never {
+  const target = new URL(returnTo, "http://localhost");
+  target.searchParams.set("error", error);
+  redirect(`${target.pathname}${target.search}`);
+}
+
+function isWithinUserBookingWindow(start: Date, advanceBookingDays: number) {
   const now = Date.now();
-  const max = now + 7 * 24 * 60 * 60 * 1000;
+  const max = now + advanceBookingDays * 24 * 60 * 60 * 1000;
   return start.getTime() >= now && start.getTime() < max;
 }
 
@@ -26,16 +33,17 @@ export async function createCourtBooking(formData: FormData) {
   const profileId = text(formData, "profileId");
   const startValue = text(formData, "startTime");
   const notes = text(formData, "notes");
+  const returnTo = safeReturnTo(formData);
 
   if (!courtId || !profileId || !startValue) {
-    redirectWithError("Choose a court, time, and player before booking.");
+    redirectWithError("Choose a court, time, and player before booking.", returnTo);
   }
 
   const startTime = new Date(startValue);
   const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
 
-  if (!Number.isFinite(startTime.getTime()) || !isWithinUserBookingWindow(startTime)) {
-    redirectWithError("Choose a time in the next 7 days.");
+  if (!Number.isFinite(startTime.getTime())) {
+    redirectWithError("Choose a valid court time.", returnTo);
   }
 
   const supabase = await createServerSupabaseClient();
@@ -47,10 +55,18 @@ export async function createCourtBooking(formData: FormData) {
     redirect("/login");
   }
 
-  const { data: courtData, error: courtError } = await supabase.from("courts").select("id,status").eq("id", courtId).eq("status", "active").single();
+  const { data: courtData, error: courtError } = await supabase.from("courts").select("id,status,venue_id").eq("id", courtId).eq("status", "active").single();
 
   if (courtError || !courtData) {
-    redirectWithError("That court is not available.");
+    redirectWithError("That court is not available.", returnTo);
+  }
+
+  const { data: bookingSettings } = courtData.venue_id
+    ? await supabase.from("organisation_booking_settings").select("advance_booking_days").eq("venue_id", courtData.venue_id).maybeSingle()
+    : { data: null };
+  const advanceBookingDays = Math.max(1, Math.min(90, Number(bookingSettings?.advance_booking_days ?? 7)));
+  if (!isWithinUserBookingWindow(startTime, advanceBookingDays)) {
+    redirectWithError(`Choose a time in the next ${advanceBookingDays} days.`, returnTo);
   }
 
   const { data: profileData, error: profileError } = await supabase
@@ -60,7 +76,7 @@ export async function createCourtBooking(formData: FormData) {
     .single();
 
   if (profileError || !profileData) {
-    redirectWithError("Choose your own profile or a linked junior profile.");
+    redirectWithError("Choose your own profile or a linked junior profile.", returnTo);
   }
 
   const player = profileData as Pick<Profile, "id" | "first_name" | "last_name" | "is_junior">;
@@ -83,9 +99,9 @@ export async function createCourtBooking(formData: FormData) {
   if (error || !bookingData) {
     console.error("CourtSide court booking failed", { courtId, profileId, startValue, error });
     if (error?.code === "23P01") {
-      redirectWithError("That slot has just been booked. Choose another time.");
+      redirectWithError("That slot has just been booked. Choose another time.", returnTo);
     }
-    redirectWithError("We could not create that booking. Please try another slot.");
+    redirectWithError("We could not create that booking. Please try another slot.", returnTo);
   }
 
   await createNotification(supabase, {
@@ -108,7 +124,10 @@ export async function createCourtBooking(formData: FormData) {
 
   revalidatePath("/dashboard/book-court");
   revalidatePath("/dashboard/my-bookings");
-  redirect("/dashboard/book-court?booking=created");
+  const successTarget = new URL(returnTo, "http://localhost");
+  successTarget.searchParams.set("booking", "created");
+  successTarget.searchParams.delete("error");
+  redirect(`${successTarget.pathname}${successTarget.search}`);
 }
 
 export async function cancelOwnCourtBooking(formData: FormData) {

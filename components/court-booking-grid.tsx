@@ -161,6 +161,7 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
             <form action={createCourtBooking} className="mt-5 grid gap-4">
               <input name="courtId" type="hidden" value={selectedCourtId} />
               <input name="startTime" type="hidden" value={activeSlot.startTime} />
+              <input name="returnTo" type="hidden" value={`/dashboard/book-court?date=${selectedDate}&court=${selectedCourtId}`} />
               <label className="text-sm font-semibold text-slate-700">
                 Booking for <span className="font-normal text-slate-500">(choose yourself or a linked junior)</span>
                 <select className="mt-2 w-full rounded border border-slate-300 px-3 py-3 focus-ring" name="profileId" required>

@@ -44,8 +44,26 @@ function clampDate(value?: string) {
 
   const selected = dateWithSaOffset(value, 0).getTime();
   const start = dateWithSaOffset(today, 0).getTime();
-  const end = start + 7 * 24 * 60 * 60 * 1000;
-  return selected >= start && selected < end ? value : today;
+  const earliest = start - 7 * 24 * 60 * 60 * 1000;
+  const latest = start + 28 * 24 * 60 * 60 * 1000;
+  return selected >= earliest && selected <= latest ? value : today;
+}
+
+function dateInputFromSerial(serial: number) {
+  return new Date(serial).toISOString().slice(0, 10);
+}
+
+function weekRange(date: string) {
+  const serial = Date.parse(`${date}T00:00:00Z`);
+  const day = new Date(serial).getUTCDay();
+  const start = serial - ((day + 6) % 7) * 24 * 60 * 60 * 1000;
+  return { end: start + 7 * 24 * 60 * 60 * 1000, start };
+}
+
+function weekRangeLabel(start: number, end: number) {
+  const formatter = new Intl.DateTimeFormat("en-ZA", { day: "numeric", month: "short", timeZone: "UTC" });
+  const year = new Intl.DateTimeFormat("en-ZA", { timeZone: "UTC", year: "numeric" }).format(new Date(end - 1));
+  return `${formatter.format(new Date(start))} - ${formatter.format(new Date(end - 1))} ${year}`;
 }
 
 function slotsForDate(date: string) {
@@ -90,7 +108,11 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
 
   const selectedDate = clampDate(searchParams?.date);
   const dayStart = dateWithSaOffset(selectedDate, 0);
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  const selectedWeek = weekRange(selectedDate);
+  const rangeStart = dateWithSaOffset(dateInputFromSerial(selectedWeek.start), 0);
+  const rangeEnd = dateWithSaOffset(dateInputFromSerial(selectedWeek.end), 0);
+  const previousWeekDate = dateInputFromSerial(Date.parse(`${selectedDate}T00:00:00Z`) - 7 * 24 * 60 * 60 * 1000);
+  const nextWeekDate = dateInputFromSerial(Date.parse(`${selectedDate}T00:00:00Z`) + 7 * 24 * 60 * 60 * 1000);
 
   const { data: courtData, error: courtsError } = await supabase
     .from("courts")
@@ -130,9 +152,9 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
   }));
 
   const { data: bookingData } = courts.length
-    ? await supabase.rpc("coachr_court_booking_blocks_for_range", {
-        check_end_time: dayEnd.toISOString(),
-        check_start_time: dayStart.toISOString()
+      ? await supabase.rpc("coachr_court_booking_blocks_for_range", {
+        check_end_time: rangeEnd.toISOString(),
+        check_start_time: rangeStart.toISOString()
       })
     : { data: [] };
 
@@ -150,8 +172,10 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
       <StatusAlert className="mb-5" message={successMessage(searchParams?.booking)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
       <section className="surface-card mb-5 p-5">
-        <h2 className="section-title">Availability for {formatDate(dayStart.toISOString())}</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Choose a court, time and player. Slots are 60 minutes and can be booked up to 7 days ahead.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div><p className="section-kicker">{weekRangeLabel(selectedWeek.start, selectedWeek.end)}</p><h2 className="section-title mt-1">{formatDate(dayStart.toISOString())}</h2><p className="mt-2 text-sm leading-6 text-slate-600">Choose a court, time and player. Availability is refreshed for the displayed week.</p></div>
+          <div className="flex gap-2"><Link className="btn-secondary px-3 py-2" href={`/dashboard/book-court?date=${previousWeekDate}${selectedCourtId ? `&court=${selectedCourtId}` : ""}`}>Previous Week</Link><Link className="btn-secondary px-3 py-2" href={`/dashboard/book-court?date=${nextWeekDate}${selectedCourtId ? `&court=${selectedCourtId}` : ""}`}>Next Week</Link></div>
+        </div>
         <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
           <span className="ui-chip ui-chip-success">Available</span>
           <span className="ui-chip ui-chip-brand">Your booking</span>

@@ -12,6 +12,7 @@ import {
   upcomingCoachLessons,
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
+import { loadCoachSessionOccurrencesForRange, loadCoachSessions, sessionAttendanceSummary } from "@/lib/coach-sessions";
 import { CoachRActionCard, CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "./coachr-shared";
 
 export const dynamic = "force-dynamic";
@@ -151,6 +152,14 @@ export default async function CoachRPage() {
   const todayDay = new Date(todaySerial).getUTCDay();
   const weekStartSerial = todaySerial - ((todayDay + 6) % 7) * DAY_MS;
   const weekEndSerial = weekStartSerial + 7 * DAY_MS;
+  const [sessions, sessionOccurrences] = await Promise.all([
+    loadCoachSessions(access.context),
+    loadCoachSessionOccurrencesForRange(
+      access.context,
+      new Date(weekStartSerial - 2 * 60 * 60 * 1000).toISOString(),
+      new Date(weekEndSerial - 2 * 60 * 60 * 1000).toISOString()
+    )
+  ]);
   const todayLessons = lessons
     .filter((lesson) => localDateSerial(lesson.start_time) === todaySerial)
     .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
@@ -164,6 +173,9 @@ export default async function CoachRPage() {
   const cancelledLessonCount = lessons.filter((lesson) => lesson.status === "cancelled").length;
   const replacementLessonCount = lessons.filter((lesson) => /replacement|extra|make.?up|catch.?up/i.test(`${lesson.title} ${lesson.notes ?? ""}`)).length;
   const outstandingAttendanceCount = lessons.filter((lesson) => lessonNeedsAttendance(lesson)).length;
+  const outstandingSessionAttendanceCount = sessionOccurrences
+    .filter((occurrence) => occurrence.end_time <= new Date().toISOString() && occurrence.status === "scheduled")
+    .reduce((total, occurrence) => total + sessionAttendanceSummary(occurrence).due, 0);
   const outstandingFeedbackCount = lessons.filter(
     (lesson) => new Date(lesson.end_time).getTime() <= Date.now() && (lesson.feedback_status === "not_started" || lesson.feedback_status === "draft")
   ).length;
@@ -175,6 +187,8 @@ export default async function CoachRPage() {
   const privateStudentCount = new Set(lessons.filter((lesson) => lesson.lesson_type === "private").map((lesson) => lesson.player_id)).size;
   const pendingLinkCount = pendingLinksResult.count ?? 0;
   const unreadMessageCount = unreadMessagesResult.count ?? 0;
+  const activeSquadCount = sessions.filter((session) => session.status === "active" && session.session_type === "squad").length;
+  const todaySessionCount = sessionOccurrences.filter((occurrence) => localDateSerial(occurrence.start_time) === todaySerial).length;
   const activeOrganisationName = access.context.activeOrganisationMembership?.venue?.name ?? "Organisation not selected";
   const coachName = access.context.activeOrganisationMembership?.profile
     ? profileDisplayName(access.context.activeOrganisationMembership.profile)
@@ -191,11 +205,27 @@ export default async function CoachRPage() {
   const statCards = [
     {
       label: "Today",
-      value: todayLessons.length,
-      helper: "lessons",
+      value: todayLessons.length + todaySessionCount,
+      helper: "sessions",
       href: "/dashboard/coachr/schedule",
       icon: <TimeIcon size={18} />,
       tone: "bg-court-mist text-court-teal"
+    },
+    {
+      label: "Squads",
+      value: activeSquadCount,
+      helper: "active",
+      href: "/dashboard/coachr/sessions",
+      icon: <MatchIcon size={18} />,
+      tone: "bg-court-mist text-court-teal"
+    },
+    {
+      label: "Attendance",
+      value: outstandingAttendanceCount + outstandingSessionAttendanceCount,
+      helper: "due",
+      href: "/dashboard/coachr/schedule",
+      icon: <StatusIcon size={18} />,
+      tone: "bg-amber-50 text-amber-700"
     },
     {
       label: "Students",
@@ -224,9 +254,9 @@ export default async function CoachRPage() {
   ];
   const quickLinks = [
     {
-      title: "Quick Add Lesson",
-      text: "Create a lesson for this week.",
-      href: "/dashboard/coachr/schedule",
+      title: "Create Session",
+      text: "Private, semi-private or squad.",
+      href: "/dashboard/coachr/sessions/new",
       icon: <TimeIcon size={18} />
     },
     {
@@ -265,8 +295,8 @@ export default async function CoachRPage() {
             <Link className="inline-flex items-center justify-center gap-2 rounded border border-white/20 px-3 py-2 text-sm font-black hover:bg-white/10" href="/dashboard/notifications">
               <NotificationIcon size={16} /> Notifications
             </Link>
-            <Link className="inline-flex items-center justify-center gap-2 rounded bg-court-teal px-3 py-2 text-sm font-black hover:bg-teal-500" href="/dashboard/coachr/schedule?new=1#new-lesson">
-              Add Lesson <ArrowRightIcon size={15} />
+            <Link className="inline-flex items-center justify-center gap-2 rounded bg-court-teal px-3 py-2 text-sm font-black hover:bg-teal-500" href="/dashboard/coachr/sessions/new">
+              Create Session <ArrowRightIcon size={15} />
             </Link>
           </div>
         </div>
@@ -278,12 +308,12 @@ export default async function CoachRPage() {
         ))}
       </CoachRCompactGrid>
 
-      {lessons.length === 0 ? (
+      {lessons.length === 0 && sessions.length === 0 ? (
         <section className="empty-state mb-5">
           <TimeIcon size={24} />
           <h2 className="section-title mt-3">Your coaching schedule is ready.</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">Add your first lesson to start planning your week.</p>
-          <Link className="btn-primary mt-4" href="/dashboard/coachr/schedule?new=1#new-lesson">Add First Lesson</Link>
+          <Link className="btn-primary mt-4" href="/dashboard/coachr/sessions/new">Create First Session</Link>
         </section>
       ) : (
         <section className="mb-5 grid gap-4 lg:grid-cols-2">
@@ -320,7 +350,7 @@ export default async function CoachRPage() {
         <CoachRSummaryCard helper="private students" href="/dashboard/coachr/students?lessonType=private" icon={<EntriesIcon size={18} />} label="Private" value={privateStudentCount} />
         <CoachRSummaryCard helper="awaiting approval" href="/dashboard/coachr/students#pending-links" icon={<NotificationIcon size={18} />} label="Player Links" value={pendingLinkCount} />
         <CoachRSummaryCard helper="player absent" href="/dashboard/coachr/schedule" icon={<StatusIcon size={18} />} label="Missed" value={missedLessonCount} />
-        <CoachRSummaryCard helper="needs marking" href="/dashboard/coachr/schedule" icon={<MatchIcon size={18} />} label="Attendance" value={outstandingAttendanceCount} />
+        <CoachRSummaryCard helper="needs marking" href="/dashboard/coachr/schedule" icon={<MatchIcon size={18} />} label="Attendance" value={outstandingAttendanceCount + outstandingSessionAttendanceCount} />
       </CoachRCompactGrid>
 
       <section className="surface-card mb-5 p-4 sm:p-5">

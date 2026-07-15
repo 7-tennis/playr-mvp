@@ -1,8 +1,5 @@
 import Link from "next/link";
 import { CoachRCourtPicker } from "@/components/coachr-court-picker";
-import { CoachRRecurrenceControls } from "@/components/coachr-recurrence-controls";
-import { CoachRStudentSelector } from "@/components/coachr-student-selector";
-import { CollapsibleCard } from "@/components/collapsible-card";
 import { ArrowRightIcon, BookingIcon, ChevronDownIcon, EntriesIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
@@ -24,9 +21,18 @@ import {
   type CoachLessonProfile,
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
+import {
+  activeSessionParticipants,
+  coachSessionLocation,
+  coachSessionTypeLabel,
+  loadCoachSessionOccurrencesForRange,
+  sessionAttendanceSummary,
+  type CoachSessionOccurrenceWithRelations
+} from "@/lib/coach-sessions";
 import { canManageOrganisationCourtAccess } from "@/lib/organisations";
 import type { CoachLessonAttendanceResult } from "@/types/courtside";
-import { cancelCoachLesson, createCoachLesson, markCoachLessonAttendance, updateCoachLesson } from "../actions";
+import { cancelCoachSessionOccurrence, markAllCoachSessionAttendance, markCoachSessionAttendance, moveCoachSessionOccurrence } from "../sessions/actions";
+import { cancelCoachLesson, markCoachLessonAttendance, updateCoachLesson } from "../actions";
 import { CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "../coachr-shared";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +44,8 @@ type CoachRSchedulePageProps = {
     lesson_error?: string;
     new?: string;
     player?: string;
+    session?: string;
+    session_error?: string;
     week?: string;
   };
 };
@@ -62,12 +70,22 @@ function statusMessage(value?: string) {
       return "Recurring lesson series cancelled.";
     case "attendance_marked":
       return "Attendance saved.";
+    case "session_cancelled":
+      return "Session cancelled and linked courts released.";
+    case "moved":
+      return "Session moved and linked court bookings updated.";
     default:
       return null;
   }
 }
 
 function errorMessage(value?: string) {
+  if (value?.startsWith("player_conflict:")) {
+    return `${value.split(":").slice(1).join(":")} already has another session at this time.`;
+  }
+  if (value?.startsWith("coach_conflict:")) {
+    return `${value.split(":").slice(1).join(":")} already has another session at this time.`;
+  }
   if (value?.startsWith("court_conflict:")) {
     const courtName = value.split(":").slice(1).join(":") || "Selected court";
     return `${courtName} is already booked at this time.`;
@@ -125,7 +143,7 @@ function errorMessage(value?: string) {
     case "attendance_player":
       return "Choose a player linked to this lesson attendance list.";
     case "create_failed":
-      return "Lesson could not be created. Check the CoachR setup cards below, then try again.";
+      return "The lesson could not be created. No booking was made. Please try again.";
     case "update_failed":
       return "Lesson could not be updated.";
     case "cancel_failed":
@@ -232,46 +250,6 @@ function dateTimeLocalValue(value: string) {
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }
 
-function recordValue(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-}
-
-function proposalText(proposal: Record<string, unknown> | null, key: string) {
-  const value = proposal?.[key];
-  return typeof value === "string" || typeof value === "number" ? String(value) : "";
-}
-
-function validDate(value: string, fallback: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
-}
-
-function validTime(value: string, fallback: string) {
-  return /^\d{2}:\d{2}$/.test(value) ? value : fallback;
-}
-
-function addMinutes(time: string, minutes: number) {
-  const [hours, minute] = time.split(":").map(Number);
-  const total = Math.min(23 * 60 + 59, Math.max(0, hours * 60 + minute + minutes));
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-function proposedDayOfWeek(value: string, fallback: number) {
-  const days = new Map([
-    ["monday", 1],
-    ["tuesday", 2],
-    ["wednesday", 3],
-    ["thursday", 4],
-    ["friday", 5],
-    ["saturday", 6],
-    ["sunday", 7]
-  ]);
-  return days.get(value.trim().toLowerCase()) ?? fallback;
-}
-
-function isoDayOfWeek(serial: number) {
-  const day = new Date(serial).getUTCDay();
-  return day === 0 ? 7 : day;
-}
 
 function repeatRuleSummary(lesson: CoachLessonWithRelations) {
   if (lesson.series) {
@@ -300,12 +278,10 @@ function repeatRuleSummary(lesson: CoachLessonWithRelations) {
   return start && end ? `Weekly ${start} to ${end}` : "Weekly";
 }
 
-function dayTimeRange(lessons: CoachLessonWithRelations[]) {
-  if (lessons.length === 0) {
-    return "Open day";
-  }
-
-  return `${timeLabel(lessons[0].start_time)} - ${timeLabel(lessons[lessons.length - 1].end_time)}`;
+function combinedDayTimeRange(lessons: CoachLessonWithRelations[], sessions: CoachSessionOccurrenceWithRelations[]) {
+  const items = [...lessons, ...sessions].sort((left, right) => new Date(left.start_time).getTime() - new Date(right.start_time).getTime());
+  if (items.length === 0) return "Open day";
+  return `${timeLabel(items[0].start_time)} - ${timeLabel(items[items.length - 1].end_time)}`;
 }
 
 function dayStatusSummary(lessons: CoachLessonWithRelations[]) {
@@ -514,6 +490,94 @@ function AttendanceButtons({
         })}
       </div>
     </form>
+  );
+}
+
+function sessionAttendanceLabel(status: string) {
+  if (status === "present") return "Present";
+  if (status === "absent") return "Absent";
+  if (status === "excused") return "Excused";
+  if (status === "late") return "Late";
+  return "Not marked";
+}
+
+function SessionOccurrenceCard({ courtOptions, occurrence, returnTo }: { courtOptions: CoachLessonCourt[]; occurrence: CoachSessionOccurrenceWithRelations; returnTo: string }) {
+  const session = occurrence.session;
+  if (!session) return null;
+  const participants = activeSessionParticipants(session);
+  const attendanceByPlayer = new Map(occurrence.attendance.map((row) => [row.player_profile_id, row]));
+  const attendance = sessionAttendanceSummary(occurrence);
+  const courts = occurrence.court_links.map((link) => link.court?.name).filter(Boolean).join(", ") || coachSessionLocation(session);
+
+  return (
+    <details className="ui-collapsible overflow-hidden rounded-lg border border-court-teal/30 bg-white shadow-sm">
+      <summary className="flex cursor-pointer items-start justify-between gap-3 p-3">
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="truncate font-black text-court-navy">{session.name}</span>
+            <span className="ui-chip ui-chip-brand">{coachSessionTypeLabel(session.session_type)}</span>
+            <span className={`ui-chip ${lessonStatusTone(occurrence.status)}`}>{formatLabel(occurrence.status)}</span>
+          </span>
+          <span className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+            <span className="ui-chip ui-chip-muted"><TimeIcon size={13} /> {timeLabel(occurrence.start_time)} - {timeLabel(occurrence.end_time)}</span>
+            <span className="ui-chip ui-chip-muted"><EntriesIcon size={13} /> {participants.length} player{participants.length === 1 ? "" : "s"}</span>
+            <span className="ui-chip ui-chip-muted"><BookingIcon size={13} /> {courts}</span>
+            <span className={`ui-chip ${attendance.due === 0 && attendance.total > 0 ? "ui-chip-success" : "ui-chip-warning"}`}>{attendance.due === 0 ? "Attendance complete" : `${attendance.due} attendance due`}</span>
+          </span>
+        </span>
+        <span className="ui-collapsible-chevron grid h-8 w-8 shrink-0 place-items-center rounded bg-court-mist text-court-teal"><ChevronDownIcon size={16} /></span>
+      </summary>
+      <div className="border-t border-slate-100 p-3">
+        <div className="grid gap-2 text-sm sm:grid-cols-2">
+          <p className="rounded bg-slate-50 p-3 font-semibold text-slate-700">Coach: <span className="font-black text-court-navy">{profileDisplayName(session.primary_coach)}</span></p>
+          <p className="rounded bg-slate-50 p-3 font-semibold text-slate-700">Courts: <span className="font-black text-court-navy">{courts}</span></p>
+        </div>
+
+        <section className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-black text-court-navy">Attendance</p><p className="mt-1 text-xs font-semibold text-slate-500">Saved for this occurrence only.</p></div>{participants.length > 1 ? <form action={markAllCoachSessionAttendance}><input name="occurrenceId" type="hidden" value={occurrence.id} /><input name="returnTo" type="hidden" value={returnTo} /><button className="rounded bg-court-teal px-3 py-2 text-xs font-black text-white" type="submit">Mark All Present</button></form> : null}</div>
+          <div className="mt-3 grid gap-3">
+            {participants.map((participant) => {
+              const saved = attendanceByPlayer.get(participant.player_profile_id);
+              return (
+                <article className="rounded-lg border border-slate-200 bg-white p-3" key={participant.id}>
+                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-black text-court-navy">{profileDisplayName(participant.player)}</p><span className={`ui-chip ${saved && saved.attendance_status !== "not_recorded" ? "ui-chip-success" : "ui-chip-muted"}`}>{sessionAttendanceLabel(saved?.attendance_status ?? "not_recorded")}</span></div>
+                  <form action={markCoachSessionAttendance} className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <input name="occurrenceId" type="hidden" value={occurrence.id} /><input name="playerProfileId" type="hidden" value={participant.player_profile_id} /><input name="returnTo" type="hidden" value={returnTo} />
+                    {(["present", "absent", "excused", "late"] as const).map((status) => <button className={`rounded border px-2 py-3 text-xs font-black ${saved?.attendance_status === status ? "border-court-navy bg-court-navy text-white" : "border-slate-200 bg-white text-court-navy hover:border-court-teal"}`} key={status} name="attendanceStatus" type="submit" value={status}>{sessionAttendanceLabel(status)}</button>)}
+                  </form>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        {occurrence.status === "scheduled" ? (
+          <details className="mt-4 rounded-lg border border-slate-200 p-3">
+            <summary className="cursor-pointer text-sm font-black text-court-navy">Move Session</summary>
+            <form action={moveCoachSessionOccurrence} className="mt-3 grid gap-3">
+              <input name="occurrenceId" type="hidden" value={occurrence.id} /><input name="returnTo" type="hidden" value={returnTo} />
+              <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold text-slate-700">Starts<input className="mt-1 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={dateTimeLocalValue(occurrence.start_time)} name="startTime" type="datetime-local" /></label><label className="text-sm font-bold text-slate-700">Ends<input className="mt-1 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={dateTimeLocalValue(occurrence.end_time)} name="endTime" type="datetime-local" /></label></div>
+              {session.location_type === "managed_court" ? <fieldset><legend className="text-sm font-bold text-slate-700">Courts</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{courtOptions.map((court) => <label className="flex items-center gap-2 rounded border border-slate-200 p-3 text-sm font-bold text-slate-700" key={court.id}><input defaultChecked={occurrence.court_links.some((link) => link.court_id === court.id)} name="courtIds" type="checkbox" value={court.id} />{court.name}</label>)}</div></fieldset> : null}
+              <p className="text-xs font-semibold leading-5 text-slate-500">The current booking stays unchanged unless every selected court, player and coach is available.</p>
+              <button className="btn-secondary" type="submit">Check Availability & Move</button>
+            </form>
+          </details>
+        ) : null}
+
+        {occurrence.status === "scheduled" ? (
+          <details className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <summary className="cursor-pointer text-sm font-black text-amber-900">Cancel Session</summary>
+            <form action={cancelCoachSessionOccurrence} className="mt-3 grid gap-3">
+              <input name="occurrenceId" type="hidden" value={occurrence.id} /><input name="returnTo" type="hidden" value={returnTo} />
+              <p className="text-sm font-semibold text-amber-900">Cancelling this session will release {courts} for other bookings.</p>
+              {session.repeat_mode === "weekly" ? <label className="text-sm font-bold text-amber-900">Apply to<select className="mt-1 w-full rounded border border-amber-300 bg-white px-3 py-2 focus-ring" name="scope"><option value="single">This session only</option><option value="future">This and future sessions</option><option value="series">Entire future series</option></select></label> : <input name="scope" type="hidden" value="single" />}
+              <label className="text-sm font-bold text-amber-900">Reason <span className="font-normal">(optional)</span><input className="mt-1 w-full rounded border border-amber-300 bg-white px-3 py-2 focus-ring" name="reason" /></label>
+              <button className="rounded bg-amber-700 px-3 py-3 text-sm font-black text-white" type="submit">Cancel and Release Courts</button>
+            </form>
+          </details>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
@@ -831,16 +895,21 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
   const selectedWeekStart = weekStartSerial(selectedDateSerial);
   const selectedWeekEnd = selectedWeekStart + 7 * DAY_MS;
   const todaySerial = localDateSerial(new Date());
-  const [lessons, options] = await Promise.all([
+  const [lessons, sessionOccurrences, options] = await Promise.all([
     loadCoachLessonsForRange(access.context, rangeBoundaryIso(selectedWeekStart), rangeBoundaryIso(selectedWeekEnd)),
+    loadCoachSessionOccurrencesForRange(access.context, rangeBoundaryIso(selectedWeekStart), rangeBoundaryIso(selectedWeekEnd)),
     loadCoachLessonOptions(access.context)
   ]);
   const canFilterByCoach = !coachOnly && options.coachProfiles.length > 0;
   const requestedCoachId = searchParams?.coach ?? "";
   const selectedCoachId = canFilterByCoach && options.coachProfiles.some((profile) => profile.id === requestedCoachId) ? requestedCoachId : "";
-  const requestedPlayerId = searchParams?.player ?? "";
-  const selectedStudent = options.studentOptions.find((student) => student.profile.id === requestedPlayerId) ?? null;
   const visibleLessons = selectedCoachId ? lessons.filter((lesson) => lesson.coach_id === selectedCoachId) : lessons;
+  const requestedSessionId = searchParams?.session ?? "";
+  const visibleSessionOccurrences = sessionOccurrences.filter((occurrence) => {
+    if (requestedSessionId && occurrence.session_id !== requestedSessionId) return false;
+    if (!selectedCoachId) return true;
+    return occurrence.session?.coaches.some((coach) => coach.status === "active" && coach.coach_profile_id === selectedCoachId) ?? false;
+  });
   const playerOptions = mergeProfiles(options.playerProfiles, visibleLessons);
   const lessonPlayers = visibleLessons.map((lesson) => lesson.player).filter(isProfile).length;
   const setupCards = setupIssues({
@@ -854,53 +923,21 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
     studentLoadError: options.studentLoadError
   });
   const returnTo = scheduleHref(selectedWeekStart, selectedCoachId);
-  const createHref = scheduleHref(selectedWeekStart, selectedCoachId, true);
-  const defaultVenueId = access.context.venueId ?? access.context.activeOrganisationMembership?.venue_id ?? options.venues[0]?.id ?? "";
+  const createHref = "/dashboard/coachr/sessions/new";
   const canManageCourtAccess = access.context.role === "platform_admin" || canManageOrganisationCourtAccess(access.context.activeOrganisationRole);
-  const defaultCreateSerial = todaySerial >= selectedWeekStart && todaySerial < selectedWeekEnd ? todaySerial : selectedWeekStart;
-  const proposal = recordValue(selectedStudent?.connectionContext.proposal);
-  const proposalCoachId = typeof selectedStudent?.connectionContext.coachProfileId === "string" ? selectedStudent.connectionContext.coachProfileId : "";
-  const validProposalCoachId = options.coachProfiles.some((coach) => coach.id === proposalCoachId) ? proposalCoachId : "";
-  const assignedStudentCoachId = selectedStudent?.assignedCoachIds.find((coachId) => options.coachProfiles.some((coach) => coach.id === coachId)) ?? "";
-  const defaultCoachId = coachOnly
-    ? access.context.adultProfileId ?? ""
-    : selectedCoachId || validProposalCoachId || assignedStudentCoachId || options.coachProfiles[0]?.id || access.context.adultProfileId || "";
-  const defaultPlayerId = selectedStudent?.profile.id ?? "";
-  const fallbackCreateDate = serialDateInput(defaultCreateSerial);
-  const proposalStartDate = validDate(proposalText(proposal, "startDate"), fallbackCreateDate);
-  const defaultRecurrenceEndDate = new Date(Date.parse(`${proposalStartDate}T00:00:00Z`) + 12 * 7 * DAY_MS).toISOString().slice(0, 10);
-  const proposalStartTime = validTime(proposalText(proposal, "startTime"), "14:00");
-  const proposalDuration = Number.parseInt(proposalText(proposal, "durationMinutes"), 10);
-  const proposalEndTime = addMinutes(proposalStartTime, Number.isFinite(proposalDuration) && proposalDuration > 0 ? proposalDuration : 60);
-  const defaultDayOfWeek = proposedDayOfWeek(proposalText(proposal, "day"), isoDayOfWeek(defaultCreateSerial));
-  const defaultRepeatMode = proposalText(proposal, "recurrence") === "weekly" ? "weekly" : "none";
-  const proposedLessonType = coachLessonTypes.includes(proposalText(proposal, "lessonType") as (typeof coachLessonTypes)[number])
-    ? proposalText(proposal, "lessonType")
-    : "private";
-  const proposedVenue = proposalText(proposal, "venue");
-  const proposedManagedCourt = proposedVenue
-    ? options.courts.find((court) => court.owner_name?.trim().toLowerCase() === proposedVenue.trim().toLowerCase()) ?? null
-    : null;
-  const studentSelectorOptions = options.studentOptions.map((student) => ({
-    context: [
-      student.profile.is_junior ? "Junior" : "Adult",
-      student.parentName ? `Parent: ${student.parentName}` : null,
-      student.assignedCoachNames.length > 0 ? student.assignedCoachNames.join(", ") : "Unassigned",
-      "Active"
-    ].filter(Boolean).join(" · "),
-    id: student.profile.id,
-    name: profileDisplayName(student.profile),
-    searchText: student.searchText
-  }));
   const weekDays = Array.from({ length: 7 }, (_, index) => {
     const serial = selectedWeekStart + index * DAY_MS;
     const dayLessons = visibleLessons
       .filter((lesson) => localDateSerial(lesson.start_time) === serial)
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+    const daySessions = visibleSessionOccurrences
+      .filter((occurrence) => localDateSerial(occurrence.start_time) === serial)
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
-    return { dayLessons, serial };
+    return { dayLessons, daySessions, serial };
   });
-  const selectedTodayCount = visibleLessons.filter((lesson) => localDateSerial(lesson.start_time) === todaySerial).length;
+  const selectedTodayCount = visibleLessons.filter((lesson) => localDateSerial(lesson.start_time) === todaySerial).length
+    + visibleSessionOccurrences.filter((occurrence) => localDateSerial(occurrence.start_time) === todaySerial).length;
   const missedCount = visibleLessons.filter((lesson) => lesson.status === "missed").length;
   const replacementCount = visibleLessons.filter((lesson) => /replacement|extra|make.?up|catch.?up/i.test(`${lesson.title} ${lesson.notes ?? ""}`)).length;
 
@@ -908,6 +945,8 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
     <CoachRPageFrame context={access.context} subtitle="Plan a coaching week, update lessons quickly, and keep every day easy to scan." title="Weekly Schedule">
       <StatusAlert className="mb-5" message={statusMessage(searchParams?.lesson)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.lesson_error)} tone="error" />
+      <StatusAlert className="mb-5" message={statusMessage(searchParams?.session)} tone="success" />
+      <StatusAlert className="mb-5" message={errorMessage(searchParams?.session_error)} tone="error" />
       <CoachRRoleSummary context={access.context} />
 
       <section className="mb-5 overflow-hidden rounded-lg bg-court-navy text-white shadow-court">
@@ -916,7 +955,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
             <p className="text-xs font-black uppercase tracking-wide text-court-lime">{coachOnly ? "My schedule" : "Venue schedule"}</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">{weekRangeLabel(selectedWeekStart)}</h2>
             <p className="mt-2 text-sm font-semibold text-white/75">
-              {visibleLessons.length} lessons this week
+              {visibleLessons.length + visibleSessionOccurrences.length} sessions this week
               {lessonPlayers > 0 ? ` | ${lessonPlayers} student sessions` : ""}
             </p>
           </div>
@@ -931,7 +970,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
               Next Week
             </Link>
             <Link className="inline-flex items-center justify-center gap-2 rounded bg-court-teal px-4 py-3 text-sm font-black text-white transition hover:bg-teal-500" href={createHref}>
-              Create Lesson <ArrowRightIcon size={16} />
+              Create Session <ArrowRightIcon size={16} />
             </Link>
           </div>
         </div>
@@ -939,7 +978,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
 
       <CoachRCompactGrid className="mb-5">
         <CoachRSummaryCard helper="selected day" label="Today" value={selectedTodayCount} />
-        <CoachRSummaryCard helper="lesson slots" label="This Week" value={visibleLessons.length} />
+        <CoachRSummaryCard helper="session slots" label="This Week" value={visibleLessons.length + visibleSessionOccurrences.length} />
         <CoachRSummaryCard helper="player absent" label="Missed" value={missedCount} />
         <CoachRSummaryCard helper="make-up lessons" label="Replacement" value={replacementCount} />
       </CoachRCompactGrid>
@@ -980,123 +1019,15 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
         </section>
       ) : null}
 
-      <CollapsibleCard
-        defaultOpen={searchParams?.new === "1"}
-        eyebrow="Create"
-        id="new-lesson"
-        summary="Add a lesson to the selected week. Creating it reserves the selected court."
-        title="New lesson"
-      >
-        <form action={createCoachLesson} className="grid gap-3">
-          <input name="returnTo" type="hidden" value={returnTo} />
-
-          {selectedStudent && proposal ? (
-            <div className="rounded-lg border border-court-teal/25 bg-court-mist p-3 text-sm font-semibold text-court-navy">
-              Proposed lesson details for <span className="font-black">{profileDisplayName(selectedStudent.profile)}</span> have been loaded as editable defaults. Review them before saving.
-            </div>
-          ) : null}
-
-          <CoachRRecurrenceControls
-            defaultDayOfWeek={defaultDayOfWeek}
-            defaultOneOffEnd={`${proposalStartDate}T${proposalEndTime}`}
-            defaultOneOffStart={`${proposalStartDate}T${proposalStartTime}`}
-            defaultRecurrenceEndDate={defaultRecurrenceEndDate}
-            defaultRecurrenceStartDate={proposalStartDate}
-            defaultRepeatMode={defaultRepeatMode}
-            defaultWeeklyEndTime={proposalEndTime}
-            defaultWeeklyStartTime={proposalStartTime}
-          />
-
-          {access.context.role !== "platform_admin" && access.context.venueId ? (
-            <input name="venueId" type="hidden" value={access.context.venueId} />
-          ) : (
-            <label className="text-sm font-semibold text-slate-700">
-              Venue
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultVenueId} name="venueId" required>
-                <option value="">Choose venue</option>
-                {options.venues.map((venue) => (
-                  <option key={venue.id} value={venue.id}>
-                    {venue.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          {coachOnly ? (
-            <input name="coachId" type="hidden" value={defaultCoachId} />
-          ) : options.coachProfiles.length > 0 ? (
-            <label className="text-sm font-semibold text-slate-700">
-              Coach
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={defaultCoachId} name="coachId" required>
-                {options.coachProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profileDisplayName(profile)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <div className="ui-empty-card">No active coaches are available for this organisation. Add or activate a coach before creating a lesson.</div>
-          )}
-
-          {studentSelectorOptions.length > 0 ? (
-            <CoachRStudentSelector defaultValue={defaultPlayerId} options={studentSelectorOptions} />
-          ) : (
-            <div className="ui-empty-card">
-              {options.studentLoadError === "load_failed"
-                ? "Students could not be loaded. Check the active organisation or try again."
-                : coachOnly
-                  ? "No students are assigned to this coach yet."
-                  : options.pendingPlayerInvitationCount > 0
-                    ? "Student invitations are awaiting approval."
-                    : "No students are connected to this academy yet."}
-              <div className="mt-3"><Link className="btn-secondary inline-flex" href="/dashboard/coachr/students">Open Students</Link></div>
-            </div>
-          )}
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-semibold text-slate-700">
-              Type
-              <select className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={proposedLessonType} name="lessonType">
-                {coachLessonTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {formatLabel(type)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <CoachRCourtPicker
-            canManageAccess={canManageCourtAccess}
-            courts={options.courts}
-            defaultCourtId={proposedManagedCourt?.id ?? ""}
-            defaultCustomLocation={proposedManagedCourt ? "" : proposedVenue}
-            defaultLocationType={proposedVenue && !proposedManagedCourt ? "custom" : "managed_court"}
-            externalVenues={options.externalVenues}
-            organisationId={defaultVenueId}
-          />
-
-          <label className="text-sm font-semibold text-slate-700">
-            Title
-            <input className="mt-2 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={selectedStudent ? `${profileDisplayName(selectedStudent.profile)} coaching` : "Coaching lesson"} name="title" required />
-          </label>
-
-          <label className="text-sm font-semibold text-slate-700">
-            Notes
-            <textarea className="mt-2 min-h-20 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="notes" placeholder="Optional lesson notes" />
-          </label>
-
-          <button className="btn-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={!defaultCoachId || studentSelectorOptions.length === 0} type="submit">
-            Create Lesson
-          </button>
-        </form>
-      </CollapsibleCard>
+      <section className="surface-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div><p className="section-kicker">Create</p><h2 className="mt-1 text-lg font-black text-court-navy">New coaching session</h2><p className="mt-1 text-sm text-slate-600">Choose Private, Semi-private or Squad in the guided planner.</p></div>
+        <Link className="btn-primary shrink-0" href="/dashboard/coachr/sessions/new">Create Session <ArrowRightIcon size={16} /></Link>
+      </section>
 
       <section className="mt-5 grid gap-3">
-        {weekDays.map(({ dayLessons, serial }) => {
+        {weekDays.map(({ dayLessons, daySessions, serial }) => {
           const status = dayStatusSummary(dayLessons);
+          const totalItems = dayLessons.length + daySessions.length;
 
           return (
             <details
@@ -1111,8 +1042,8 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
                     {serial === todaySerial ? <span className="ui-chip ui-chip-brand">Today</span> : null}
                   </span>
                   <span className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
-                    <span className="ui-chip ui-chip-muted">{dayLessons.length} lessons</span>
-                    <span className="ui-chip ui-chip-muted">{dayTimeRange(dayLessons)}</span>
+                    <span className="ui-chip ui-chip-muted">{totalItems} sessions</span>
+                    <span className="ui-chip ui-chip-muted">{combinedDayTimeRange(dayLessons, daySessions)}</span>
                     {status.scheduled > 0 ? <span className="ui-chip ui-chip-brand">{status.scheduled} scheduled</span> : null}
                     {status.completed > 0 ? <span className="ui-chip ui-chip-success">{status.completed} completed</span> : null}
                     {status.changed > 0 ? <span className="ui-chip ui-chip-warning">{status.changed} changed</span> : null}
@@ -1124,8 +1055,9 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
               </summary>
 
               <div className="border-t border-slate-100 p-3">
-                {dayLessons.length > 0 ? (
+                {totalItems > 0 ? (
                   <div className="grid gap-3">
+                    {daySessions.map((occurrence) => <SessionOccurrenceCard courtOptions={options.courts} key={occurrence.id} occurrence={occurrence} returnTo={returnTo} />)}
                     {dayLessons.map((lesson) => (
                       <LessonCard
                         canManageCourtAccess={canManageCourtAccess}
