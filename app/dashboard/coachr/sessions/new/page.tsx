@@ -29,6 +29,9 @@ function errorMessage(value?: string) {
     case "time_order": return "The session must end after it starts.";
     case "custom_location": return "Enter the off-site venue or court.";
     case "missing_migration": return "CoachR sessions need the latest database migration before they can be created.";
+    case "booking_creation_failed": return "The session was not created because its court booking could not be confirmed.";
+    case "booking_synchronisation_failed": return "The session and court booking could not be synchronised. No partial session was kept.";
+    case "occurrence_generation_failed": return "The scheduled occurrences could not be generated. No partial session was kept.";
     case "access": return "Your role cannot create a session in this organisation.";
     case "missing_fields": return "Complete the required session details before saving.";
     case "session_create_failed":

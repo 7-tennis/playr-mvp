@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createCourtBooking } from "@/app/dashboard/book-court/actions";
 import type { CourtBookingType } from "@/types/courtside";
 
@@ -20,7 +21,8 @@ type BookingBlock = {
   player_profile_id: string | null;
   start_time: string;
   end_time: string;
-  booking_type: CourtBookingType;
+  booking_type: CourtBookingType | null;
+  occupancy_type: "own_booking" | "unavailable";
   player_name: string | null;
 };
 
@@ -41,13 +43,16 @@ type CourtBookingGridProps = {
 };
 
 function bookingLabel(booking: BookingBlock) {
+  if (booking.occupancy_type === "unavailable") {
+    return "Unavailable";
+  }
   if (booking.booking_type === "player_booking") {
     return booking.player_name ? `Booked: ${booking.player_name}` : "Booked";
   }
   if (booking.booking_type === "lesson") {
     return "Coach Lesson";
   }
-  return booking.booking_type
+  return (booking.booking_type ?? "unavailable")
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
@@ -55,7 +60,23 @@ function bookingLabel(booking: BookingBlock) {
 
 export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots, profiles, bookings, userProfileIds }: CourtBookingGridProps) {
   const [activeSlot, setActiveSlot] = useState<Slot | null>(null);
+  const router = useRouter();
   const selectedCourt = courts.find((court) => court.id === selectedCourtId) ?? courts[0];
+
+  useEffect(() => {
+    const refresh = () => router.refresh();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [router]);
 
   const selectedCourtBookings = bookings.filter((booking) => booking.court_id === selectedCourtId);
 
@@ -104,14 +125,11 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
             });
             const isPast = new Date(slot.startTime).getTime() <= Date.now();
             const isUserBooking = Boolean(booking?.player_profile_id && userProfileIds.includes(booking.player_profile_id));
-            const isBlock = Boolean(booking && booking.booking_type !== "player_booking");
             const disabled = Boolean(booking) || isPast || profiles.length === 0;
             const stateLabel = booking
               ? isUserBooking
                 ? "Your booking"
-                : isBlock
-                  ? "Club block"
-                  : "Booked"
+                : "Unavailable"
               : isPast
                 ? "Past"
                 : profiles.length === 0
@@ -120,9 +138,7 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
             const stateClass = booking
               ? isUserBooking
                 ? "border-court-teal bg-court-mist text-court-navy"
-                : isBlock
-                  ? "border-amber-200 bg-amber-50 text-amber-900"
-                  : "border-slate-200 bg-slate-50 text-slate-500"
+                : "border-slate-200 bg-slate-50 text-slate-500"
               : isPast || profiles.length === 0
                 ? "border-slate-200 bg-slate-50 text-slate-500"
                 : "border-emerald-200 bg-white text-court-navy hover:border-court-teal hover:shadow-court";

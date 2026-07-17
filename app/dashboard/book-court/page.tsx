@@ -19,7 +19,9 @@ type BookCourtPageProps = {
   };
 };
 
-type BookingRow = Pick<CourtBooking, "court_id" | "player_profile_id" | "start_time" | "end_time" | "booking_type"> & {
+type BookingRow = Pick<CourtBooking, "court_id" | "player_profile_id" | "start_time" | "end_time"> & {
+  booking_type: CourtBookingType | null;
+  occupancy_type: "own_booking" | "unavailable";
   player_name: string | null;
 };
 
@@ -151,19 +153,31 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
     label: profile.is_junior ? "linked junior" : "myself"
   }));
 
-  const { data: bookingData } = courts.length
-      ? await supabase.rpc("coachr_court_booking_blocks_for_range", {
+  const bookingResult = courts.length
+    ? await supabase.rpc("playr_court_occupancy_for_range", {
         check_end_time: rangeEnd.toISOString(),
         check_start_time: rangeStart.toISOString()
       })
-    : { data: [] };
+    : { data: [], error: null };
+  const bookingData = bookingResult.data;
+  const availabilityError = bookingResult.error;
+
+  if (availabilityError) {
+    console.error("Player court occupancy could not be loaded", {
+      code: availabilityError.code,
+      rangeEnd: rangeEnd.toISOString(),
+      rangeStart: rangeStart.toISOString(),
+      userId: user.id
+    });
+  }
 
   const bookings = ((bookingData ?? []) as unknown as BookingRow[]).map((booking) => ({
     court_id: booking.court_id,
     player_profile_id: booking.player_profile_id,
     start_time: booking.start_time,
     end_time: booking.end_time,
-    booking_type: booking.booking_type as CourtBookingType,
+    booking_type: booking.booking_type,
+    occupancy_type: booking.occupancy_type,
     player_name: booking.player_name
   }));
 
@@ -179,8 +193,7 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
         <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
           <span className="ui-chip ui-chip-success">Available</span>
           <span className="ui-chip ui-chip-brand">Your booking</span>
-          <span className="ui-chip ui-chip-muted">Booked</span>
-          <span className="ui-chip ui-chip-warning">Club block</span>
+          <span className="ui-chip ui-chip-muted">Unavailable</span>
         </div>
       </section>
 
@@ -198,6 +211,11 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
         <section className="empty-state">
           <h2 className="section-title">No courts are active yet</h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">Court availability will appear here once the club activates courts in ClubR.</p>
+        </section>
+      ) : availabilityError ? (
+        <section className="empty-state">
+          <h2 className="section-title">Court availability is temporarily unavailable</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">Bookings are paused until the live court schedule can be confirmed.</p>
         </section>
       ) : (
         <CourtBookingGrid

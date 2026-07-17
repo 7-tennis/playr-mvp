@@ -1,9 +1,26 @@
 import type { AuthenticatedClubRContext } from "@/lib/clubr";
-import type { Court, CourtBooking, CourtSideEvent, EventEntry, Profile, Venue } from "@/types/courtside";
+import type { Court, CourtBooking, CourtBookingStatus, CourtBookingType, CourtSideEvent, EventEntry, Profile, Venue } from "@/types/courtside";
 
 export type ClubRBooking = CourtBooking & {
   courts: (Pick<Court, "id" | "name" | "venue_id"> & { venues: Pick<Venue, "name"> | null }) | null;
   profiles: Pick<Profile, "id" | "first_name" | "last_name" | "email" | "is_junior" | "member_status"> | null;
+};
+
+export type ClubRCourtOccupancy = {
+  booking_id: string;
+  court_id: string;
+  court_name: string;
+  start_time: string;
+  end_time: string;
+  booking_status: CourtBookingStatus;
+  booking_type: CourtBookingType;
+  occupancy_type: string;
+  source_product: string | null;
+  booking_organisation_id: string | null;
+  academy_name: string | null;
+  session_name: string | null;
+  session_type: string | null;
+  coach_name: string | null;
 };
 
 export type ClubRMember = Pick<
@@ -69,6 +86,25 @@ export async function loadClubRBookings(context: AuthenticatedClubRContext, star
   }
 
   return ((data ?? []) as unknown as ClubRBooking[]) ?? [];
+}
+
+export async function loadClubRCourtOccupancy(context: AuthenticatedClubRContext, startTime: string, endTime: string) {
+  const { data, error } = await context.supabase.rpc("clubr_court_occupancy_for_range", {
+    check_end_time: endTime,
+    check_start_time: startTime,
+    p_owner_venue_id: context.venueId
+  });
+
+  if (error) {
+    console.error("ClubR court occupancy could not be loaded", {
+      code: error.code,
+      role: context.role,
+      venueId: context.venueId
+    });
+    return [] as ClubRCourtOccupancy[];
+  }
+
+  return (data ?? []) as ClubRCourtOccupancy[];
 }
 
 export async function loadClubRMembers(context: AuthenticatedClubRContext, search = "") {

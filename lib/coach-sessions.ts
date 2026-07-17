@@ -5,6 +5,8 @@ import type {
   CoachSessionAttendance,
   CoachSessionAttendanceStatus,
   CoachSessionOccurrence,
+  CoachSessionOccurrenceCoach,
+  CoachSessionOccurrenceParticipant,
   CoachSessionParticipantStatus,
   CoachSessionType,
   Profile
@@ -63,10 +65,20 @@ export type CoachSessionOccurrenceCourt = {
   booking: { id: string; status: "confirmed" | "cancelled" } | null;
 };
 
+export type CoachSessionOccurrenceCoachWithProfile = CoachSessionOccurrenceCoach & {
+  coach: CoachSessionProfile | null;
+};
+
+export type CoachSessionOccurrenceParticipantWithProfile = CoachSessionOccurrenceParticipant & {
+  player: CoachSessionProfile | null;
+};
+
 export type CoachSessionOccurrenceWithRelations = CoachSessionOccurrence & {
   session: CoachSessionWithRelations | null;
   attendance: CoachSessionAttendanceWithProfile[];
   court_links: CoachSessionOccurrenceCourt[];
+  occurrence_coaches: CoachSessionOccurrenceCoachWithProfile[];
+  occurrence_participants: CoachSessionOccurrenceParticipantWithProfile[];
 };
 
 export type PrivatePlayerSession = {
@@ -151,6 +163,27 @@ const occurrenceSelect = `
   cancelled_by_user_id,
   created_at,
   updated_at,
+  occurrence_coaches:coach_session_occurrence_coaches(
+    id,
+    occurrence_id,
+    coach_profile_id,
+    role,
+    status,
+    assigned_by_user_id,
+    created_at,
+    updated_at,
+    coach:coach_profile_id(id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level)
+  ),
+  occurrence_participants:coach_session_occurrence_participants(
+    id,
+    occurrence_id,
+    player_profile_id,
+    parent_profile_id,
+    status,
+    created_at,
+    updated_at,
+    player:player_profile_id(id,first_name,last_name,is_junior,parent_profile_id,junior_stage,player_level)
+  ),
   session:session_id(${sessionSelect}),
   attendance:coach_session_attendance(
     id,
@@ -214,6 +247,20 @@ export function activeSessionParticipants(session: Pick<CoachSessionWithRelation
   return session.participants.filter((participant) => participant.status === "active");
 }
 
+export function activeOccurrenceParticipants(occurrence: CoachSessionOccurrenceWithRelations) {
+  if (occurrence.occurrence_participants.length > 0) {
+    return occurrence.occurrence_participants.filter((participant) => participant.status === "active");
+  }
+  return activeSessionParticipants(occurrence.session ?? { participants: [] });
+}
+
+export function activeOccurrenceCoaches(occurrence: CoachSessionOccurrenceWithRelations) {
+  if (occurrence.occurrence_coaches.length > 0) {
+    return occurrence.occurrence_coaches.filter((coach) => coach.status === "active");
+  }
+  return occurrence.session?.coaches.filter((coach) => coach.status === "active") ?? [];
+}
+
 export async function topUpCoachSessions(context: AuthenticatedContext, through: Date) {
   const venueId = context.venueId ?? context.activeOrganisationMembership?.venue_id ?? null;
   if (!venueId) return;
@@ -256,8 +303,8 @@ export async function loadCoachSessionOccurrencesForRange(
   const { data, error } = await context.supabase
     .from("coach_session_occurrences")
     .select(occurrenceSelect)
-    .gte("start_time", startTime)
     .lt("start_time", endTime)
+    .gt("end_time", startTime)
     .order("start_time", { ascending: true })
     .limit(limit);
 
@@ -288,7 +335,7 @@ export async function loadPrivatePlayerSessions(context: AuthenticatedContext, p
 }
 
 export function sessionAttendanceSummary(occurrence: CoachSessionOccurrenceWithRelations) {
-  const activePlayers = activeSessionParticipants(occurrence.session ?? { participants: [] });
+  const activePlayers = activeOccurrenceParticipants(occurrence);
   const marked = occurrence.attendance.filter((row) => row.attendance_status !== "not_recorded").length;
   return { due: Math.max(0, activePlayers.length - marked), marked, total: activePlayers.length };
 }

@@ -614,6 +614,27 @@ export interface CoachSessionOccurrence {
   updated_at: string;
 }
 
+export interface CoachSessionOccurrenceCoach {
+  id: string;
+  occurrence_id: string;
+  coach_profile_id: string;
+  role: "primary" | "assistant" | "replacement";
+  status: "active" | "removed";
+  assigned_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachSessionOccurrenceParticipant {
+  id: string;
+  occurrence_id: string;
+  player_profile_id: string;
+  parent_profile_id: string | null;
+  status: "active" | "removed";
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CoachSessionAttendance {
   id: string;
   occurrence_id: string;

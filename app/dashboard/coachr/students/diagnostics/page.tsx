@@ -25,7 +25,7 @@ function shortId(value: string | null) {
 }
 
 type DiagnosticsPageProps = {
-  searchParams?: { lesson?: string; venue?: string };
+  searchParams?: { lesson?: string; occurrence?: string; venue?: string };
 };
 
 type ReservationDiagnostic = {
@@ -42,6 +42,19 @@ type ReservationDiagnostic = {
   reservation_valid: boolean;
   recurrence_end_mode: string | null;
   next_generation_boundary: string | null;
+};
+
+type OccurrenceDiagnostic = {
+  occurrence_id: string;
+  session_id: string;
+  session_name: string;
+  coach_names: string;
+  court_id: string | null;
+  court_name: string | null;
+  booking_id: string | null;
+  booking_status: string | null;
+  availability_resolver_result: "available" | "unavailable" | "not_applicable";
+  occupancy_type: string;
 };
 
 export default async function CoachRConnectionDiagnosticsPage({ searchParams }: DiagnosticsPageProps) {
@@ -81,6 +94,13 @@ export default async function CoachRConnectionDiagnosticsPage({ searchParams }: 
     ? await access.context.supabase.rpc("coachr_lesson_reservation_diagnostics", { p_lesson_id: requestedLessonId })
     : { data: [], error: null };
   const reservation = ((reservationResult.data?.[0] ?? null) as ReservationDiagnostic | null);
+  const requestedOccurrenceId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(searchParams?.occurrence ?? "")
+    ? searchParams?.occurrence ?? null
+    : null;
+  const occurrenceResult = requestedOccurrenceId
+    ? await access.context.supabase.rpc("coachr_occurrence_diagnostics", { p_occurrence_id: requestedOccurrenceId })
+    : { data: [], error: null };
+  const occurrenceDiagnostics = (occurrenceResult.data ?? []) as OccurrenceDiagnostic[];
 
   if (error) {
     console.error("CoachR connection diagnostics could not be loaded", {
@@ -135,6 +155,42 @@ export default async function CoachRConnectionDiagnosticsPage({ searchParams }: 
             </div>
           ) : (
             <p className="mt-3 text-sm font-semibold text-amber-800">No permitted lesson reservation was found.</p>
+          )}
+        </section>
+      ) : null}
+
+      {requestedOccurrenceId ? (
+        <section className="surface-card mb-5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="section-kicker">Unified schedule</p>
+              <h2 className="section-title mt-1">Occurrence {shortId(requestedOccurrenceId)}</h2>
+            </div>
+            <span className={`ui-chip ${occurrenceDiagnostics.length > 0 && occurrenceDiagnostics.every((item) => item.availability_resolver_result !== "available") ? "ui-chip-success" : "ui-chip-warning"}`}>
+              {occurrenceDiagnostics.length > 0 && occurrenceDiagnostics.every((item) => item.availability_resolver_result !== "available") ? "Occupancy valid" : "Needs review"}
+            </span>
+          </div>
+          {occurrenceResult.error ? (
+            <p className="mt-3 text-sm font-semibold text-amber-800">Occurrence diagnostics could not be loaded.</p>
+          ) : occurrenceDiagnostics.length > 0 ? (
+            <div className="mt-4 grid gap-3">
+              {occurrenceDiagnostics.map((item) => (
+                <article className="rounded border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-600" key={`${item.occurrence_id}:${item.court_id ?? "no-court"}`}>
+                  <p className="font-black text-court-navy">{item.session_name}</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <p>Occurrence: <span className="font-black text-court-navy">{shortId(item.occurrence_id)}</span></p>
+                    <p>Coach: <span className="font-black text-court-navy">{item.coach_names}</span></p>
+                    <p>Court: <span className="font-black text-court-navy">{item.court_name ?? "Not managed"}</span></p>
+                    <p>Booking: <span className="font-black text-court-navy">{shortId(item.booking_id)}</span></p>
+                    <p>Booking status: <span className="font-black text-court-navy">{item.booking_status ? formatLabel(item.booking_status) : "Not linked"}</span></p>
+                    <p>Availability resolver: <span className="font-black text-court-navy">{formatLabel(item.availability_resolver_result)}</span></p>
+                    <p>Occupancy: <span className="font-black text-court-navy">{formatLabel(item.occupancy_type)}</span></p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm font-semibold text-amber-800">No permitted occurrence was found.</p>
           )}
         </section>
       ) : null}

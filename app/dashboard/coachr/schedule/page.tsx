@@ -22,7 +22,8 @@ import {
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
 import {
-  activeSessionParticipants,
+  activeOccurrenceCoaches,
+  activeOccurrenceParticipants,
   coachSessionLocation,
   coachSessionTypeLabel,
   loadCoachSessionOccurrencesForRange,
@@ -132,6 +133,16 @@ function errorMessage(value?: string) {
       return "CoachR lesson setup is missing a required database function. Run the latest Supabase migrations.";
     case "managed_lesson_booking_required":
       return "The lesson was not saved because its managed court could not be reserved.";
+    case "booking_creation_failed":
+      return "The session was not saved because its court booking could not be created.";
+    case "booking_synchronisation_failed":
+      return "The session and court booking could not be synchronised. No partial change was kept.";
+    case "booking_release_failed":
+      return "The session could not be cancelled because its court booking was not released.";
+    case "booking_refresh_failed":
+      return "Court availability could not be refreshed. Please try again.";
+    case "occurrence_generation_failed":
+      return "The scheduled occurrences could not be generated. No partial session was kept.";
     case "invalid_series":
       return "That recurring lesson series could not be found.";
     case "access":
@@ -501,10 +512,11 @@ function sessionAttendanceLabel(status: string) {
   return "Not marked";
 }
 
-function SessionOccurrenceCard({ courtOptions, occurrence, returnTo }: { courtOptions: CoachLessonCourt[]; occurrence: CoachSessionOccurrenceWithRelations; returnTo: string }) {
+function SessionOccurrenceCard({ courtOptions, occurrence, returnTo, showDiagnostics }: { courtOptions: CoachLessonCourt[]; occurrence: CoachSessionOccurrenceWithRelations; returnTo: string; showDiagnostics: boolean }) {
   const session = occurrence.session;
   if (!session) return null;
-  const participants = activeSessionParticipants(session);
+  const participants = activeOccurrenceParticipants(occurrence);
+  const coaches = activeOccurrenceCoaches(occurrence);
   const attendanceByPlayer = new Map(occurrence.attendance.map((row) => [row.player_profile_id, row]));
   const attendance = sessionAttendanceSummary(occurrence);
   const courts = occurrence.court_links.map((link) => link.court?.name).filter(Boolean).join(", ") || coachSessionLocation(session);
@@ -529,9 +541,10 @@ function SessionOccurrenceCard({ courtOptions, occurrence, returnTo }: { courtOp
       </summary>
       <div className="border-t border-slate-100 p-3">
         <div className="grid gap-2 text-sm sm:grid-cols-2">
-          <p className="rounded bg-slate-50 p-3 font-semibold text-slate-700">Coach: <span className="font-black text-court-navy">{profileDisplayName(session.primary_coach)}</span></p>
+          <p className="rounded bg-slate-50 p-3 font-semibold text-slate-700">Coach: <span className="font-black text-court-navy">{coaches.map((coach) => profileDisplayName(coach.coach)).join(", ") || profileDisplayName(session.primary_coach)}</span></p>
           <p className="rounded bg-slate-50 p-3 font-semibold text-slate-700">Courts: <span className="font-black text-court-navy">{courts}</span></p>
         </div>
+        {showDiagnostics ? <Link className="mt-3 inline-flex text-xs font-black text-court-teal hover:text-court-navy" href={`/dashboard/coachr/students/diagnostics?occurrence=${occurrence.id}`}>Schedule diagnostics</Link> : null}
 
         <section className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-black text-court-navy">Attendance</p><p className="mt-1 text-xs font-semibold text-slate-500">Saved for this occurrence only.</p></div>{participants.length > 1 ? <form action={markAllCoachSessionAttendance}><input name="occurrenceId" type="hidden" value={occurrence.id} /><input name="returnTo" type="hidden" value={returnTo} /><button className="rounded bg-court-teal px-3 py-2 text-xs font-black text-white" type="submit">Mark All Present</button></form> : null}</div>
@@ -908,7 +921,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
   const visibleSessionOccurrences = sessionOccurrences.filter((occurrence) => {
     if (requestedSessionId && occurrence.session_id !== requestedSessionId) return false;
     if (!selectedCoachId) return true;
-    return occurrence.session?.coaches.some((coach) => coach.status === "active" && coach.coach_profile_id === selectedCoachId) ?? false;
+    return activeOccurrenceCoaches(occurrence).some((coach) => coach.coach_profile_id === selectedCoachId);
   });
   const playerOptions = mergeProfiles(options.playerProfiles, visibleLessons);
   const lessonPlayers = visibleLessons.map((lesson) => lesson.player).filter(isProfile).length;
@@ -1057,7 +1070,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
               <div className="border-t border-slate-100 p-3">
                 {totalItems > 0 ? (
                   <div className="grid gap-3">
-                    {daySessions.map((occurrence) => <SessionOccurrenceCard courtOptions={options.courts} key={occurrence.id} occurrence={occurrence} returnTo={returnTo} />)}
+                    {daySessions.map((occurrence) => <SessionOccurrenceCard courtOptions={options.courts} key={occurrence.id} occurrence={occurrence} returnTo={returnTo} showDiagnostics={!coachOnly} />)}
                     {dayLessons.map((lesson) => (
                       <LessonCard
                         canManageCourtAccess={canManageCourtAccess}

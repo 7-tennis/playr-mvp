@@ -91,7 +91,11 @@ export async function createCourtBooking(formData: FormData) {
       status: "confirmed",
       booking_type: "player_booking",
       is_public: false,
-      notes: notes || null
+      notes: notes || null,
+      owner_organisation_id: courtData.venue_id,
+      booking_organisation_id: null,
+      booking_purpose: "member_booking",
+      source_product: "playr"
     })
     .select("id")
     .single();

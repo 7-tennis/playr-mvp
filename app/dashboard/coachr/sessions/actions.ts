@@ -90,6 +90,11 @@ function sessionError(error: { code?: string; message?: string } | null | undefi
     "participant_count",
     "participant_status",
     "recurrence_range",
+    "booking_creation_failed",
+    "booking_refresh_failed",
+    "booking_release_failed",
+    "booking_synchronisation_failed",
+    "occurrence_generation_failed",
     "session_create_failed",
     "time_order"
   ];
@@ -109,6 +114,9 @@ function revalidateSessionSurfaces() {
   revalidatePath("/dashboard/coachr/schedule");
   revalidatePath("/dashboard/coachr/sessions");
   revalidatePath("/dashboard/coachr/students");
+  revalidatePath("/dashboard/clubr");
+  revalidatePath("/dashboard/clubr/bookings");
+  revalidatePath("/dashboard/my-bookings");
 }
 
 export async function createCoachSession(formData: FormData) {
