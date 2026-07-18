@@ -2,9 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
+import { CancelledSessionCard, SessionRequestCard } from "@/components/session-request-cards";
 import { ArrowRightIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, InviteIcon, RatingIcon, SchoolIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
 import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
@@ -269,7 +271,7 @@ function JuniorCard({ junior, activity, clubName }: { junior: JuniorCardProfile;
   );
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams?: { profile?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams?: { profile?: string; request?: string; request_error?: string } }) {
   if (!hasSupabaseConfig()) {
     return (
       <PageShell eyebrow="MyPlayR" title="Supabase is not configured.">
@@ -390,6 +392,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
       }))
     : [];
   const privateAcademySessions = privateSessionResults.flat();
+  const [sessionRequests, privateSessionActivityResults] = profileIds.length > 0
+    ? await Promise.all([
+        loadPlayerSessionRequests(supabase, profileIds),
+        Promise.all(profileIds.map(async (profileId) => (await loadPrivatePlayerSessionActivity(supabase, profileId)).map((activity) => ({ ...activity, playerProfileId: profileId }))))
+      ])
+    : [[], []];
+  const privateSessionActivity = privateSessionActivityResults.flat();
+  const pendingSessionRequests = sessionRequests.filter((request) => isPendingSessionRequest(request.status));
+  const recentSessionRequests = sessionRequests.filter((request) => !isPendingSessionRequest(request.status)).slice(0, 6);
+  const requestByOccurrence = new Map(sessionRequests.map((request) => [request.occurrence_id, request]));
+  const cancelledSessions = privateSessionActivity
+    .filter((activity) => activity.occurrence_status === "cancelled" || activity.occurrence_status === "rain" || activity.occurrence_status === "sick")
+    .slice(0, 4);
   const academyAssignmentByLink = new Map(academyAssignments.filter((assignment) => assignment.organisation_player_link_id).map((assignment) => [assignment.organisation_player_link_id as string, assignment]));
   const academyLessonByPlayer = new Map<string, AcademyLessonRow>();
   academyLessons.forEach((lesson) => {
@@ -452,6 +467,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   return (
     <PageShell eyebrow="MyPlayR" subtitle="Your players, progress and upcoming tennis activity." title="MyPlayR">
       <StatusAlert className="mb-5" message={searchParams?.profile === "saved" ? "Profile saved." : null} tone="success" />
+      <StatusAlert className="mb-5" message={searchParams?.request === "approved" ? "Lesson confirmed. The new court and time are booked." : searchParams?.request === "declined" ? "Request declined. No unapproved booking changes were made." : searchParams?.request === "makeup_requested" ? "Lesson time requested. The court will be booked after coach approval." : null} tone="success" />
+      <StatusAlert className="mb-5" message={searchParams?.request_error === "time_unavailable" ? "This time is no longer available. The original session has not changed." : searchParams?.request_error ? "The lesson request could not be completed. No schedule or booking changes were made." : null} tone="error" />
       {!profile ? (
         <StatusAlert
           className="mb-5"
@@ -507,6 +524,17 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           ) : null}
         </div>
       </section>
+
+      {(pendingSessionRequests.length > 0 || cancelledSessions.length > 0 || recentSessionRequests.length > 0) ? (
+        <section className="mb-6" id="lesson-requests">
+          <div className="mb-4"><p className="section-kicker">CoachR</p><h2 className="mt-2 text-2xl font-black text-court-navy">Lesson Changes</h2><p className="mt-1 text-sm text-slate-600">Requests and cancelled private lessons across your PlayR cards.</p></div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {pendingSessionRequests.map((request) => <SessionRequestCard key={request.id} request={request} returnTo="/dashboard#lesson-requests" viewer="player" />)}
+            {cancelledSessions.map((activity) => <CancelledSessionCard activity={activity} existingRequest={requestByOccurrence.get(activity.occurrence_id) ?? null} key={`${activity.playerProfileId}:${activity.occurrence_id}`} playerProfileId={activity.playerProfileId} returnTo="/dashboard#lesson-requests" />)}
+          </div>
+          {recentSessionRequests.length > 0 ? <details className="ui-collapsible mt-3 rounded-lg border border-slate-200 bg-white p-3"><summary className="flex cursor-pointer items-center justify-between text-sm font-black text-court-navy"><span>Request History</span><ArrowRightIcon className="ui-collapsible-chevron rotate-90" size={16} /></summary><div className="mt-3 grid gap-3 lg:grid-cols-2">{recentSessionRequests.map((request) => <SessionRequestCard compact key={request.id} request={request} returnTo="/dashboard#lesson-requests" viewer="player" />)}</div></details> : null}
+        </section>
+      ) : null}
 
       {academyLinks.length > 0 ? (
         <section className="mb-6" id="academies">

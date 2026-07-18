@@ -25,7 +25,23 @@ function shortId(value: string | null) {
 }
 
 type DiagnosticsPageProps = {
-  searchParams?: { lesson?: string; occurrence?: string; venue?: string };
+  searchParams?: { lesson?: string; occurrence?: string; request?: string; venue?: string };
+};
+
+type RequestDiagnostic = {
+  request_id: string;
+  request_origin: string;
+  request_status: string;
+  occurrence_id: string;
+  player_profile_id: string;
+  responder_user_id: string;
+  coach_profile_id: string;
+  current_booking_ids: string[];
+  proposed_court_id: string;
+  availability_result: string;
+  approval_result: string;
+  replacement_occurrence_id: string | null;
+  notification_count: number;
 };
 
 type ReservationDiagnostic = {
@@ -101,6 +117,13 @@ export default async function CoachRConnectionDiagnosticsPage({ searchParams }: 
     ? await access.context.supabase.rpc("coachr_occurrence_diagnostics", { p_occurrence_id: requestedOccurrenceId })
     : { data: [], error: null };
   const occurrenceDiagnostics = (occurrenceResult.data ?? []) as OccurrenceDiagnostic[];
+  const requestedRequestId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(searchParams?.request ?? "")
+    ? searchParams?.request ?? null
+    : null;
+  const requestResult = requestedRequestId
+    ? await access.context.supabase.rpc("coachr_reschedule_request_diagnostics", { p_request_id: requestedRequestId })
+    : { data: [], error: null };
+  const requestDiagnostic = (requestResult.data?.[0] ?? null) as RequestDiagnostic | null;
 
   if (error) {
     console.error("CoachR connection diagnostics could not be loaded", {
@@ -192,6 +215,13 @@ export default async function CoachRConnectionDiagnosticsPage({ searchParams }: 
           ) : (
             <p className="mt-3 text-sm font-semibold text-amber-800">No permitted occurrence was found.</p>
           )}
+        </section>
+      ) : null}
+
+      {requestedRequestId ? (
+        <section className="surface-card mb-5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="section-kicker">Rescheduling</p><h2 className="section-title mt-1">Request {shortId(requestedRequestId)}</h2></div><span className={`ui-chip ${requestDiagnostic?.availability_result === "available" ? "ui-chip-success" : "ui-chip-warning"}`}>{requestDiagnostic?.availability_result ? formatLabel(requestDiagnostic.availability_result) : "Needs review"}</span></div>
+          {requestResult.error ? <p className="mt-3 text-sm font-semibold text-amber-800">Request diagnostics could not be loaded.</p> : requestDiagnostic ? <div className="mt-4 grid gap-2 text-sm font-semibold text-slate-600 sm:grid-cols-2"><p>Origin: <span className="font-black text-court-navy">{formatLabel(requestDiagnostic.request_origin)}</span></p><p>Status: <span className="font-black text-court-navy">{formatLabel(requestDiagnostic.request_status)}</span></p><p>Occurrence: <span className="font-black text-court-navy">{shortId(requestDiagnostic.occurrence_id)}</span></p><p>Player: <span className="font-black text-court-navy">{shortId(requestDiagnostic.player_profile_id)}</span></p><p>Responder: <span className="font-black text-court-navy">{shortId(requestDiagnostic.responder_user_id)}</span></p><p>Coach: <span className="font-black text-court-navy">{shortId(requestDiagnostic.coach_profile_id)}</span></p><p>Current bookings: <span className="font-black text-court-navy">{requestDiagnostic.current_booking_ids.length}</span></p><p>Proposed court: <span className="font-black text-court-navy">{shortId(requestDiagnostic.proposed_court_id)}</span></p><p>Approval: <span className="font-black text-court-navy">{formatLabel(requestDiagnostic.approval_result)}</span></p><p>Replacement: <span className="font-black text-court-navy">{shortId(requestDiagnostic.replacement_occurrence_id)}</span></p><p>Notifications: <span className="font-black text-court-navy">{requestDiagnostic.notification_count}</span></p></div> : <p className="mt-3 text-sm font-semibold text-amber-800">No permitted request was found.</p>}
         </section>
       ) : null}
 

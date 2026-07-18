@@ -32,6 +32,17 @@ export type CoachSessionStatus = "active" | "paused" | "ended" | "cancelled";
 export type CoachSessionParticipantStatus = "active" | "pending" | "paused" | "removed";
 export type CoachSessionOccurrenceStatus = "scheduled" | "completed" | "cancelled" | "rain" | "sick";
 export type CoachSessionAttendanceStatus = "present" | "absent" | "excused" | "late" | "not_recorded";
+export type CoachSessionRequestOrigin = "coach_initiated" | "player_initiated" | "parent_initiated";
+export type CoachSessionRequestStatus =
+  | "draft"
+  | "pending_parent"
+  | "pending_player"
+  | "pending_coach"
+  | "approved"
+  | "declined"
+  | "expired"
+  | "superseded"
+  | "failed";
 export type NotificationType =
   | "match_invite_received"
   | "match_invite_accepted"
@@ -54,6 +65,10 @@ export type NotificationType =
   | "lesson_created"
   | "lesson_updated"
   | "lesson_cancelled"
+  | "lesson_move_requested"
+  | "lesson_time_requested"
+  | "lesson_move_declined"
+  | "lesson_time_confirmed"
   | "new_message";
 export type NotificationStatus = "unread" | "read" | "action_required" | "resolved" | "expired";
 export type OrganisationType = "academy" | "club" | "school" | "district" | "club_academy" | "school_district";
@@ -610,6 +625,39 @@ export interface CoachSessionOccurrence {
   cancellation_reason: string | null;
   cancelled_at: string | null;
   cancelled_by_user_id: string | null;
+  replacement_for_occurrence_id: string | null;
+  reschedule_request_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoachSessionRescheduleRequest {
+  id: string;
+  venue_id: string;
+  occurrence_id: string;
+  requested_by_user_id: string;
+  request_origin: CoachSessionRequestOrigin;
+  player_profile_id: string;
+  responder_user_id: string;
+  coach_profile_id: string;
+  current_start_time: string;
+  current_end_time: string;
+  current_venue_id: string;
+  current_court_ids: string[];
+  current_court_names: string[];
+  current_booking_ids: string[];
+  proposed_start_time: string;
+  proposed_end_time: string;
+  proposed_venue_id: string;
+  proposed_court_id: string;
+  status: CoachSessionRequestStatus;
+  message: string | null;
+  response_message: string | null;
+  responded_by_user_id: string | null;
+  responded_at: string | null;
+  approval_error: string | null;
+  replacement_occurrence_id: string | null;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
 }

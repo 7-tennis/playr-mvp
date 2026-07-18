@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { PageShell } from "@/components/page-shell";
+import { CancelledSessionCard, SessionRequestCard } from "@/components/session-request-cards";
+import { StatusAlert } from "@/components/status-alert";
 import {
   BadgeIcon,
   BookingIcon,
@@ -24,6 +26,7 @@ import {
   StatusIcon
 } from "@/components/playr-icons";
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
 import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
@@ -130,7 +133,36 @@ type PlayerDetailPageProps = {
   params: {
     id: string;
   };
+  searchParams?: {
+    request?: string;
+    request_error?: string;
+  };
 };
+
+function requestMessage(value?: string) {
+  switch (value) {
+    case "approved": return "Lesson confirmed. The new court and time are booked.";
+    case "declined": return "Request declined. The original session remains unchanged.";
+    case "makeup_requested": return "Lesson time requested. The court will be booked after coach approval.";
+    default: return null;
+  }
+}
+
+function requestErrorMessage(value?: string) {
+  switch (value) {
+    case "time_unavailable": return "This court is no longer available. The original session has not changed. Please choose another time.";
+    case "coach_conflict": return "The coach is no longer available at this time. Please choose another option.";
+    case "player_conflict": return "This player already has another session or booking at this time.";
+    case "request_not_pending": return "This request has already been resolved.";
+    case "confirmation_required": return "Review the request and confirm before continuing.";
+    case "makeup_not_available": return "Another time can only be requested for a cancelled private lesson.";
+    case "missing_migration": return "The latest CoachR scheduling migration has not been applied yet.";
+    case "missing_fields": return "Choose an available lesson time before sending the request.";
+    case "request_failed":
+    case "approval_failed": return "The request could not be completed. No schedule or booking changes were made.";
+    default: return null;
+  }
+}
 
 function playerName(profile: Pick<Profile, "first_name" | "last_name">) {
   return `${profile.first_name} ${profile.last_name}`;
@@ -254,7 +286,7 @@ function matchPlayerName(match: MatchHistoryRow, profileId: string) {
   return `${match.inviter_first_name} ${match.inviter_last_name}`;
 }
 
-export default async function PlayerDetailPage({ params }: PlayerDetailPageProps) {
+export default async function PlayerDetailPage({ params, searchParams }: PlayerDetailPageProps) {
   if (!hasSupabaseConfig()) {
     return (
       <PageShell eyebrow="Player Detail" title="Supabase is not configured.">
@@ -313,7 +345,9 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
     { data: academyLinkData },
     { data: academyAssignmentData },
     { data: academyLessonData },
-    { data: privateAcademySessionData, error: privateAcademySessionError }
+    { data: privateAcademySessionData, error: privateAcademySessionError },
+    sessionRequests,
+    privateSessionActivity
   ] = await Promise.all([
     supabase.from("ratings").select("*").eq("profile_id", player.id).maybeSingle(),
     supabase.from("rating_changes").select("*").eq("profile_id", player.id).order("created_at", { ascending: false }).limit(5),
@@ -361,7 +395,9 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
       .eq("status", "scheduled")
       .gte("start_time", now)
       .order("start_time", { ascending: true }),
-    supabase.rpc("coachr_private_player_sessions", { p_player_profile_id: player.id })
+    supabase.rpc("coachr_private_player_sessions", { p_player_profile_id: player.id }),
+    loadPlayerSessionRequests(supabase, [player.id]),
+    loadPrivatePlayerSessionActivity(supabase, player.id)
   ]);
 
   if (ratingError) {
@@ -428,9 +464,16 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
   const confidenceText = player.is_junior ? formatLabel(player.junior_rating_confidence) : rating ? formatLabel(rating.confidence) : "No rating yet";
   const participationText = player.is_junior ? `${player.participation_score} pts` : `${player.participation_score ?? 0} pts`;
   const profileHref = `/dashboard/profile?member=${player.id}#member-details`;
+  const requestReturnTo = `/dashboard/players/${player.id}#lesson-requests`;
+  const pendingSessionRequests = sessionRequests.filter((request) => isPendingSessionRequest(request.status));
+  const recentSessionRequests = sessionRequests.filter((request) => !isPendingSessionRequest(request.status)).slice(0, 8);
+  const requestByOccurrence = new Map(sessionRequests.map((request) => [request.occurrence_id, request]));
+  const cancelledSessions = privateSessionActivity.filter((activity) => activity.occurrence_status === "cancelled" || activity.occurrence_status === "rain" || activity.occurrence_status === "sick");
 
   return (
     <PageShell eyebrow="Player Detail" subtitle="Player profile, progress and upcoming tennis activity." title={playerName(player)}>
+      <StatusAlert className="mb-5" message={requestMessage(searchParams?.request)} tone="success" />
+      <StatusAlert className="mb-5" message={requestErrorMessage(searchParams?.request_error)} tone="error" />
       <div className="mb-5">
         <Link className="font-bold text-court-blue" href="/dashboard">
           Back to MyPlayR
@@ -443,6 +486,9 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
         </a>
         <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#progress">
           Progress
+        </a>
+        <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#lesson-requests">
+          Lessons
         </a>
         <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#membership">
           Membership
@@ -529,6 +575,15 @@ export default async function PlayerDetailPage({ params }: PlayerDetailPageProps
           </div>
         </SectionCard>
       </div>
+
+      {(pendingSessionRequests.length > 0 || cancelledSessions.length > 0 || recentSessionRequests.length > 0) ? (
+        <section className="surface-card mt-5 p-4 sm:p-5" id="lesson-requests">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="section-kicker">CoachR</p><h2 className="mt-1 text-lg font-black text-court-navy">Lesson Requests</h2><p className="mt-1 text-sm text-slate-600">Approve proposed moves or request another time after a cancellation.</p></div><BookingIcon className="text-court-teal" size={20} /></div>
+          {pendingSessionRequests.length > 0 ? <div className="mt-4 grid gap-3">{pendingSessionRequests.map((request) => <SessionRequestCard key={request.id} request={request} returnTo={requestReturnTo} viewer="player" />)}</div> : null}
+          {cancelledSessions.length > 0 ? <div className="mt-4 grid gap-3"><p className="text-sm font-black uppercase tracking-wide text-slate-500">Cancelled Lessons</p>{cancelledSessions.slice(0, 6).map((activity) => <CancelledSessionCard activity={activity} existingRequest={requestByOccurrence.get(activity.occurrence_id) ?? null} key={activity.occurrence_id} playerProfileId={player.id} returnTo={requestReturnTo} />)}</div> : null}
+          {recentSessionRequests.length > 0 ? <details className="ui-collapsible mt-4 rounded-lg border border-slate-200 p-3"><summary className="flex cursor-pointer items-center justify-between gap-3 text-sm font-black text-court-navy"><span>Request History</span><span className="ui-collapsible-chevron"><ChevronDownIcon size={16} /></span></summary><div className="mt-3 grid gap-3">{recentSessionRequests.map((request) => <SessionRequestCard compact key={request.id} request={request} returnTo={requestReturnTo} viewer="player" />)}</div></details> : null}
+        </section>
+      ) : null}
 
       <section className="surface-card mt-5 p-4 sm:p-5" id="academies">
         <div className="flex items-start justify-between gap-3"><div><p className="section-kicker">Connected organisations</p><h2 className="mt-1 text-lg font-black text-court-navy">Academies</h2></div><ClubIcon className="text-court-teal" size={20} /></div>

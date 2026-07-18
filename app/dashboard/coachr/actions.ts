@@ -84,6 +84,7 @@ function lessonErrorValue(error: { code?: string; message?: string } | null | un
       "coach_conflict",
       "coach_venue_missing",
       "coach_venue",
+      "confirmation_required",
       "court_venue",
       "court_access",
       "custom_location",
@@ -326,7 +327,6 @@ export async function updateCoachLesson(formData: FormData) {
   if (context.kind !== "authenticated" || !lessonId) {
     redirectWithParam(returnTo, "lesson_error", "invalid_lesson");
   }
-
   const status = allowedValue<CoachLessonStatus>(text(formData, "status"), coachLessonStatuses, "scheduled");
   const coachId = context.role === "coach" ? context.adultProfileId : optionalUuid(formData, "coachId");
   const title = text(formData, "title");
@@ -391,6 +391,9 @@ export async function cancelCoachLesson(formData: FormData) {
 
   if (context.kind !== "authenticated" || !lessonId) {
     redirectWithParam(returnTo, "lesson_error", "invalid_lesson");
+  }
+  if (text(formData, "confirmCancellation") !== "confirmed") {
+    redirectWithParam(returnTo, "lesson_error", "confirmation_required");
   }
 
   const { error } = await context.supabase.rpc("coachr_cancel_lesson_plan_v2", {

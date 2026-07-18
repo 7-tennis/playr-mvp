@@ -94,8 +94,19 @@ function sessionError(error: { code?: string; message?: string } | null | undefi
     "booking_refresh_failed",
     "booking_release_failed",
     "booking_synchronisation_failed",
+    "confirmation_required",
+    "duration",
+    "invalid_request",
+    "makeup_not_available",
+    "managed_court_required",
+    "move_request_required",
     "occurrence_generation_failed",
+    "request_not_pending",
+    "request_recipient_missing",
     "session_create_failed",
+    "session_history_protected",
+    "single_player_request_required",
+    "time_unavailable",
     "time_order"
   ];
 
@@ -201,6 +212,9 @@ export async function cancelCoachSessionOccurrence(formData: FormData) {
   const returnTo = safeReturnTo(formData, "/dashboard/coachr/schedule");
   const occurrenceId = uuid(value(formData, "occurrenceId"));
   if (context.kind !== "authenticated" || !occurrenceId) redirectWith(returnTo, "session_error", "access");
+  if (value(formData, "confirmCancellation") !== "confirmed") {
+    redirectWith(returnTo, "session_error", "confirmation_required");
+  }
 
   const scope = allowed(value(formData, "scope"), ["single", "future", "series", "through"] as const, "single");
   const { error } = await context.supabase.rpc("coachr_cancel_session_occurrence", {
@@ -224,22 +238,26 @@ export async function moveCoachSessionOccurrence(formData: FormData) {
   const occurrenceId = uuid(value(formData, "occurrenceId"));
   const startTime = dateTime(formData, "startTime");
   const endTime = dateTime(formData, "endTime");
-  const courtIds = uuidValues(formData, "courtIds");
-  if (context.kind !== "authenticated" || !occurrenceId || !startTime || !endTime) redirectWith(returnTo, "session_error", "missing_fields");
+  const courtId = uuid(value(formData, "courtId"));
+  const supersedesRequestId = uuid(value(formData, "supersedesRequestId"));
+  if (context.kind !== "authenticated" || !occurrenceId || !startTime || !endTime || !courtId) redirectWith(returnTo, "session_error", "missing_fields");
 
-  const { error } = await context.supabase.rpc("coachr_move_session_occurrence", {
-    p_court_ids: courtIds,
-    p_end_time: endTime,
+  const { error } = await context.supabase.rpc("coachr_create_move_request", {
+    p_message: nullableValue(formData, "message"),
     p_occurrence_id: occurrenceId,
-    p_start_time: startTime
+    p_proposed_court_id: courtId,
+    p_proposed_end_time: endTime,
+    p_proposed_start_time: startTime,
+    p_supersedes_request_id: supersedesRequestId
   });
   if (error) {
-    console.error("CoachR session move failed", { code: error.code, message: error.message, occurrenceId, userId: context.user.id });
+    console.error("CoachR session move request failed", { code: error.code, message: error.message, occurrenceId, userId: context.user.id });
     redirectWith(returnTo, "session_error", sessionError(error));
   }
 
   revalidateSessionSurfaces();
-  redirectWith(returnTo, "session", "moved");
+  revalidatePath("/dashboard/notifications");
+  redirectWith(returnTo, "session", "move_request_sent");
 }
 
 export async function markCoachSessionAttendance(formData: FormData) {

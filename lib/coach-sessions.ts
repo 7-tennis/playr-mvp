@@ -161,6 +161,8 @@ const occurrenceSelect = `
   cancellation_reason,
   cancelled_at,
   cancelled_by_user_id,
+  replacement_for_occurrence_id,
+  reschedule_request_id,
   created_at,
   updated_at,
   occurrence_coaches:coach_session_occurrence_coaches(

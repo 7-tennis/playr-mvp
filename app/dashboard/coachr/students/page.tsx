@@ -1,6 +1,7 @@
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CoachRPlayerConnectionSearch } from "@/components/coachr-player-connection-search";
+import { SessionRequestCard } from "@/components/session-request-cards";
 import {
   academyStudentProposal,
   activeAcademyStudentName,
@@ -17,6 +18,7 @@ import {
   type CoachLessonWithRelations
 } from "@/lib/coach-lessons";
 import { loadCoachSessionOccurrencesForRange, loadCoachSessions } from "@/lib/coach-sessions";
+import { isPendingSessionRequest, loadCoachSessionRequests } from "@/lib/coach-session-requests";
 import { invitationLink } from "@/lib/organisations";
 import type { ActiveAcademyStudent, CoachLessonAttendanceResult, OrganisationInvitation } from "@/types/courtside";
 import { CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "../coachr-shared";
@@ -232,13 +234,14 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
           .order("created_at", { ascending: false })
           .limit(80)
       : Promise.resolve({ data: [], error: null });
-  const [activeStudentsResult, lessons, sessions, sessionOccurrences, options, playerInvitationsResult] = await Promise.all([
+  const [activeStudentsResult, lessons, sessions, sessionOccurrences, options, playerInvitationsResult, sessionRequests] = await Promise.all([
     loadActiveAcademyStudents(access.context, activeVenueId),
     loadCoachLessons(access.context, 160),
     loadCoachSessions(access.context),
     loadCoachSessionOccurrencesForRange(access.context, new Date(Date.now() - 366 * 24 * 60 * 60 * 1000).toISOString(), new Date(Date.now() + 91 * 24 * 60 * 60 * 1000).toISOString(), 1000),
     loadCoachLessonOptions(access.context),
-    playerInvitationQuery
+    playerInvitationQuery,
+    loadCoachSessionRequests(access.context, 40)
   ]);
   const studentMap = new Map(activeStudentsResult.students.map((student) => [student.playerProfileId, studentSummary(student)]));
   const playerInvitations = ((playerInvitationsResult.data ?? []) as PlayerLinkInvitation[]) ?? [];
@@ -311,6 +314,7 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
   const allStudents = Array.from(studentMap.values());
   const privateStudentCount = allStudents.filter((student) => student.lessonTypes.includes("private")).length;
   const assignedStudentCount = allStudents.filter((student) => student.assignedCoachIds.length > 0).length;
+  const pendingSessionRequests = sessionRequests.filter((request) => isPendingSessionRequest(request.status));
   const canViewDiagnostics = access.context.role === "platform_admin" || ["organisation_admin", "club_manager"].includes(access.context.activeOrganisationRole ?? "");
   const emptyStudentMessage = activeStudentsResult.error
     ? "Students could not be loaded. Check the active organisation or try again."
@@ -349,6 +353,13 @@ export default async function CoachRStudentsPage({ searchParams }: CoachRStudent
         <div className="mb-5 flex justify-end">
           <a className="text-sm font-black text-court-teal hover:text-court-navy" href="/dashboard/coachr/students/diagnostics">Connection Diagnostics</a>
         </div>
+      ) : null}
+
+      {pendingSessionRequests.length > 0 ? (
+        <section className="surface-card mb-5 p-4 sm:p-5">
+          <div><p className="section-kicker">Lesson changes</p><h2 className="section-title mt-1">Student Requests</h2><p className="mt-1 text-sm text-slate-600">Pending requests stay next to the relevant student context.</p></div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">{pendingSessionRequests.map((request) => <SessionRequestCard compact key={request.id} request={request} returnTo="/dashboard/coachr/students" viewer="coach" />)}</div>
+        </section>
       ) : null}
 
       <CollapsibleCard

@@ -2,7 +2,10 @@ import Link from "next/link";
 import { SetupReminderCard } from "@/components/organisation-setup-wizard";
 import { ArrowRightIcon, BookingIcon, EntriesIcon, MatchIcon, NotificationIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
+import { loadCoachSessionRequests } from "@/lib/coach-session-requests";
 import { loadOrganisationSetup } from "@/lib/organisation-setup";
+import { SessionRequestCard } from "@/components/session-request-cards";
+import { StatusAlert } from "@/components/status-alert";
 import {
   lessonHasAttendanceResult,
   lessonNeedsAttendance,
@@ -93,7 +96,19 @@ function LessonMiniCard({ lesson, compact = false }: { lesson: CoachLessonWithRe
   );
 }
 
-export default async function CoachRPage() {
+function requestMessage(value?: string) {
+  if (value === "approved") return "Lesson confirmed. The court and time are now booked.";
+  if (value === "declined") return "Request declined. No unapproved booking changes were made.";
+  return null;
+}
+
+function requestError(value?: string) {
+  if (value === "time_unavailable") return "This time is no longer available. The original session has not changed.";
+  if (value) return "The request could not be completed. No schedule or booking changes were made.";
+  return null;
+}
+
+export default async function CoachRPage({ searchParams }: { searchParams?: { request?: string; request_error?: string } }) {
   const { access, content } = await getProtectedCoachRPage("coachr");
 
   if (content) {
@@ -136,7 +151,7 @@ export default async function CoachRPage() {
         .select("id", { count: "exact", head: true })
         .in("invitation_kind", ["player", "player_junior"])
         .eq("status", "pending");
-  const [lessons, activeStudentsResult, pendingLinksResult, unreadMessagesResult] = await Promise.all([
+  const [lessons, activeStudentsResult, pendingLinksResult, unreadMessagesResult, sessionRequests] = await Promise.all([
     loadCoachLessons(access.context, lessonLoadLimit),
     activeStudentsQuery,
     pendingLinksQuery,
@@ -144,7 +159,8 @@ export default async function CoachRPage() {
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("user_id", access.context.user.id)
-      .is("read_at", null)
+      .is("read_at", null),
+    loadCoachSessionRequests(access.context, 24)
   ]);
   const upcomingLessons = upcomingCoachLessons(lessons);
   const nextLesson = upcomingLessons[0] ?? null;
@@ -188,6 +204,9 @@ export default async function CoachRPage() {
   const pendingLinkCount = pendingLinksResult.count ?? 0;
   const unreadMessageCount = unreadMessagesResult.count ?? 0;
   const activeSquadCount = sessions.filter((session) => session.status === "active" && session.session_type === "squad").length;
+  const awaitingPlayerRequests = sessionRequests.filter((request) => request.status === "pending_parent" || request.status === "pending_player");
+  const awaitingCoachRequests = sessionRequests.filter((request) => request.status === "pending_coach");
+  const recentlyConfirmedRequests = sessionRequests.filter((request) => request.status === "approved").slice(0, 2);
   const todaySessionCount = sessionOccurrences.filter((occurrence) => localDateSerial(occurrence.start_time) === todaySerial).length;
   const activeOrganisationName = access.context.activeOrganisationMembership?.venue?.name ?? "Organisation not selected";
   const coachName = access.context.activeOrganisationMembership?.profile
@@ -281,6 +300,8 @@ export default async function CoachRPage() {
 
   return (
     <CoachRPageFrame context={access.context} subtitle="Today, your next lesson and the coaching work that needs attention." title="MyCoachR">
+      <StatusAlert className="mb-5" message={requestMessage(searchParams?.request)} tone="success" />
+      <StatusAlert className="mb-5" message={requestError(searchParams?.request_error)} tone="error" />
       <CoachRRoleSummary context={access.context} />
       {setupSnapshot ? <SetupReminderCard organisationName={access.context.activeOrganisationMembership?.venue?.name ?? "your academy"} snapshot={setupSnapshot} /> : null}
 
@@ -307,6 +328,14 @@ export default async function CoachRPage() {
           <CoachRSummaryCard helper={stat.helper} href={stat.href} icon={<span className={stat.tone}>{stat.icon}</span>} key={stat.label} label={stat.label} value={stat.value} />
         ))}
       </CoachRCompactGrid>
+
+      {(awaitingPlayerRequests.length > 0 || awaitingCoachRequests.length > 0 || recentlyConfirmedRequests.length > 0) ? (
+        <section className="surface-card mb-5 p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="section-kicker">Requests</p><h2 className="section-title mt-1">Lesson changes</h2></div><Link className="text-sm font-black text-court-teal" href="/dashboard/coachr/schedule#session-requests">Open all</Link></div>
+          <div className="mt-3 grid grid-cols-2 gap-2"><div className="rounded bg-amber-50 p-3"><p className="text-2xl font-black text-amber-800">{awaitingPlayerRequests.length}</p><p className="text-xs font-black uppercase tracking-wide text-amber-700">Awaiting player</p></div><div className="rounded bg-court-mist p-3"><p className="text-2xl font-black text-court-navy">{awaitingCoachRequests.length}</p><p className="text-xs font-black uppercase tracking-wide text-court-teal">Awaiting coach</p></div></div>
+          <div className="mt-3 grid gap-3">{[...awaitingCoachRequests, ...awaitingPlayerRequests, ...recentlyConfirmedRequests].slice(0, 3).map((request) => <SessionRequestCard compact key={request.id} request={request} returnTo="/dashboard/coachr" viewer="coach" />)}</div>
+        </section>
+      ) : null}
 
       {lessons.length === 0 && sessions.length === 0 ? (
         <section className="empty-state mb-5">

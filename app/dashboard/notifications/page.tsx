@@ -40,6 +40,10 @@ const notificationVisuals: Record<NotificationType, { className: string }> = {
   lesson_created: { className: "bg-court-mist text-court-teal" },
   lesson_updated: { className: "bg-sky-50 text-sky-700" },
   lesson_cancelled: { className: "bg-amber-50 text-amber-800" },
+  lesson_move_requested: { className: "bg-amber-50 text-amber-800" },
+  lesson_time_requested: { className: "bg-court-mist text-court-teal" },
+  lesson_move_declined: { className: "bg-slate-100 text-slate-700" },
+  lesson_time_confirmed: { className: "bg-emerald-50 text-emerald-700" },
   new_message: { className: "bg-court-navy text-white" }
 };
 
@@ -75,6 +79,10 @@ function notificationIcon(type: NotificationType) {
     case "lesson_created":
     case "lesson_updated":
     case "lesson_cancelled":
+    case "lesson_move_requested":
+    case "lesson_time_requested":
+    case "lesson_move_declined":
+    case "lesson_time_confirmed":
       return <BookingIcon size={20} />;
     default:
       return <NotificationIcon size={20} />;

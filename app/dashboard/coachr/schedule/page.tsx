@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { CoachRCourtPicker } from "@/components/coachr-court-picker";
+import { CoachSessionOccurrenceActions, LegacyLessonCancellationCard } from "@/components/coachr-session-actions";
 import { ArrowRightIcon, BookingIcon, ChevronDownIcon, EntriesIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
+import { SessionRequestCard } from "@/components/session-request-cards";
 import { StatusAlert } from "@/components/status-alert";
+import { isPendingSessionRequest, loadCoachSessionRequests } from "@/lib/coach-session-requests";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import {
   attendanceResultLabel,
@@ -32,8 +35,8 @@ import {
 } from "@/lib/coach-sessions";
 import { canManageOrganisationCourtAccess } from "@/lib/organisations";
 import type { CoachLessonAttendanceResult } from "@/types/courtside";
-import { cancelCoachSessionOccurrence, markAllCoachSessionAttendance, markCoachSessionAttendance, moveCoachSessionOccurrence } from "../sessions/actions";
-import { cancelCoachLesson, markCoachLessonAttendance, updateCoachLesson } from "../actions";
+import { markAllCoachSessionAttendance, markCoachSessionAttendance } from "../sessions/actions";
+import { markCoachLessonAttendance, updateCoachLesson } from "../actions";
 import { CoachRCompactGrid, CoachRPageFrame, CoachRRoleSummary, CoachRSummaryCard, getProtectedCoachRPage } from "../coachr-shared";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +50,8 @@ type CoachRSchedulePageProps = {
     player?: string;
     session?: string;
     session_error?: string;
+    request?: string;
+    request_error?: string;
     week?: string;
   };
 };
@@ -66,15 +71,23 @@ function statusMessage(value?: string) {
     case "series_updated":
       return "Recurring lesson series updated.";
     case "cancelled":
-      return "Lesson cancelled.";
+      return "Lesson cancelled. The linked court is now available.";
     case "series_cancelled":
-      return "Recurring lesson series cancelled.";
+      return "Recurring lesson series cancelled. Linked courts were released.";
     case "attendance_marked":
       return "Attendance saved.";
     case "session_cancelled":
       return "Session cancelled and linked courts released.";
     case "moved":
       return "Session moved and linked court bookings updated.";
+    case "move_request_sent":
+      return "Move request sent. The current session remains booked until it is accepted.";
+    case "makeup_requested":
+      return "Lesson time requested. A court will be booked after approval.";
+    case "approved":
+      return "Lesson confirmed. The new court and time are booked.";
+    case "declined":
+      return "Request declined. No unapproved booking changes were made.";
     default:
       return null;
   }
@@ -108,6 +121,25 @@ function errorMessage(value?: string) {
       return "Choose a court so PlayR can reserve it for this lesson.";
     case "time_order":
       return "Lesson end time must be after the start time.";
+    case "time_unavailable":
+      return "This time is no longer available. The original session has not changed.";
+    case "player_conflict":
+      return "The player already has another booking or session at this time.";
+    case "confirmation_required":
+      return "Review the details and confirm before continuing.";
+    case "request_not_pending":
+      return "This request has already been resolved.";
+    case "single_player_request_required":
+      return "Approval-based move requests are currently available for one-player sessions.";
+    case "managed_court_required":
+      return "Move requests currently require a managed court.";
+    case "request_recipient_missing":
+      return "The linked parent, adult player or coach account could not be found.";
+    case "missing_migration":
+      return "The latest CoachR scheduling migration has not been applied yet.";
+    case "request_failed":
+    case "approval_failed":
+      return "The request could not be completed. No schedule or booking changes were made.";
     case "court_conflict":
       return "The selected court is already booked at this time.";
     case "coach_conflict":
@@ -512,7 +544,7 @@ function sessionAttendanceLabel(status: string) {
   return "Not marked";
 }
 
-function SessionOccurrenceCard({ courtOptions, occurrence, returnTo, showDiagnostics }: { courtOptions: CoachLessonCourt[]; occurrence: CoachSessionOccurrenceWithRelations; returnTo: string; showDiagnostics: boolean }) {
+function SessionOccurrenceCard({ occurrence, pendingRequest, returnTo, showDiagnostics }: { occurrence: CoachSessionOccurrenceWithRelations; pendingRequest: boolean; returnTo: string; showDiagnostics: boolean }) {
   const session = occurrence.session;
   if (!session) return null;
   const participants = activeOccurrenceParticipants(occurrence);
@@ -529,6 +561,7 @@ function SessionOccurrenceCard({ courtOptions, occurrence, returnTo, showDiagnos
             <span className="truncate font-black text-court-navy">{session.name}</span>
             <span className="ui-chip ui-chip-brand">{coachSessionTypeLabel(session.session_type)}</span>
             <span className={`ui-chip ${lessonStatusTone(occurrence.status)}`}>{formatLabel(occurrence.status)}</span>
+            {pendingRequest ? <span className="ui-chip ui-chip-warning">Move request pending</span> : null}
           </span>
           <span className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
             <span className="ui-chip ui-chip-muted"><TimeIcon size={13} /> {timeLabel(occurrence.start_time)} - {timeLabel(occurrence.end_time)}</span>
@@ -565,29 +598,18 @@ function SessionOccurrenceCard({ courtOptions, occurrence, returnTo, showDiagnos
         </section>
 
         {occurrence.status === "scheduled" ? (
-          <details className="mt-4 rounded-lg border border-slate-200 p-3">
-            <summary className="cursor-pointer text-sm font-black text-court-navy">Move Session</summary>
-            <form action={moveCoachSessionOccurrence} className="mt-3 grid gap-3">
-              <input name="occurrenceId" type="hidden" value={occurrence.id} /><input name="returnTo" type="hidden" value={returnTo} />
-              <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold text-slate-700">Starts<input className="mt-1 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={dateTimeLocalValue(occurrence.start_time)} name="startTime" type="datetime-local" /></label><label className="text-sm font-bold text-slate-700">Ends<input className="mt-1 w-full rounded border border-slate-300 px-3 py-2 focus-ring" defaultValue={dateTimeLocalValue(occurrence.end_time)} name="endTime" type="datetime-local" /></label></div>
-              {session.location_type === "managed_court" ? <fieldset><legend className="text-sm font-bold text-slate-700">Courts</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{courtOptions.map((court) => <label className="flex items-center gap-2 rounded border border-slate-200 p-3 text-sm font-bold text-slate-700" key={court.id}><input defaultChecked={occurrence.court_links.some((link) => link.court_id === court.id)} name="courtIds" type="checkbox" value={court.id} />{court.name}</label>)}</div></fieldset> : null}
-              <p className="text-xs font-semibold leading-5 text-slate-500">The current booking stays unchanged unless every selected court, player and coach is available.</p>
-              <button className="btn-secondary" type="submit">Check Availability & Move</button>
-            </form>
-          </details>
-        ) : null}
-
-        {occurrence.status === "scheduled" ? (
-          <details className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <summary className="cursor-pointer text-sm font-black text-amber-900">Cancel Session</summary>
-            <form action={cancelCoachSessionOccurrence} className="mt-3 grid gap-3">
-              <input name="occurrenceId" type="hidden" value={occurrence.id} /><input name="returnTo" type="hidden" value={returnTo} />
-              <p className="text-sm font-semibold text-amber-900">Cancelling this session will release {courts} for other bookings.</p>
-              {session.repeat_mode === "weekly" ? <label className="text-sm font-bold text-amber-900">Apply to<select className="mt-1 w-full rounded border border-amber-300 bg-white px-3 py-2 focus-ring" name="scope"><option value="single">This session only</option><option value="future">This and future sessions</option><option value="series">Entire future series</option></select></label> : <input name="scope" type="hidden" value="single" />}
-              <label className="text-sm font-bold text-amber-900">Reason <span className="font-normal">(optional)</span><input className="mt-1 w-full rounded border border-amber-300 bg-white px-3 py-2 focus-ring" name="reason" /></label>
-              <button className="rounded bg-amber-700 px-3 py-3 text-sm font-black text-white" type="submit">Cancel and Release Courts</button>
-            </form>
-          </details>
+          <CoachSessionOccurrenceActions
+            courtsLabel={courts}
+            durationMinutes={session.duration_minutes}
+            endTime={occurrence.end_time}
+            isRecurring={session.repeat_mode === "weekly"}
+            occurrenceId={occurrence.id}
+            participantCount={participants.length}
+            pendingRequest={pendingRequest}
+            returnTo={returnTo}
+            sessionName={session.name}
+            startTime={occurrence.start_time}
+          />
         ) : null}
       </div>
     </details>
@@ -859,33 +881,15 @@ function LessonCard({
         </form>
 
         {lesson.status === "scheduled" ? (
-          <form action={cancelCoachLesson} className="mt-3 grid gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:grid-cols-2">
-            <input name="returnTo" type="hidden" value={returnTo} />
-            <input name="lessonId" type="hidden" value={lesson.id} />
-            {isRecurring ? (
-              <select className="rounded border border-amber-300 bg-white px-3 py-2 text-sm font-semibold focus-ring" defaultValue="single" name="cancelScope">
-                <option value="single">This lesson only</option>
-                <option value="future">This and future lessons</option>
-              </select>
-            ) : (
-              <input name="cancelScope" type="hidden" value="single" />
-            )}
-            <select className="rounded border border-amber-300 bg-white px-3 py-2 text-sm font-semibold focus-ring" name="cancelStatus">
-              <option value="cancelled">Cancelled</option>
-              <option value="rain">Rain</option>
-              <option value="sick">Sick</option>
-            </select>
-            {isRecurring ? (
-              <label className="text-xs font-bold leading-5 text-amber-900 sm:col-span-2">
-                Optional final date
-                <input className="mt-1 w-full rounded border border-amber-300 bg-white px-3 py-2 text-sm focus-ring" name="effectiveEndDate" type="date" />
-                <span className="mt-1 block font-semibold">Leave blank to stop before this occurrence. Choose a date to keep lessons through that day.</span>
-              </label>
-            ) : null}
-            <button className="rounded bg-amber-600 px-3 py-2 text-sm font-black text-white transition hover:bg-amber-700" type="submit">
-              Cancel Lesson
-            </button>
-          </form>
+          <LegacyLessonCancellationCard
+            courtLabel={lesson.court?.name ?? "court booking"}
+            endTime={lesson.end_time}
+            isRecurring={isRecurring}
+            lessonId={lesson.id}
+            returnTo={returnTo}
+            startTime={lesson.start_time}
+            title={lesson.title}
+          />
         ) : null}
       </div>
     </details>
@@ -908,10 +912,11 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
   const selectedWeekStart = weekStartSerial(selectedDateSerial);
   const selectedWeekEnd = selectedWeekStart + 7 * DAY_MS;
   const todaySerial = localDateSerial(new Date());
-  const [lessons, sessionOccurrences, options] = await Promise.all([
+  const [lessons, sessionOccurrences, options, sessionRequests] = await Promise.all([
     loadCoachLessonsForRange(access.context, rangeBoundaryIso(selectedWeekStart), rangeBoundaryIso(selectedWeekEnd)),
     loadCoachSessionOccurrencesForRange(access.context, rangeBoundaryIso(selectedWeekStart), rangeBoundaryIso(selectedWeekEnd)),
-    loadCoachLessonOptions(access.context)
+    loadCoachLessonOptions(access.context),
+    loadCoachSessionRequests(access.context)
   ]);
   const canFilterByCoach = !coachOnly && options.coachProfiles.length > 0;
   const requestedCoachId = searchParams?.coach ?? "";
@@ -936,6 +941,15 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
     studentLoadError: options.studentLoadError
   });
   const returnTo = scheduleHref(selectedWeekStart, selectedCoachId);
+  const pendingRequestByOccurrence = new Map(
+    sessionRequests
+      .filter((request) => isPendingSessionRequest(request.status))
+      .map((request) => [request.occurrence_id, request])
+  );
+  const awaitingPlayerRequests = sessionRequests.filter((request) => request.status === "pending_parent" || request.status === "pending_player");
+  const awaitingCoachRequests = sessionRequests.filter((request) => request.status === "pending_coach");
+  const recentlyConfirmedRequests = sessionRequests.filter((request) => request.status === "approved").slice(0, 3);
+  const requestHistory = sessionRequests.filter((request) => !isPendingSessionRequest(request.status) && request.status !== "approved").slice(0, 12);
   const createHref = "/dashboard/coachr/sessions/new";
   const canManageCourtAccess = access.context.role === "platform_admin" || canManageOrganisationCourtAccess(access.context.activeOrganisationRole);
   const weekDays = Array.from({ length: 7 }, (_, index) => {
@@ -960,6 +974,8 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.lesson_error)} tone="error" />
       <StatusAlert className="mb-5" message={statusMessage(searchParams?.session)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.session_error)} tone="error" />
+      <StatusAlert className="mb-5" message={statusMessage(searchParams?.request)} tone="success" />
+      <StatusAlert className="mb-5" message={errorMessage(searchParams?.request_error)} tone="error" />
       <CoachRRoleSummary context={access.context} />
 
       <section className="mb-5 overflow-hidden rounded-lg bg-court-navy text-white shadow-court">
@@ -995,6 +1011,22 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
         <CoachRSummaryCard helper="player absent" label="Missed" value={missedCount} />
         <CoachRSummaryCard helper="make-up lessons" label="Replacement" value={replacementCount} />
       </CoachRCompactGrid>
+
+      {(awaitingPlayerRequests.length > 0 || awaitingCoachRequests.length > 0 || recentlyConfirmedRequests.length > 0) ? (
+        <section className="surface-card mb-5 p-4 sm:p-5" id="session-requests">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="section-kicker">Requests</p><h2 className="section-title mt-1">Lesson changes</h2><p className="mt-1 text-sm text-slate-600">Approve requested times or track proposals without searching through messages.</p></div>
+            <div className="flex flex-wrap gap-2"><span className="ui-chip ui-chip-warning">{awaitingPlayerRequests.length} awaiting player</span><span className="ui-chip ui-chip-brand">{awaitingCoachRequests.length} awaiting coach</span></div>
+          </div>
+
+          {awaitingCoachRequests.length > 0 ? <div className="mt-4 grid gap-3"><p className="text-sm font-black uppercase tracking-wide text-slate-500">Lesson Requests Awaiting Coach</p>{awaitingCoachRequests.map((request) => <div className="grid gap-3" key={request.id}><SessionRequestCard request={request} returnTo={returnTo} viewer="coach" /><Link className="text-xs font-black text-court-teal" href={`/dashboard/coachr/students/diagnostics?request=${request.id}`}>Request diagnostics</Link><details className="ui-collapsible rounded-lg border border-slate-200 bg-slate-50 p-3"><summary className="flex cursor-pointer items-center justify-between text-sm font-black text-court-navy"><span>Propose Another Time</span><ChevronDownIcon className="ui-collapsible-chevron" size={16} /></summary><CoachSessionOccurrenceActions courtsLabel={request.current_court_names.join(", ") || "Original court"} currentBooked={request.occurrence?.status === "scheduled"} durationMinutes={request.occurrence?.session?.duration_minutes ?? Math.max(5, Math.round((new Date(request.current_end_time).getTime() - new Date(request.current_start_time).getTime()) / 60000))} endTime={request.current_end_time} isRecurring={request.occurrence?.session?.repeat_mode === "weekly"} occurrenceId={request.occurrence_id} participantCount={1} pendingRequest returnTo={returnTo} sessionName={request.occurrence?.session?.name ?? "Coaching session"} startTime={request.current_start_time} supersedesRequestId={request.id} /></details></div>)}</div> : null}
+
+          {awaitingPlayerRequests.length > 0 ? <div className="mt-4 grid gap-3"><p className="text-sm font-black uppercase tracking-wide text-slate-500">Move Requests Awaiting Parent or Player</p>{awaitingPlayerRequests.map((request) => <div className="grid gap-2" key={request.id}><SessionRequestCard compact request={request} returnTo={returnTo} viewer="coach" /><Link className="text-xs font-black text-court-teal" href={`/dashboard/coachr/students/diagnostics?request=${request.id}`}>Request diagnostics</Link></div>)}</div> : null}
+
+          {recentlyConfirmedRequests.length > 0 ? <details className="ui-collapsible mt-4 rounded-lg border border-slate-200 p-3"><summary className="flex cursor-pointer items-center justify-between text-sm font-black text-court-navy"><span>Recently Confirmed Moves · {recentlyConfirmedRequests.length}</span><ChevronDownIcon className="ui-collapsible-chevron" size={16} /></summary><div className="mt-3 grid gap-3">{recentlyConfirmedRequests.map((request) => <SessionRequestCard compact key={request.id} request={request} returnTo={returnTo} viewer="coach" />)}</div></details> : null}
+          {requestHistory.length > 0 ? <details className="ui-collapsible mt-3 rounded-lg border border-slate-200 p-3"><summary className="flex cursor-pointer items-center justify-between text-sm font-black text-court-navy"><span>Request History</span><ChevronDownIcon className="ui-collapsible-chevron" size={16} /></summary><div className="mt-3 grid gap-3">{requestHistory.map((request) => <SessionRequestCard compact key={request.id} request={request} returnTo={returnTo} viewer="coach" />)}</div></details> : null}
+        </section>
+      ) : null}
 
       {canFilterByCoach ? (
         <form className="surface-card mb-5 grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-end" method="get">
@@ -1070,7 +1102,7 @@ export default async function CoachRSchedulePage({ searchParams }: CoachRSchedul
               <div className="border-t border-slate-100 p-3">
                 {totalItems > 0 ? (
                   <div className="grid gap-3">
-                    {daySessions.map((occurrence) => <SessionOccurrenceCard courtOptions={options.courts} key={occurrence.id} occurrence={occurrence} returnTo={returnTo} showDiagnostics={!coachOnly} />)}
+                    {daySessions.map((occurrence) => <SessionOccurrenceCard key={occurrence.id} occurrence={occurrence} pendingRequest={pendingRequestByOccurrence.has(occurrence.id)} returnTo={returnTo} showDiagnostics={!coachOnly} />)}
                     {dayLessons.map((lesson) => (
                       <LessonCard
                         canManageCourtAccess={canManageCourtAccess}
