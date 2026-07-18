@@ -10,8 +10,21 @@ import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { OrganisationRole } from "@/types/courtside";
 
-export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "platform_admin";
+export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "committee" | "reception" | "platform_admin";
 export type StoredUserRole = UserRole | "admin" | "staff";
+export type ClubRPermission =
+  | "clubr"
+  | "clubr:members"
+  | "clubr:members:manage"
+  | "clubr:roles:manage"
+  | "clubr:bookings"
+  | "clubr:courts"
+  | "clubr:courts:manage"
+  | "clubr:notices"
+  | "clubr:notices:manage"
+  | "clubr:settings"
+  | "clubr:settings:manage"
+  | "clubr:diagnostics";
 export type CoachRPermission =
   | "coachr"
   | "coachr:schedule"
@@ -61,6 +74,8 @@ export function normalizeStoredRole(role: StoredUserRole | string | null | undef
     case "coach":
     case "head_coach":
     case "club_admin":
+    case "committee":
+    case "reception":
     case "platform_admin":
       return role;
     default:
@@ -80,6 +95,10 @@ export function roleLabel(role: UserRole) {
       return "Head Coach";
     case "club_admin":
       return "Club Admin";
+    case "committee":
+      return "Committee";
+    case "reception":
+      return "Reception";
     case "platform_admin":
       return "SupeR UseR";
   }
@@ -98,7 +117,23 @@ export function canAccessClubAdmin(role: UserRole) {
 }
 
 export function canAccessClubR(role: UserRole) {
-  return role === "club_admin" || role === "platform_admin";
+  return role === "club_admin" || role === "committee" || role === "reception" || role === "platform_admin";
+}
+
+export function canAccessClubRPermission(role: UserRole, permission: ClubRPermission) {
+  if (role === "platform_admin" || role === "club_admin") {
+    return true;
+  }
+
+  if (role === "committee") {
+    return permission !== "clubr:roles:manage" && permission !== "clubr:settings:manage" && permission !== "clubr:diagnostics";
+  }
+
+  if (role === "reception") {
+    return ["clubr", "clubr:members", "clubr:bookings", "clubr:courts", "clubr:notices", "clubr:settings"].includes(permission);
+  }
+
+  return false;
 }
 
 export function canManageOwnCoachResources({
@@ -167,12 +202,16 @@ function rolePriority(role: StoredUserRole | string | null | undefined) {
       return 60;
     case "club_admin":
       return 50;
+    case "committee":
+      return 45;
     case "head_coach":
       return 40;
     case "coach":
       return 30;
     case "parent":
       return 20;
+    case "reception":
+      return 15;
     case "player":
       return 10;
   }

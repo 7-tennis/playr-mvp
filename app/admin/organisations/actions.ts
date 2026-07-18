@@ -7,7 +7,7 @@ import type { AdminRole, OrganisationRole, Venue } from "@/types/courtside";
 
 const assignableRoles: AdminRole[] = ["platform_admin", "club_admin", "head_coach", "coach"];
 const organisationTypes: Venue["organisation_type"][] = ["academy", "club", "school", "district", "club_academy", "school_district"];
-const invitationRoles: OrganisationRole[] = ["organisation_admin", "head_coach", "coach", "assistant_coach", "club_manager", "sports_coordinator", "team_manager", "viewer"];
+const invitationRoles: OrganisationRole[] = ["organisation_admin", "head_coach", "coach", "assistant_coach", "club_manager", "committee", "reception", "sports_coordinator", "team_manager", "viewer"];
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);

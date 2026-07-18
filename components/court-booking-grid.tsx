@@ -37,6 +37,7 @@ type CourtBookingGridProps = {
   selectedCourtId: string;
   selectedDate: string;
   slots: Slot[];
+  slotMinutes: number;
   profiles: ProfileOption[];
   bookings: BookingBlock[];
   userProfileIds: string[];
@@ -58,7 +59,7 @@ function bookingLabel(booking: BookingBlock) {
     .join(" ");
 }
 
-export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots, profiles, bookings, userProfileIds }: CourtBookingGridProps) {
+export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMinutes, slots, profiles, bookings, userProfileIds }: CourtBookingGridProps) {
   const [activeSlot, setActiveSlot] = useState<Slot | null>(null);
   const router = useRouter();
   const selectedCourt = courts.find((court) => court.id === selectedCourtId) ?? courts[0];
@@ -100,7 +101,7 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
         <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-xl font-black text-court-navy">{selectedCourt?.name ?? "Court"}</h2>
-            <p className="text-sm text-slate-600">Tap an available slot to confirm a 60-minute booking.</p>
+            <p className="text-sm text-slate-600">Tap an available slot to confirm a {slotMinutes}-minute booking.</p>
           </div>
           <form className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
             <input name="court" type="hidden" value={selectedCourtId} />
@@ -167,7 +168,7 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slots,
               <div>
                 <h2 className="text-xl font-black text-court-navy">Book {selectedCourt?.name}</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  {activeSlot.timeLabel} for 60 minutes. Choose whether this is for you or a linked junior before confirming.
+                  {activeSlot.timeLabel} for {slotMinutes} minutes. Choose whether this is for you or a linked junior before confirming.
                 </p>
               </div>
               <button className="rounded border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50" onClick={() => setActiveSlot(null)} type="button">

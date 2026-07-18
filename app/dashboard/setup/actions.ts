@@ -194,7 +194,7 @@ export async function inviteSetupStaff(formData: FormData) {
   const { context, productContext, venueId } = await requireSetupManager(formData);
   const email = text(formData, "email").toLowerCase();
   const role = text(formData, "role") as OrganisationRole;
-  const clubRoles: OrganisationRole[] = ["club_manager", "head_coach", "coach", "sports_coordinator", "viewer"];
+  const clubRoles: OrganisationRole[] = ["club_manager", "committee", "reception", "head_coach", "coach", "sports_coordinator", "viewer"];
   const coachRoles: OrganisationRole[] = ["head_coach", "coach", "assistant_coach"];
   const allowedRoles = productContext === "clubr" ? clubRoles : coachRoles;
   const step = productContext === "clubr" ? "staff" : "coaches";

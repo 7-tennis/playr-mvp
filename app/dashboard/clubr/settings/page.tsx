@@ -1,41 +1,42 @@
 import Link from "next/link";
+import { saveClubBookingSettings, saveClubDetails } from "@/app/dashboard/clubr/actions";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { StatusIcon } from "@/components/playr-icons";
-import { loadOrganisationSetup, productSetupPath, setupProgress } from "@/lib/organisation-setup";
-import { ClubRPageFrame, getProtectedClubRPage } from "../clubr-shared";
+import { StatusAlert } from "@/components/status-alert";
+import { loadClubRBookingSettings } from "@/lib/clubr-data";
+import { clubRError, clubRMessage } from "@/lib/clubr-ui";
+import { productSetupPath } from "@/lib/organisation-setup";
+import { canAccessClubRPermission } from "@/lib/permissions";
+import { ClubRDataErrorCard, ClubRPageFrame, getProtectedClubRPage } from "../clubr-shared";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClubRSettingsPage() {
-  const { content, context, venue } = await getProtectedClubRPage();
+export default async function ClubRSettingsPage({ searchParams }: { searchParams?: { error?: string; message?: string } }) {
+  const { content, context, venue } = await getProtectedClubRPage("clubr:settings");
   if (content) return content;
   if (!context || !venue) return null;
-
-  const [snapshot, courts, booking, staff, access, requests] = await Promise.all([
-    loadOrganisationSetup(context.supabase, venue.id, "clubr"),
-    context.supabase.from("courts").select("id,status", { count: "exact" }).eq("venue_id", venue.id),
-    context.supabase.from("organisation_booking_settings").select("*").eq("venue_id", venue.id).maybeSingle(),
-    context.supabase.from("organisation_memberships").select("id", { count: "exact", head: true }).eq("venue_id", venue.id).eq("status", "active"),
-    context.supabase.from("organisation_court_access").select("id", { count: "exact", head: true }).eq("owner_venue_id", venue.id).eq("status", "active"),
-    context.supabase.from("organisation_court_access_requests").select("id", { count: "exact", head: true }).eq("owner_venue_id", venue.id).eq("status", "pending")
-  ]);
-  const progress = setupProgress(snapshot);
-  const activeCourts = (courts.data ?? []).filter((court) => court.status === "active").length;
+  const settingsResult = await loadClubRBookingSettings(context, venue.id);
+  const settings = settingsResult.data;
+  const canManage = canAccessClubRPermission(context.role, "clubr:settings:manage");
 
   return (
-    <ClubRPageFrame context={context} subtitle="Review and update club setup without rerunning a technical checklist." title="Settings" venue={venue}>
-      <section className="mb-4 rounded-lg border border-court-teal/20 bg-court-mist p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
-        <div><p className="section-kicker">Setup status</p><h2 className="mt-1 text-lg font-black text-court-navy">{snapshot.setup.status === "complete" ? "ClubR is ready" : `${progress.completeCount} of ${progress.totalCount} steps saved`}</h2></div>
-        <Link className="btn-primary mt-3 sm:mt-0" href={productSetupPath("clubr", snapshot.setup.current_step)}>{snapshot.setup.status === "complete" ? "Review Setup" : "Resume Setup"}</Link>
-      </section>
+    <ClubRPageFrame context={context} subtitle="How is this club configured?" title="Settings" venue={venue}>
+      <StatusAlert className="mb-4" message={clubRMessage(searchParams?.message)} tone="success" />
+      <StatusAlert className="mb-4" message={clubRError(searchParams?.error)} tone="error" />
+      {settingsResult.error ? <div className="mb-4"><ClubRDataErrorCard error={settingsResult.error} title="Booking settings could not be confirmed" /></div> : null}
 
       <div className="grid gap-3">
-        <CollapsibleCard summary={`${venue.name} · ${venue.contact_email ?? "Contact email to be added"}`} title="Organisation Details"><Link className="btn-secondary" href={productSetupPath("clubr", "details")}>Edit Club Details</Link></CollapsibleCard>
-        <CollapsibleCard summary={`${staff.count ?? 0} active staff and organisation leaders`} title="Staff and Roles"><Link className="btn-secondary" href={productSetupPath("clubr", "staff")}>Manage Staff Access</Link></CollapsibleCard>
-        <CollapsibleCard summary={booking.data?.no_courts ? "No PlayR-managed courts" : `${activeCourts} active courts`} title="Courts and Venues"><Link className="btn-secondary" href={productSetupPath("clubr", "courts")}>Manage Courts</Link></CollapsibleCard>
-        <CollapsibleCard summary={booking.data ? `${booking.data.slot_minutes} minute slots · ${booking.data.opening_time.slice(0, 5)}-${booking.data.closing_time.slice(0, 5)}` : "Booking basics still need attention"} title="Booking Rules"><Link className="btn-secondary" href={productSetupPath("clubr", "booking")}>Edit Booking Basics</Link></CollapsibleCard>
-        <CollapsibleCard badge={(requests.count ?? 0) > 0 ? <span className="ui-chip ui-chip-warning"><StatusIcon size={14} /> {requests.count} waiting</span> : null} summary={`${access.count ?? 0} active organisation access grants`} title="Shared Access"><Link className="btn-secondary" href={productSetupPath("clubr", "sharing")}>Manage Courts and Access</Link></CollapsibleCard>
-        <CollapsibleCard summary="Member invitations and linked player records" title="Members"><Link className="btn-secondary" href="/dashboard/clubr/members">Open Members</Link></CollapsibleCard>
+        <CollapsibleCard summary={`${venue.name} · ${venue.organisation_type.replaceAll("_", " ")}`} title="Club Details">
+          {canManage ? <form action={saveClubDetails} className="grid gap-3 sm:grid-cols-2"><input name="venueId" type="hidden" value={venue.id} /><label className="text-sm font-bold text-slate-700 sm:col-span-2">Club name<input className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={venue.name} name="name" required /></label><label className="text-sm font-bold text-slate-700">Contact email<input className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={venue.contact_email ?? ""} name="contactEmail" type="email" /></label><label className="text-sm font-bold text-slate-700">Contact telephone<input className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={venue.contact_phone ?? ""} name="contactPhone" /></label><label className="text-sm font-bold text-slate-700 sm:col-span-2">Physical address<textarea className="mt-1.5 min-h-20 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={venue.address ?? ""} name="address" /></label><label className="text-sm font-bold text-slate-700">Timezone<select className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={venue.timezone} name="timezone"><option value="Africa/Johannesburg">Africa/Johannesburg</option></select></label><button className="btn-primary self-end" type="submit">Save Club Details</button></form> : <div className="grid gap-2 text-sm"><p><strong>Email:</strong> {venue.contact_email ?? "Not configured"}</p><p><strong>Telephone:</strong> {venue.contact_phone ?? "Not configured"}</p><p><strong>Address:</strong> {venue.address ?? "Not configured"}</p><p><strong>Timezone:</strong> {venue.timezone}</p></div>}
+        </CollapsibleCard>
+
+        <CollapsibleCard summary={settings ? `${settings.slot_minutes} minute slots · ${settings.opening_time.slice(0, 5)}-${settings.closing_time.slice(0, 5)} · ${settings.advance_booking_days} days ahead` : "Booking rules have not been configured"} title="Booking Hours">
+          {canManage ? <form action={saveClubBookingSettings} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><input name="venueId" type="hidden" value={venue.id} /><label className="text-sm font-bold text-slate-700">Opens<input className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={settings?.opening_time.slice(0, 5) ?? "06:00"} name="openingTime" type="time" /></label><label className="text-sm font-bold text-slate-700">Closes<input className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={settings?.closing_time.slice(0, 5) ?? "21:00"} name="closingTime" type="time" /></label><label className="text-sm font-bold text-slate-700">Slot duration<select className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={settings?.slot_minutes ?? 60} name="slotMinutes"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option><option value="90">90 minutes</option><option value="120">120 minutes</option></select></label><label className="text-sm font-bold text-slate-700">Advance booking days<input className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={settings?.advance_booking_days ?? 7} max="90" min="1" name="advanceBookingDays" type="number" /></label><label className="text-sm font-bold text-slate-700">Maximum active bookings<input className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={settings?.max_active_bookings ?? 3} max="100" min="1" name="maxActiveBookings" type="number" /></label><label className="text-sm font-bold text-slate-700">Non-member price (R)<input className="mt-1.5 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" defaultValue={(settings?.non_member_price_cents ?? 0) / 100} min="0" name="nonMemberPrice" step="1" type="number" /></label><label className="flex items-center gap-2 rounded border border-slate-200 p-3 text-sm font-bold text-slate-700"><input defaultChecked={settings?.member_booking_enabled ?? true} name="memberBookingEnabled" type="checkbox" /> Member booking enabled</label><label className="flex items-center gap-2 rounded border border-slate-200 p-3 text-sm font-bold text-slate-700"><input defaultChecked={settings?.non_member_booking_enabled ?? false} name="nonMemberBookingEnabled" type="checkbox" /> Non-member booking enabled</label><button className="btn-primary lg:col-span-3" type="submit">Save Booking Rules</button></form> : <p className="text-sm leading-6 text-slate-600">Booking rules are read-only for your ClubR role.</p>}
+          <p className="mt-3 rounded bg-court-mist p-3 text-xs font-semibold leading-5 text-court-navy">These hours, slot intervals, booking windows and active-booking limits are enforced by the player booking server policy.</p>
+        </CollapsibleCard>
+
+        <CollapsibleCard summary="Court names, surfaces and operating status" title="Courts"><Link className="btn-secondary" href="/dashboard/clubr/courts">Manage Courts</Link></CollapsibleCard>
+        <CollapsibleCard summary="Logo and club colours" title="Appearance"><div className="ui-empty-card">Appearance settings are coming later. No branding values are invented in this phase.</div></CollapsibleCard>
+        {canManage ? <CollapsibleCard summary="Authorised staff, roles and shared court access" title="Advanced Setup"><Link className="btn-secondary" href={productSetupPath("clubr", "staff")}>Manage Staff Access</Link></CollapsibleCard> : null}
       </div>
     </ClubRPageFrame>
   );

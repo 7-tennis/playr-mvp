@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import { BookingIcon, ChevronDownIcon, ClubIcon, EntriesIcon, EventIcon } from "@/components/playr-icons";
+import { BookingIcon, ChevronDownIcon, ClubIcon, EntriesIcon, StatusIcon } from "@/components/playr-icons";
+import type { UserRole } from "@/lib/permissions";
 
 const clubRLinks = [
   { href: "/dashboard/clubr/members", label: "Members", icon: EntriesIcon },
   { href: "/dashboard/clubr/bookings", label: "Bookings", icon: BookingIcon },
   { href: "/dashboard/clubr", label: "MyClubR", icon: ClubIcon, isHub: true },
-  { href: "/dashboard/clubr/events", label: "Events", icon: EventIcon },
+  { href: "/dashboard/clubr/courts", label: "Courts", icon: StatusIcon },
   { href: "/dashboard/clubr/more", label: "More", icon: ChevronDownIcon }
 ];
 
@@ -21,7 +22,7 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function ClubRDesktopNav() {
+export function ClubRDesktopNav({ role: _role }: { role: UserRole }) {
   const pathname = usePathname();
 
   return (
@@ -55,7 +56,7 @@ export function ClubRDesktopNav() {
   );
 }
 
-export function ClubRBottomNav() {
+export function ClubRBottomNav({ role: _role }: { role: UserRole }) {
   const pathname = usePathname();
 
   return (

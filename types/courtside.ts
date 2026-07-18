@@ -9,7 +9,7 @@ export type Sport = "tennis" | "pickleball" | "futsal" | "multi_sport";
 export type EventStatus = "draft" | "published" | "cancelled" | "completed";
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "refunded" | "cancelled";
 export type EntryStatus = "active" | "cancelled" | "checked_in" | "no_show";
-export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "platform_admin";
+export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "committee" | "reception" | "platform_admin";
 export type AdminRole = UserRole | "admin" | "staff";
 export type CourtStatus = "active" | "inactive";
 export type CourtBookingStatus = "confirmed" | "cancelled";
@@ -80,6 +80,8 @@ export type OrganisationRole =
   | "club_manager"
   | "sports_coordinator"
   | "team_manager"
+  | "committee"
+  | "reception"
   | "viewer";
 export type OrganisationMembershipStatus = "pending" | "active" | "declined" | "suspended" | "removed";
 export type OrganisationInvitationStatus = "pending" | "accepted" | "declined" | "expired" | "cancelled";
@@ -93,6 +95,17 @@ export type OrganisationSetupStatus = "not_started" | "in_progress" | "complete"
 export type CourtAccessReadinessStatus = "active" | "pending" | "no_courts_shared" | "unavailable" | "expired" | "revoked" | "invalid_context";
 export type CourtAccessRequestStatus = "pending" | "active" | "declined" | "cancelled" | "expired";
 export type CoachingProposalStatus = "not_specified" | "proposed" | "confirmed" | "declined";
+export type ClubMembershipStatus = "active" | "inactive" | "pending";
+export type ClubNoticeCategory = "pinned" | "general" | "maintenance" | "important";
+export type ClubOperationalBlockReason =
+  | "maintenance"
+  | "weather"
+  | "private_club_use"
+  | "safety"
+  | "committee_use"
+  | "club_operations"
+  | "court_preparation"
+  | "other";
 
 export interface Profile {
   id: string;
@@ -225,6 +238,52 @@ export interface Venue {
   description: string | null;
   primary_admin_profile_id: string | null;
   head_coach_profile_id: string | null;
+  timezone: string;
+  primary_colour: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembership {
+  id: string;
+  venue_id: string;
+  profile_id: string;
+  status: ClubMembershipStatus;
+  joined_at: string | null;
+  deactivated_at: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubNotice {
+  id: string;
+  venue_id: string;
+  title: string;
+  message: string;
+  category: ClubNoticeCategory;
+  is_active: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
+  created_by_user_id: string;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubOperationalBlock {
+  id: string;
+  venue_id: string;
+  court_id: string;
+  court_booking_id: string;
+  reason: ClubOperationalBlockReason;
+  note: string | null;
+  status: "active" | "released";
+  created_by_user_id: string;
+  released_by_user_id: string | null;
+  released_at: string | null;
   created_at: string;
   updated_at: string;
 }

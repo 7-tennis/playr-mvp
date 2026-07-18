@@ -31,12 +31,14 @@ export const organisationRoles: OrganisationRole[] = [
   "club_manager",
   "sports_coordinator",
   "team_manager",
+  "committee",
+  "reception",
   "viewer"
 ];
 
 export const coachingOrganisationRoles: OrganisationRole[] = ["head_coach", "coach", "assistant_coach"];
 export const coachManagerOrganisationRoles: OrganisationRole[] = ["organisation_admin", "club_manager", "head_coach"];
-export const clubROrganisationRoles: OrganisationRole[] = ["organisation_admin", "club_manager"];
+export const clubROrganisationRoles: OrganisationRole[] = ["organisation_admin", "club_manager", "committee", "reception"];
 export const organisationMembershipStatuses: OrganisationMembershipStatus[] = ["pending", "active", "declined", "suspended", "removed"];
 
 export function organisationRoleLabel(role: OrganisationRole | string | null | undefined) {
@@ -55,6 +57,10 @@ export function organisationRoleLabel(role: OrganisationRole | string | null | u
       return "Sports Coordinator";
     case "team_manager":
       return "Team Manager";
+    case "committee":
+      return "Committee";
+    case "reception":
+      return "Reception";
     case "viewer":
       return "Viewer";
     default:
@@ -87,6 +93,8 @@ export function organisationRolePriority(role: OrganisationRole | string | null 
       return 60;
     case "head_coach":
       return 50;
+    case "committee":
+      return 48;
     case "sports_coordinator":
       return 45;
     case "team_manager":
@@ -95,6 +103,8 @@ export function organisationRolePriority(role: OrganisationRole | string | null 
       return 35;
     case "assistant_coach":
       return 30;
+    case "reception":
+      return 20;
     case "viewer":
       return 10;
     default:
@@ -107,6 +117,10 @@ export function appRoleForOrganisationRole(role: OrganisationRole | string | nul
     case "organisation_admin":
     case "club_manager":
       return "club_admin";
+    case "committee":
+      return "committee";
+    case "reception":
+      return "reception";
     case "head_coach":
       return "head_coach";
     case "coach":
@@ -120,6 +134,8 @@ export function appRoleForOrganisationRole(role: OrganisationRole | string | nul
 export function productForOrganisationRole(role: OrganisationRole | string | null | undefined): ProductContext {
   switch (appRoleForOrganisationRole(role)) {
     case "club_admin":
+    case "committee":
+    case "reception":
       return "clubr";
     case "head_coach":
     case "coach":
@@ -134,6 +150,10 @@ export function productForOrganisationMembership(membership: Pick<OrganisationMe
 
   if (membership.role === "sports_coordinator" || membership.role === "team_manager") {
     return "teamr";
+  }
+
+  if (membership.role === "committee" || membership.role === "reception") {
+    return "clubr";
   }
 
   if (
@@ -161,6 +181,8 @@ export function appRoleForOrganisationMembership(membership: Pick<OrganisationMe
 export function productLabelForOrganisationRole(role: OrganisationRole | string | null | undefined) {
   switch (appRoleForOrganisationRole(role)) {
     case "club_admin":
+    case "committee":
+    case "reception":
       return "ClubR";
     case "head_coach":
     case "coach":
@@ -272,7 +294,10 @@ export function pickActiveOrganisationMembership(memberships: OrganisationMember
   }
 
   if (preference) {
-    const preferred = memberships
+    const preferredProductMemberships = memberships.filter(
+      (membership) => membership.venue_id === preference.venue_id && productForOrganisationMembership(membership) === preference.product_context
+    );
+    const preferred = (preferredProductMemberships.length > 0 ? preferredProductMemberships : memberships.filter((membership) => membership.venue_id === preference.venue_id))
       .filter((membership) => membership.venue_id === preference.venue_id)
       .sort((left, right) => organisationRolePriority(right.role) - organisationRolePriority(left.role))[0];
 

@@ -34,11 +34,11 @@ function zaDateInput(date = new Date()) {
   }).format(date);
 }
 
-function dateWithSaOffset(date: string, hour: number) {
-  return new Date(`${date}T${String(hour).padStart(2, "0")}:00:00+02:00`);
+function dateWithSaOffset(date: string, hour: number, minute = 0) {
+  return new Date(`${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+02:00`);
 }
 
-function clampDate(value?: string) {
+function clampDate(value: string | undefined, advanceBookingDays: number) {
   const today = zaDateInput();
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return today;
@@ -47,7 +47,7 @@ function clampDate(value?: string) {
   const selected = dateWithSaOffset(value, 0).getTime();
   const start = dateWithSaOffset(today, 0).getTime();
   const earliest = start - 7 * 24 * 60 * 60 * 1000;
-  const latest = start + 28 * 24 * 60 * 60 * 1000;
+  const latest = start + Math.max(1, Math.min(90, advanceBookingDays)) * 24 * 60 * 60 * 1000;
   return selected >= earliest && selected <= latest ? value : today;
 }
 
@@ -68,14 +68,19 @@ function weekRangeLabel(start: number, end: number) {
   return `${formatter.format(new Date(start))} - ${formatter.format(new Date(end - 1))} ${year}`;
 }
 
-function slotsForDate(date: string) {
-  return Array.from({ length: 15 }, (_, index) => {
-    const start = dateWithSaOffset(date, 6 + index);
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
+function slotsForDate(date: string, openingTime: string, closingTime: string, slotMinutes: number) {
+  const [openingHour, openingMinute] = openingTime.slice(0, 5).split(":").map(Number);
+  const [closingHour, closingMinute] = closingTime.slice(0, 5).split(":").map(Number);
+  const opening = dateWithSaOffset(date, openingHour, openingMinute);
+  const closing = dateWithSaOffset(date, closingHour, closingMinute);
+  const slotCount = Math.max(0, Math.floor((closing.getTime() - opening.getTime()) / (slotMinutes * 60 * 1000)));
+  return Array.from({ length: slotCount }, (_, index) => {
+    const start = new Date(opening.getTime() + index * slotMinutes * 60 * 1000);
+    const end = new Date(start.getTime() + slotMinutes * 60 * 1000);
     return {
       startTime: start.toISOString(),
       endTime: end.toISOString(),
-      timeLabel: `${String(start.getUTCHours() + 2).padStart(2, "0")}:00 - ${String(end.getUTCHours() + 2).padStart(2, "0")}:00`
+      timeLabel: `${new Intl.DateTimeFormat("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Johannesburg" }).format(start)} - ${new Intl.DateTimeFormat("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Africa/Johannesburg" }).format(end)}`
     };
   });
 }
@@ -108,14 +113,6 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
     redirect("/login");
   }
 
-  const selectedDate = clampDate(searchParams?.date);
-  const dayStart = dateWithSaOffset(selectedDate, 0);
-  const selectedWeek = weekRange(selectedDate);
-  const rangeStart = dateWithSaOffset(dateInputFromSerial(selectedWeek.start), 0);
-  const rangeEnd = dateWithSaOffset(dateInputFromSerial(selectedWeek.end), 0);
-  const previousWeekDate = dateInputFromSerial(Date.parse(`${selectedDate}T00:00:00Z`) - 7 * 24 * 60 * 60 * 1000);
-  const nextWeekDate = dateInputFromSerial(Date.parse(`${selectedDate}T00:00:00Z`) + 7 * 24 * 60 * 60 * 1000);
-
   const { data: courtData, error: courtsError } = await supabase
     .from("courts")
     .select("*")
@@ -124,6 +121,25 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
 
   const courts = (courtData ?? []) as Court[];
   const selectedCourtId = courts.some((court) => court.id === searchParams?.court) ? String(searchParams?.court) : courts[0]?.id;
+  const selectedCourt = courts.find((court) => court.id === selectedCourtId) ?? null;
+  const { data: bookingSettings } = selectedCourt?.venue_id
+    ? await supabase
+        .from("organisation_booking_settings")
+        .select("opening_time,closing_time,slot_minutes,advance_booking_days")
+        .eq("venue_id", selectedCourt.venue_id)
+        .maybeSingle()
+    : { data: null };
+  const slotMinutes = Number(bookingSettings?.slot_minutes ?? 60);
+  const openingTime = selectedCourt?.opening_time ?? bookingSettings?.opening_time ?? "06:00";
+  const closingTime = selectedCourt?.closing_time ?? bookingSettings?.closing_time ?? "21:00";
+  const advanceBookingDays = Number(bookingSettings?.advance_booking_days ?? 7);
+  const selectedDate = clampDate(searchParams?.date, advanceBookingDays);
+  const dayStart = dateWithSaOffset(selectedDate, 0);
+  const selectedWeek = weekRange(selectedDate);
+  const rangeStart = dateWithSaOffset(dateInputFromSerial(selectedWeek.start), 0);
+  const rangeEnd = dateWithSaOffset(dateInputFromSerial(selectedWeek.end), 0);
+  const previousWeekDate = dateInputFromSerial(Date.parse(`${selectedDate}T00:00:00Z`) - 7 * 24 * 60 * 60 * 1000);
+  const nextWeekDate = dateInputFromSerial(Date.parse(`${selectedDate}T00:00:00Z`) + 7 * 24 * 60 * 60 * 1000);
 
   const { data: adultProfileData } = await supabase
     .from("profiles")
@@ -224,7 +240,8 @@ export default async function BookCourtPage({ searchParams }: BookCourtPageProps
           profiles={profiles}
           selectedCourtId={selectedCourtId}
           selectedDate={selectedDate}
-          slots={slotsForDate(selectedDate)}
+          slotMinutes={slotMinutes}
+          slots={slotsForDate(selectedDate, openingTime, closingTime, slotMinutes)}
           userProfileIds={profileIds}
         />
       )}

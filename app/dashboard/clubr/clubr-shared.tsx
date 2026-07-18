@@ -7,6 +7,8 @@ import { ClubIcon, PrivateIcon } from "@/components/playr-icons";
 import { clubRScopeLabel, getClubRAccess, loadClubRVenue, type AuthenticatedClubRContext, type ClubRAccess } from "@/lib/clubr";
 import { formatLabel } from "@/lib/courtside-format";
 import { roleLabel } from "@/lib/permissions";
+import type { ClubRPermission } from "@/lib/permissions";
+import type { ClubRDataError } from "@/lib/clubr-data";
 
 export function ClubRRestricted({ access }: { access: ClubRAccess }) {
   const roleText = access.context.kind === "authenticated" ? roleLabel(access.context.role) : "Signed-in user";
@@ -19,7 +21,7 @@ export function ClubRRestricted({ access }: { access: ClubRAccess }) {
         </div>
         <h2 className="section-title mt-4">ClubR access restricted.</h2>
         <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
-          Ask the PlayR SupeR UseR to assign you as Club Admin for this venue. Current role: {roleText}.
+          Ask your club administrator to assign the ClubR access needed for this page. Current role: {roleText}.
         </p>
         <Link className="btn-secondary mt-5" href="/dashboard">
           Back to MyPlayR
@@ -52,27 +54,29 @@ export function ClubRPageFrame({
 }) {
   return (
     <PageShell eyebrow="ClubR" subtitle={subtitle} title={title}>
-      <ClubRDesktopNav />
-      <section className="surface-card mb-5 p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="section-kicker">Access</p>
-            <h2 className="section-title mt-1">{roleLabel(context.role)}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {clubRScopeLabel(context, venue)} · {venue?.organisation_type ? formatLabel(venue.organisation_type) : "Venue setup to be confirmed"}
-            </p>
-          </div>
-          <span className="ui-chip ui-chip-brand">
-            <ClubIcon size={14} /> {context.role === "platform_admin" ? "Global ClubR view" : "Venue-scoped ClubR"}
-          </span>
-        </div>
+      <ClubRDesktopNav role={context.role} />
+      <section className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+        <p className="min-w-0 text-sm font-bold text-court-navy">
+          {clubRScopeLabel(context, venue)}
+          <span className="ml-2 font-semibold text-slate-500">{roleLabel(context.role)} · {venue?.organisation_type ? formatLabel(venue.organisation_type) : "Venue setup pending"}</span>
+        </p>
+        <span className="ui-chip ui-chip-brand"><ClubIcon size={14} /> {context.role === "platform_admin" ? "Global" : "ClubR"}</span>
       </section>
       <div className="mb-5">
         <OrganisationSwitcher activeMembershipId={context.activeOrganisationMembership?.id ?? null} memberships={context.organisationMemberships} />
       </div>
       <div className="pb-24 md:pb-0">{children}</div>
-      <ClubRBottomNav />
+      <ClubRBottomNav role={context.role} />
     </PageShell>
+  );
+}
+
+export function ClubRDataErrorCard({ error, title = "ClubR data is unavailable" }: { error: ClubRDataError; title?: string }) {
+  return (
+    <section className="rounded-lg border border-red-200 bg-red-50 p-4" role="alert">
+      <h2 className="font-black text-red-900">{title}</h2>
+      <p className="mt-1 text-sm leading-6 text-red-800">{error.message} No availability or activity assumptions were made.</p>
+    </section>
   );
 }
 
@@ -125,8 +129,8 @@ export function ClubRActionCard({
   );
 }
 
-export async function getProtectedClubRPage() {
-  const access = await getClubRAccess();
+export async function getProtectedClubRPage(permission: ClubRPermission = "clubr") {
+  const access = await getClubRAccess(permission);
 
   if (access.context.kind === "no-config") {
     return { access, content: <ClubRNoConfig />, context: null, venue: null };

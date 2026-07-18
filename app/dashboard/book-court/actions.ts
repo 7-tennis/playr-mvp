@@ -40,7 +40,6 @@ export async function createCourtBooking(formData: FormData) {
   }
 
   const startTime = new Date(startValue);
-  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
 
   if (!Number.isFinite(startTime.getTime())) {
     redirectWithError("Choose a valid court time.", returnTo);
@@ -61,10 +60,16 @@ export async function createCourtBooking(formData: FormData) {
     redirectWithError("That court is not available.", returnTo);
   }
 
-  const { data: bookingSettings } = courtData.venue_id
-    ? await supabase.from("organisation_booking_settings").select("advance_booking_days").eq("venue_id", courtData.venue_id).maybeSingle()
-    : { data: null };
+  const { data: bookingSettings, error: bookingSettingsError } = courtData.venue_id
+    ? await supabase.from("organisation_booking_settings").select("advance_booking_days,slot_minutes").eq("venue_id", courtData.venue_id).maybeSingle()
+    : { data: null, error: null };
+  if (bookingSettingsError) {
+    console.error("CourtSide booking settings could not be loaded", { code: bookingSettingsError.code, courtId });
+    redirectWithError("Court booking rules could not be confirmed. Please try again.", returnTo);
+  }
   const advanceBookingDays = Math.max(1, Math.min(90, Number(bookingSettings?.advance_booking_days ?? 7)));
+  const slotMinutes = Math.max(15, Math.min(120, Number(bookingSettings?.slot_minutes ?? 60)));
+  const endTime = new Date(startTime.getTime() + slotMinutes * 60 * 1000);
   if (!isWithinUserBookingWindow(startTime, advanceBookingDays)) {
     redirectWithError(`Choose a time in the next ${advanceBookingDays} days.`, returnTo);
   }

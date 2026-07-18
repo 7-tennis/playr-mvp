@@ -66,7 +66,10 @@ export async function switchActiveOrganisation(formData: FormData) {
   }
 
   revalidateOrganisationSurfaces();
-  if (productContext === "clubr" || productContext === "coachr") {
+  if (
+    productContext === "coachr"
+    || (productContext === "clubr" && (membership.role === "organisation_admin" || membership.role === "club_manager"))
+  ) {
     const setup = await loadOrganisationSetup(context.supabase, membership.venue_id, productContext);
 
     if (setup.migrationReady && setup.setup.status !== "complete") {

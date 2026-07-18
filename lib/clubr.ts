@@ -1,4 +1,11 @@
-import { canAccessClubR, getPermissionContext, roleLabel, type PermissionContext, type UserRole } from "@/lib/permissions";
+import {
+  canAccessClubRPermission,
+  getPermissionContext,
+  roleLabel,
+  type ClubRPermission,
+  type PermissionContext,
+  type UserRole
+} from "@/lib/permissions";
 import type { Venue } from "@/types/courtside";
 
 export type AuthenticatedClubRContext = Extract<PermissionContext, { kind: "authenticated" }>;
@@ -39,7 +46,7 @@ export function clubRScopeLabel(context: AuthenticatedClubRContext, venue: Pick<
   return venue?.name ?? "Assigned venue";
 }
 
-export async function getClubRAccess() {
+export async function getClubRAccess(permission: ClubRPermission = "clubr") {
   const context = await getPermissionContext();
 
   if (context.kind === "no-config") {
@@ -47,20 +54,22 @@ export async function getClubRAccess() {
       allowed: false,
       context,
       reason: "Supabase is not configured.",
-      requiredRoles: ["club_admin", "platform_admin"] as UserRole[]
+      permission,
+      requiredRoles: ["club_admin", "committee", "reception", "platform_admin"] as UserRole[]
     };
   }
 
-  const roleAllowed = canAccessClubR(context.role);
+  const roleAllowed = canAccessClubRPermission(context.role, permission);
   const venueAllowed = context.role === "platform_admin" || Boolean(context.venueId);
 
   return {
     allowed: roleAllowed && venueAllowed,
     context,
+    permission,
     reason: roleAllowed
       ? "ClubR access needs an assigned venue."
       : `Your current role is ${roleLabel(context.role)}.`,
-    requiredRoles: ["club_admin", "platform_admin"] as UserRole[]
+    requiredRoles: ["club_admin", "committee", "reception", "platform_admin"] as UserRole[]
   };
 }
 
@@ -69,6 +78,10 @@ export async function loadClubRVenue(context: AuthenticatedClubRContext) {
     return null;
   }
 
-  const { data } = await context.supabase.from("venues").select("id,name,slug,status,organisation_type,created_at,updated_at").eq("id", context.venueId).maybeSingle();
+  const { data } = await context.supabase
+    .from("venues")
+    .select("id,name,slug,status,organisation_type,logo_url,contact_email,contact_phone,main_contact_name,address,description,primary_admin_profile_id,head_coach_profile_id,timezone,primary_colour,created_at,updated_at")
+    .eq("id", context.venueId)
+    .maybeSingle();
   return (data as Venue | null) ?? null;
 }

@@ -182,7 +182,7 @@ function BookingStep({ product, settings }: { product: OrganisationSetupProduct;
 function StaffStep({ invitations, product }: { invitations: OrganisationInvitation[]; product: OrganisationSetupProduct }) {
   const step = product === "clubr" ? "staff" : "coaches";
   const roles = product === "clubr"
-    ? [{ value: "club_manager", label: "Club manager" }, { value: "head_coach", label: "Head Coach" }, { value: "coach", label: "Coach" }, { value: "sports_coordinator", label: "Sports coordinator" }, { value: "viewer", label: "Staff / viewer" }]
+    ? [{ value: "club_manager", label: "Club manager" }, { value: "committee", label: "Committee" }, { value: "reception", label: "Reception" }, { value: "head_coach", label: "Head Coach" }, { value: "coach", label: "Coach" }, { value: "sports_coordinator", label: "Sports coordinator" }, { value: "viewer", label: "Member / viewer" }]
     : [{ value: "head_coach", label: "Head Coach" }, { value: "coach", label: "Coach" }, { value: "assistant_coach", label: "Assistant coach" }];
 
   return (

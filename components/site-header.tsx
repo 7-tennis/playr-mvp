@@ -3,6 +3,7 @@ import { signOut } from "@/app/auth/actions";
 import { PlayerBottomNav, PlayerDesktopNav } from "@/components/player-nav";
 import { NotificationIcon } from "@/components/playr-icons";
 import { canAccessClubR, canAccessCoachR, loadActiveRoleRow, normalizeStoredRole, roleLabel, type UserRole } from "@/lib/permissions";
+import { appRoleForOrganisationMembership, loadActiveOrganisationPreference, loadOrganisationMembershipsForUser, pickActiveOrganisationMembership } from "@/lib/organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
@@ -21,15 +22,19 @@ async function getSessionState() {
       return { isLoggedIn: false, isAdmin: false, isCoach: false, role: "player" as UserRole, unreadNotifications: 0 };
     }
 
-    const [activeRole, { count: unreadCount }] = await Promise.all([
+    const [activeRole, memberships, preference, { count: unreadCount }] = await Promise.all([
       loadActiveRoleRow(supabase, user.id),
+      loadOrganisationMembershipsForUser(supabase, user.id),
+      loadActiveOrganisationPreference(supabase, user.id),
       supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .is("read_at", null)
     ]);
-    const role = normalizeStoredRole(activeRole?.role ?? null);
+    const storedRole = normalizeStoredRole(activeRole?.role ?? null);
+    const activeMembership = pickActiveOrganisationMembership(memberships, preference);
+    const role = storedRole === "platform_admin" ? storedRole : activeMembership ? appRoleForOrganisationMembership(activeMembership) : storedRole;
 
     return { isLoggedIn: true, isAdmin: canAccessClubR(role), isCoach: canAccessCoachR(role), role, unreadNotifications: unreadCount ?? 0 };
   } catch (error) {

@@ -21,6 +21,15 @@ export function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+export function formatTime(value: string) {
+  return new Intl.DateTimeFormat("en-ZA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Africa/Johannesburg"
+  }).format(new Date(value));
+}
+
 export function formatLabel(value: string | null) {
   if (!value) {
     return "Open";
