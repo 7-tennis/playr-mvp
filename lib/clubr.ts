@@ -85,3 +85,21 @@ export async function loadClubRVenue(context: AuthenticatedClubRContext) {
     .maybeSingle();
   return (data as Venue | null) ?? null;
 }
+
+export async function hasClubRMembershipCapability(
+  context: AuthenticatedClubRContext,
+  permission: "catalog_manage" | "applications_review" | "subscriptions_manage" | "billing_view" | "payments_record",
+  venueId = context.venueId
+) {
+  if (!venueId) return false;
+  const { data, error } = await context.supabase.rpc("clubr_membership_permission", {
+    check_permission: permission,
+    check_user_id: context.user.id,
+    check_venue_id: venueId
+  });
+  if (error) {
+    console.error("[clubr-memberships] capability_load_failed", { code: error.code, permission, venueId });
+    return false;
+  }
+  return data === true;
+}

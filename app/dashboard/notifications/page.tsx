@@ -44,6 +44,14 @@ const notificationVisuals: Record<NotificationType, { className: string }> = {
   lesson_time_requested: { className: "bg-court-mist text-court-teal" },
   lesson_move_declined: { className: "bg-slate-100 text-slate-700" },
   lesson_time_confirmed: { className: "bg-emerald-50 text-emerald-700" },
+  membership_application_submitted: { className: "bg-court-mist text-court-teal" },
+  membership_application_approved: { className: "bg-emerald-50 text-emerald-700" },
+  membership_application_declined: { className: "bg-slate-100 text-slate-700" },
+  membership_application_correction: { className: "bg-amber-50 text-amber-800" },
+  membership_activated: { className: "bg-emerald-50 text-emerald-700" },
+  membership_expiring: { className: "bg-amber-50 text-amber-800" },
+  membership_expired: { className: "bg-slate-100 text-slate-700" },
+  membership_manual_payment_recorded: { className: "bg-court-mist text-court-teal" },
   new_message: { className: "bg-court-navy text-white" }
 };
 
@@ -73,6 +81,14 @@ function notificationIcon(type: NotificationType) {
     case "leaderboard_changed":
       return <LeaderboardIcon size={20} />;
     case "membership_renewal":
+    case "membership_application_submitted":
+    case "membership_application_approved":
+    case "membership_application_declined":
+    case "membership_application_correction":
+    case "membership_activated":
+    case "membership_expiring":
+    case "membership_expired":
+    case "membership_manual_payment_recorded":
       return <MembershipIcon size={20} />;
     case "shop_reservation_update":
       return <ShopIcon size={20} />;

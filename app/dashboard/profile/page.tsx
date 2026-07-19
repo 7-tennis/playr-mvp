@@ -429,9 +429,9 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
         <MemberSummaryCard juniorCount={juniors.length} profile={profile} />
 
         <section>
-          <div className="mb-4">
-            <p className="section-kicker">Memberships</p>
-            <h2 className="section-title mt-2">Membership setup</h2>
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div><p className="section-kicker">Memberships</p><h2 className="section-title mt-2">Membership setup</h2></div>
+            <Link className="btn-secondary" href="/dashboard/memberships"><MembershipIcon size={16} /> View Memberships</Link>
           </div>
           <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <MembershipCard juniorCount={juniors.length} profile={profile} />

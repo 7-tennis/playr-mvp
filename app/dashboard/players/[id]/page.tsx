@@ -26,6 +26,7 @@ import {
   StatusIcon
 } from "@/components/playr-icons";
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { formatMembershipMoney, loadMembershipSubscriptions, membershipStatusLabel } from "@/lib/club-memberships";
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
 import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
@@ -463,12 +464,17 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
   const ratingText = player.is_junior ? formatJuniorRating(player.junior_stage, player.junior_rating) : rating ? rating.rating_value.toFixed(1) : "No active rating yet";
   const confidenceText = player.is_junior ? formatLabel(player.junior_rating_confidence) : rating ? formatLabel(rating.confidence) : "No rating yet";
   const participationText = player.is_junior ? `${player.participation_score} pts` : `${player.participation_score ?? 0} pts`;
-  const profileHref = `/dashboard/profile?member=${player.id}#member-details`;
   const requestReturnTo = `/dashboard/players/${player.id}#lesson-requests`;
   const pendingSessionRequests = sessionRequests.filter((request) => isPendingSessionRequest(request.status));
   const recentSessionRequests = sessionRequests.filter((request) => !isPendingSessionRequest(request.status)).slice(0, 8);
   const requestByOccurrence = new Map(sessionRequests.map((request) => [request.occurrence_id, request]));
   const cancelledSessions = privateSessionActivity.filter((activity) => activity.occurrence_status === "cancelled" || activity.occurrence_status === "rain" || activity.occurrence_status === "sick");
+  const membershipSubscriptions = await loadMembershipSubscriptions(supabase);
+  const commercialMembership = membershipSubscriptions.data.find((subscription) =>
+    subscription.coveredMembers.some((member) => member.profile_id === player.id)
+    && ["pending_activation", "active", "paused", "expiring"].includes(subscription.status)
+  ) ?? null;
+  const membershipHref = commercialMembership ? `/dashboard/memberships/${commercialMembership.id}` : "/dashboard/memberships";
 
   return (
     <PageShell eyebrow="Player Detail" subtitle="Player profile, progress and upcoming tennis activity." title={playerName(player)}>
@@ -632,21 +638,23 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
           }
           eyebrow="Membership"
           id="membership"
-          summary={`${memberStatusLabel(player.member_status)} · ${clubName ?? "No club linked"} · Renewal to be confirmed`}
+          summary={commercialMembership
+            ? `${membershipStatusLabel(commercialMembership.status)} · ${commercialMembership.venue?.name ?? "Club"} · ${commercialMembership.expiry_date ? `Expires ${formatDate(commercialMembership.expiry_date)}` : "No fixed expiry"}`
+            : `${memberStatusLabel(player.member_status)} · ${clubName ?? "No club linked"} · Renewal to be confirmed`}
           title="Membership Details"
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <DetailRow label="Membership Status" value={memberStatusLabel(player.member_status)} />
-            <DetailRow label="Membership Type" value="Membership details to be confirmed" />
-            <DetailRow label="Renewal Date" value="Renewal date to be confirmed" />
-            <DetailRow label="Club" value={clubName ?? "No club linked yet"} />
-            <DetailRow label="Pricing" value="Pricing to be confirmed" />
-            <DetailRow label="Benefits" value="Benefits depend on your club setup" />
+            <DetailRow label="Membership Status" value={commercialMembership ? membershipStatusLabel(commercialMembership.status) : memberStatusLabel(player.member_status)} />
+            <DetailRow label="Membership Type" value={commercialMembership?.plan?.name ?? "Membership details to be confirmed"} />
+            <DetailRow label="Renewal Date" value={commercialMembership?.expiry_date ? formatDate(commercialMembership.expiry_date) : commercialMembership ? "No fixed expiry" : "Renewal date to be confirmed"} />
+            <DetailRow label="Club" value={commercialMembership?.venue?.name ?? clubName ?? "No club linked yet"} />
+            <DetailRow label="Amount Due" value={commercialMembership ? formatMembershipMoney(commercialMembership.amount_due_cents, commercialMembership.currency) : "Pricing to be confirmed"} />
+            <DetailRow label="Benefits" value={commercialMembership?.plan?.benefits_text ?? "Benefits depend on your club setup"} />
           </div>
           <div className="mt-4 flex flex-col gap-3 rounded-lg border border-court-teal/25 bg-court-mist p-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-bold leading-6 text-court-navy">Membership and billing rules are managed in the private Profile hub.</p>
-            <Link className="btn-secondary shrink-0" href={profileHref}>
-              Open Profile
+            <Link className="btn-secondary shrink-0" href={membershipHref}>
+              {commercialMembership ? "View Membership" : "Memberships"}
             </Link>
           </div>
         </CollapsibleCard>

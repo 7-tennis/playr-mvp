@@ -69,6 +69,14 @@ export type NotificationType =
   | "lesson_time_requested"
   | "lesson_move_declined"
   | "lesson_time_confirmed"
+  | "membership_application_submitted"
+  | "membership_application_approved"
+  | "membership_application_declined"
+  | "membership_application_correction"
+  | "membership_activated"
+  | "membership_expiring"
+  | "membership_expired"
+  | "membership_manual_payment_recorded"
   | "new_message";
 export type NotificationStatus = "unread" | "read" | "action_required" | "resolved" | "expired";
 export type OrganisationType = "academy" | "club" | "school" | "district" | "club_academy" | "school_district";
@@ -96,6 +104,16 @@ export type CourtAccessReadinessStatus = "active" | "pending" | "no_courts_share
 export type CourtAccessRequestStatus = "pending" | "active" | "declined" | "cancelled" | "expired";
 export type CoachingProposalStatus = "not_specified" | "proposed" | "confirmed" | "declined";
 export type ClubMembershipStatus = "active" | "inactive" | "pending";
+export type ClubMembershipEligibilityClass = "any" | "adult" | "junior";
+export type ClubMembershipPlanStatus = "draft" | "active" | "archived";
+export type ClubMembershipDiscountType = "none" | "percentage" | "fixed";
+export type ClubMembershipPaymentFrequency = "once_off" | "monthly" | "every_3_months" | "every_6_months" | "annually";
+export type ClubMembershipApplicationStatus = "draft" | "pending_application" | "pending_approval" | "approved" | "declined" | "correction_requested" | "cancelled";
+export type ClubMembershipSubscriptionStatus = "pending_activation" | "active" | "paused" | "expiring" | "expired" | "cancelled";
+export type ClubMembershipCoveredMemberStatus = "pending" | "active" | "paused" | "expired" | "cancelled";
+export type ClubMembershipMemberRole = "primary" | "adult_addon" | "junior_addon";
+export type ClubMembershipBillingStatus = "scheduled" | "manually_paid" | "waived" | "cancelled";
+export type ClubMembershipInvoiceStatus = "draft" | "issued" | "due" | "manually_paid" | "cancelled";
 export type ClubNoticeCategory = "pinned" | "general" | "maintenance" | "important";
 export type ClubOperationalBlockReason =
   | "maintenance"
@@ -256,6 +274,258 @@ export interface ClubMembership {
   notes: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ClubMembershipCategory {
+  id: string;
+  venue_id: string;
+  name: string;
+  description: string | null;
+  eligibility_class: ClubMembershipEligibilityClass;
+  minimum_age: number | null;
+  maximum_age: number | null;
+  status: "active" | "archived";
+  display_order: number;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembershipPlan {
+  id: string;
+  venue_id: string;
+  category_id: string;
+  previous_version_id: string | null;
+  version: number;
+  name: string;
+  description: string | null;
+  base_price_cents: number;
+  currency: string;
+  joining_fee_cents: number;
+  joining_fee_scope: "none" | "subscription" | "covered_member";
+  duration_months: number | null;
+  no_fixed_term: boolean;
+  start_rule: "immediate" | "selected_date" | "next_month";
+  maximum_covered_members: number;
+  primary_member_required: boolean;
+  adult_primary_required: boolean;
+  most_expensive_primary: boolean;
+  parent_may_purchase_for_juniors: boolean;
+  payer_may_differ: boolean;
+  approval_required: boolean;
+  activation_policy: "on_approval" | "after_manual_payment";
+  booking_entitlement: Record<string, unknown>;
+  benefits_text: string | null;
+  terms_text: string | null;
+  status: ClubMembershipPlanStatus;
+  is_legacy: boolean;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  published_at: string | null;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembershipPricingOption {
+  id: string;
+  venue_id: string;
+  plan_id: string;
+  label: string;
+  commitment_months: number | null;
+  no_fixed_term: boolean;
+  payment_frequency: ClubMembershipPaymentFrequency;
+  discount_type: ClubMembershipDiscountType;
+  discount_value: number;
+  displayed_price_cents: number | null;
+  is_active: boolean;
+  display_order: number;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembershipAddonRule {
+  id: string;
+  venue_id: string;
+  primary_plan_id: string;
+  addon_plan_id: string;
+  member_class: ClubMembershipEligibilityClass;
+  maximum_addons: number;
+  adjustment_type: ClubMembershipDiscountType;
+  adjustment_value: number;
+  use_addon_plan_price: boolean;
+  joining_fee_policy: "plan_default" | "waive";
+  is_active: boolean;
+  display_order: number;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ClubMembershipPriceMemberLine = {
+  sequence_number: number;
+  profile_id: string;
+  profile_name: string;
+  member_role: ClubMembershipMemberRole;
+  selected_plan_id: string;
+  plan_name: string;
+  category_id: string;
+  base_amount_cents: number;
+  adjustment_cents: number;
+  joining_fee_cents: number;
+  final_amount_cents: number;
+  eligibility?: Record<string, unknown>;
+};
+
+export interface ClubMembershipPriceSnapshot {
+  calculation_version: number;
+  calculated_at: string;
+  venue_id: string;
+  plan_id: string;
+  plan_name: string;
+  plan_version: number;
+  category_id?: string;
+  pricing_option_id: string | null;
+  pricing_option_label: string;
+  commitment_months?: number | null;
+  no_fixed_term?: boolean;
+  payment_frequency?: ClubMembershipPaymentFrequency;
+  discount_type?: ClubMembershipDiscountType;
+  discount_value?: number;
+  requested_start_date?: string;
+  currency: string;
+  members: ClubMembershipPriceMemberLine[];
+  covered_member_count?: number;
+  addon_count?: number;
+  subtotal_cents: number;
+  term_discount_cents: number;
+  joining_fee_cents: number;
+  total_cents: number;
+  calculation_order?: string[];
+  legacy?: boolean;
+}
+
+export interface ClubMembershipApplication {
+  id: string;
+  venue_id: string;
+  owner_user_id: string;
+  applicant_profile_id: string;
+  payer_profile_id: string;
+  plan_id: string;
+  pricing_option_id: string;
+  requested_start_date: string;
+  status: ClubMembershipApplicationStatus;
+  currency: string;
+  calculated_total_cents: number;
+  price_snapshot: ClubMembershipPriceSnapshot;
+  terms_accepted: boolean;
+  terms_accepted_at: string | null;
+  applicant_notes: string | null;
+  staff_notes: string | null;
+  correction_message: string | null;
+  decline_reason: string | null;
+  submitted_at: string | null;
+  reviewed_by_user_id: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembershipSubscription {
+  id: string;
+  venue_id: string;
+  application_id: string | null;
+  owner_user_id: string | null;
+  applicant_profile_id: string;
+  payer_profile_id: string;
+  plan_id: string;
+  pricing_option_id: string | null;
+  status: ClubMembershipSubscriptionStatus;
+  start_date: string;
+  expiry_date: string | null;
+  currency: string;
+  accepted_total_cents: number;
+  amount_due_cents: number;
+  price_snapshot: ClubMembershipPriceSnapshot;
+  is_legacy: boolean;
+  activated_at: string | null;
+  paused_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembershipSubscriptionMember {
+  id: string;
+  subscription_id: string;
+  venue_id: string;
+  profile_id: string;
+  selected_plan_id: string;
+  club_membership_id: string | null;
+  member_role: ClubMembershipMemberRole;
+  status: ClubMembershipCoveredMemberStatus;
+  base_amount_cents: number;
+  adjustment_cents: number;
+  joining_fee_cents: number;
+  final_amount_cents: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembershipBillingSchedule {
+  id: string;
+  venue_id: string;
+  subscription_id: string;
+  pricing_option_id: string | null;
+  invoice_id: string | null;
+  sequence_number: number;
+  due_date: string;
+  amount_cents: number;
+  paid_amount_cents: number;
+  currency: string;
+  status: ClubMembershipBillingStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembershipInvoice {
+  id: string;
+  venue_id: string;
+  subscription_id: string;
+  payer_profile_id: string;
+  reference_number: string;
+  sequence_number: number;
+  billing_period_start: string | null;
+  billing_period_end: string | null;
+  line_items: Array<Record<string, unknown>>;
+  currency: string;
+  total_cents: number;
+  amount_due_cents: number;
+  due_date: string;
+  status: ClubMembershipInvoiceStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubMembershipManualPayment {
+  id: string;
+  venue_id: string;
+  subscription_id: string;
+  invoice_id: string | null;
+  billing_schedule_id: string | null;
+  payer_profile_id: string;
+  amount_cents: number;
+  currency: string;
+  received_on: string;
+  payment_method: "eft" | "cash" | "card_at_club" | "other";
+  payment_reference: string;
+  note: string | null;
+  recorded_by_user_id: string;
+  created_at: string;
 }
 
 export interface ClubNotice {

@@ -4,6 +4,7 @@ import { ChevronDownIcon } from "@/components/playr-icons";
 export function CollapsibleCard({
   badge,
   children,
+  className = "",
   defaultOpen = false,
   eyebrow,
   id,
@@ -12,6 +13,7 @@ export function CollapsibleCard({
 }: {
   badge?: ReactNode;
   children: ReactNode;
+  className?: string;
   defaultOpen?: boolean;
   eyebrow?: string;
   id?: string;
@@ -19,7 +21,7 @@ export function CollapsibleCard({
   title: string;
 }) {
   return (
-    <details className="surface-card ui-collapsible overflow-hidden" id={id} open={defaultOpen}>
+    <details className={`surface-card ui-collapsible overflow-hidden ${className}`} id={id} open={defaultOpen}>
       <summary className="flex cursor-pointer items-start justify-between gap-4 p-4 sm:p-5">
         <span className="min-w-0">
           {eyebrow ? <span className="section-kicker">{eyebrow}</span> : null}

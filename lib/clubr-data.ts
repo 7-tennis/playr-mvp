@@ -81,6 +81,23 @@ export type ClubRMemberBooking = Pick<
   "booking_id" | "court_id" | "court_name" | "start_time" | "end_time" | "booking_status" | "booking_type" | "source_product"
 >;
 
+export type ClubRMemberActivity = {
+  activity_id: string;
+  activity_type: "member_booking" | "coaching_session" | "coaching_lesson";
+  activity_status: string;
+  start_time: string;
+  end_time: string;
+  title: string;
+  court_name: string | null;
+  source_label: "PlayR" | "CoachR";
+  owner_label: string;
+  management_authority: "member" | "academy" | "club";
+  counts_toward_member_limit: boolean;
+  booking_id: string | null;
+  coach_session_occurrence_id: string | null;
+  coach_lesson_id: string | null;
+};
+
 export type ClubRBookingSettings = OrganisationBookingSettings;
 export type ClubRNotice = ClubNotice & { author_name: string | null };
 
@@ -252,6 +269,23 @@ export async function loadClubRMemberBookings(
   return error
     ? errorResult([], error, "member_bookings_load_failed", context)
     : success((data ?? []) as ClubRMemberBooking[]);
+}
+
+export async function loadClubRMemberActivity(
+  context: AuthenticatedClubRContext,
+  member: ClubRMember,
+  startTime: string,
+  endTime: string
+): Promise<ClubRDataResult<ClubRMemberActivity[]>> {
+  const { data, error } = await context.supabase.rpc("clubr_member_activity", {
+    p_end_time: endTime,
+    p_profile_id: member.profile.id,
+    p_start_time: startTime,
+    p_venue_id: member.venue_id
+  });
+  return error
+    ? errorResult([], error, "member_activity_load_failed", context)
+    : success((data ?? []) as ClubRMemberActivity[]);
 }
 
 export async function loadClubRNotices(context: AuthenticatedClubRContext): Promise<ClubRDataResult<ClubRNotice[]>> {

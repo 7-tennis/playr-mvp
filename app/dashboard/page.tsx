@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
 import { CancelledSessionCard, SessionRequestCard } from "@/components/session-request-cards";
-import { ArrowRightIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, InviteIcon, RatingIcon, SchoolIcon } from "@/components/playr-icons";
+import { ArrowRightIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, InviteIcon, MembershipIcon, RatingIcon, SchoolIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
@@ -549,7 +549,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         </section>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/book-court">
           <BookingIcon size={18} />
           <span>Book Court</span>
@@ -561,6 +561,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/events">
           <EventIcon size={18} />
           <span>Browse Events</span>
+        </Link>
+        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/memberships">
+          <MembershipIcon size={18} />
+          <span>Memberships</span>
         </Link>
       </section>
     </PageShell>

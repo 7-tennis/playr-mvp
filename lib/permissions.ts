@@ -16,6 +16,14 @@ export type ClubRPermission =
   | "clubr"
   | "clubr:members"
   | "clubr:members:manage"
+  | "clubr:memberships"
+  | "clubr:memberships:catalog:manage"
+  | "clubr:memberships:applications"
+  | "clubr:memberships:applications:review"
+  | "clubr:memberships:subscriptions"
+  | "clubr:memberships:subscriptions:manage"
+  | "clubr:memberships:billing"
+  | "clubr:memberships:payments:record"
   | "clubr:roles:manage"
   | "clubr:bookings"
   | "clubr:courts"
@@ -126,11 +134,30 @@ export function canAccessClubRPermission(role: UserRole, permission: ClubRPermis
   }
 
   if (role === "committee") {
-    return permission !== "clubr:roles:manage" && permission !== "clubr:settings:manage" && permission !== "clubr:diagnostics";
+    return ![
+      "clubr:roles:manage",
+      "clubr:settings:manage",
+      "clubr:diagnostics",
+      "clubr:memberships:catalog:manage",
+      "clubr:memberships:applications:review",
+      "clubr:memberships:subscriptions:manage",
+      "clubr:memberships:payments:record"
+    ].includes(permission);
   }
 
   if (role === "reception") {
-    return ["clubr", "clubr:members", "clubr:bookings", "clubr:courts", "clubr:notices", "clubr:settings"].includes(permission);
+    return [
+      "clubr",
+      "clubr:members",
+      "clubr:bookings",
+      "clubr:courts",
+      "clubr:notices",
+      "clubr:settings",
+      "clubr:memberships",
+      "clubr:memberships:applications",
+      "clubr:memberships:subscriptions",
+      "clubr:memberships:billing"
+    ].includes(permission);
   }
 
   return false;
