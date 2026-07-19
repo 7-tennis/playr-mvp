@@ -12,8 +12,8 @@ export default async function ClubRMorePage() {
   return (
     <ClubRPageFrame context={context} subtitle="Where are the club’s secondary tools?" title="More" venue={venue}>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <ClubRActionCard href="/dashboard/clubr/memberships" icon={<MembershipIcon size={18} />} text="Plans, applications and subscriptions." title="Memberships" />
         <ClubRActionCard href="/dashboard/clubr/notices" icon={<NotificationIcon size={18} />} text="Publish and review club updates." title="Notices" />
+        <ClubRActionCard href="/dashboard/clubr/memberships" icon={<MembershipIcon size={18} />} text="Plans, applications and subscriptions." title="Memberships" />
         <ClubRActionCard href="/dashboard/clubr/settings" icon={<BookingIcon size={18} />} text="Club details and booking rules." title="Settings" />
         {canAccessClubRPermission(context.role, "clubr:diagnostics") ? <ClubRActionCard href="/dashboard/clubr/diagnostics" icon={<StatusIcon size={18} />} text="Restricted schedule and permission checks." title="Diagnostics" /> : null}
         <ClubRActionCard href="/dashboard/profile" icon={<PrivateIcon size={18} />} text="Your private PlayR account." title="My Profile" />

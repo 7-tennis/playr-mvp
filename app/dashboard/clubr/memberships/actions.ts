@@ -71,7 +71,26 @@ function revalidateMemberships() {
   revalidatePath("/dashboard/clubr/memberships/applications");
   revalidatePath("/dashboard/clubr/memberships/subscriptions");
   revalidatePath("/dashboard/memberships");
+  revalidatePath("/dashboard/venues");
   revalidatePath("/dashboard");
+}
+
+export async function saveMembershipPlanPublicDetails(formData: FormData) {
+  const venueId = text(formData, "venueId");
+  const planId = text(formData, "planId");
+  const context = await requireMembershipPermission(venueId, "catalog_manage");
+  const publicBenefits = text(formData, "publicBenefits").split("\n").map((item) => item.trim()).filter(Boolean).slice(0, 30);
+  const { error } = await context.supabase.from("club_membership_plans").update({
+    is_public: checked(formData, "isPublic"),
+    public_benefits: publicBenefits,
+    updated_by_user_id: context.user.id
+  }).eq("id", planId).eq("venue_id", venueId);
+  if (error) {
+    console.error("[clubr-memberships] public_plan_details_failed", { code: error.code, planId, venueId });
+    redirect(resultPath(`/dashboard/clubr/memberships/plans/${planId}`, "error", "public_details_failed"));
+  }
+  revalidateMemberships();
+  redirect(resultPath(`/dashboard/clubr/memberships/plans/${planId}`, "message", "public_details_saved"));
 }
 
 export async function saveMembershipCategory(formData: FormData) {
@@ -331,12 +350,11 @@ export async function previewMembershipPrice(input: {
 }): Promise<{ error: string | null; snapshot: ClubMembershipPriceSnapshot | null }> {
   const context = await getPermissionContext();
   if (context.kind !== "authenticated") return { error: "Sign in to calculate this membership.", snapshot: null };
-  const { data, error } = await context.supabase.rpc("clubr_calculate_membership_price", {
+  const { data, error } = await context.supabase.rpc("playr_calculate_public_membership_price", {
     p_members: input.members,
     p_plan_id: input.planId,
     p_pricing_option_id: input.pricingOptionId,
-    p_start_date: input.startDate,
-    p_user_id: context.user.id
+    p_start_date: input.startDate
   });
   if (error) {
     console.error("[clubr-memberships] member_price_preview_failed", { code: error.code });

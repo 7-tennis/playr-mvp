@@ -104,6 +104,9 @@ export type CourtAccessReadinessStatus = "active" | "pending" | "no_courts_share
 export type CourtAccessRequestStatus = "pending" | "active" | "declined" | "cancelled" | "expired";
 export type CoachingProposalStatus = "not_specified" | "proposed" | "confirmed" | "declined";
 export type ClubMembershipStatus = "active" | "inactive" | "pending";
+export type VenueDiscoveryVisibility = "public" | "members_only" | "hidden";
+export type VenueLeaderboardVisibility = "public" | "members_only" | "hidden";
+export type VenueRelationshipType = "member" | "pending" | "former_member" | "guest";
 export type ClubMembershipEligibilityClass = "any" | "adult" | "junior";
 export type ClubMembershipPlanStatus = "draft" | "active" | "archived";
 export type ClubMembershipDiscountType = "none" | "percentage" | "fixed";
@@ -258,6 +261,23 @@ export interface Venue {
   head_coach_profile_id: string | null;
   timezone: string;
   primary_colour: string | null;
+  discovery_visibility: VenueDiscoveryVisibility;
+  public_description: string | null;
+  suburb: string | null;
+  town: string | null;
+  city: string | null;
+  website_url: string | null;
+  opening_hours_text: string | null;
+  surface_types: string[];
+  facilities: string[];
+  visitor_information: string | null;
+  parking_information: string | null;
+  booking_notes: string | null;
+  membership_contact: string | null;
+  public_image_url: string | null;
+  competition_leaderboard_visibility: VenueLeaderboardVisibility;
+  participation_leaderboard_visibility: VenueLeaderboardVisibility;
+  development_leaderboard_visibility: VenueLeaderboardVisibility;
   created_at: string;
   updated_at: string;
 }
@@ -321,6 +341,8 @@ export interface ClubMembershipPlan {
   terms_text: string | null;
   status: ClubMembershipPlanStatus;
   is_legacy: boolean;
+  is_public: boolean;
+  public_benefits: string[];
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
   published_at: string | null;
@@ -535,6 +557,7 @@ export interface ClubNotice {
   message: string;
   category: ClubNoticeCategory;
   is_active: boolean;
+  is_public: boolean;
   starts_at: string | null;
   ends_at: string | null;
   created_by_user_id: string;
@@ -736,6 +759,9 @@ export interface CourtBooking {
   coach_profile_id: string | null;
   source_product: string | null;
   coach_session_occurrence_id: string | null;
+  booking_price_cents: number | null;
+  booking_currency: string | null;
+  guest_contact: Record<string, string | null> | null;
 }
 
 export interface OrganisationCourtAccess {
@@ -780,6 +806,19 @@ export interface OrganisationBookingSettings {
   advance_booking_days: number;
   max_active_bookings: number;
   no_courts: boolean;
+  guest_advance_booking_days: number;
+  guest_max_duration_minutes: number;
+  guest_accessible_court_ids: string[];
+  guest_opening_time: string;
+  guest_closing_time: string;
+  max_guest_bookings_per_period: number;
+  guest_booking_period_days: number;
+  guest_approval_required: boolean;
+  guest_name_required: boolean;
+  guest_email_required: boolean;
+  guest_phone_required: boolean;
+  guest_future_payment_required: boolean;
+  public_availability_visibility: "full" | "guest_eligible" | "sign_in_required" | "after_approval";
   updated_by_user_id: string | null;
   created_at: string;
   updated_at: string;

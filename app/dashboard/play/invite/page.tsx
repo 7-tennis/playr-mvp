@@ -61,7 +61,7 @@ export default async function PlayInvitePage({ searchParams }: PlayInvitePagePro
             Book a court first, or start a match request and agree on the court once your opponent accepts.
           </p>
           <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
-            <Link className="btn-primary" href="/dashboard/book-court">
+            <Link className="btn-primary" href="/dashboard/venues">
               Book Court
             </Link>
             <Link className="btn-secondary" href="/dashboard/play/plan-match">

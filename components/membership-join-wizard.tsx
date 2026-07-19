@@ -17,11 +17,13 @@ function todayInput() {
   return date.toISOString().slice(0, 10);
 }
 
-export function MembershipJoinWizard({ plans, profiles, venue }: { plans: MembershipPlanView[]; profiles: JoinProfile[]; venue: Pick<Venue, "id" | "name"> }) {
+export function MembershipJoinWizard({ initialPlanId, initialProfileId, plans, profiles, venue }: { initialPlanId?: string; initialProfileId?: string; plans: MembershipPlanView[]; profiles: JoinProfile[]; venue: Pick<Venue, "id" | "name"> }) {
   const [step, setStep] = useState(0);
-  const [selectedIds, setSelectedIds] = useState<string[]>(profiles[0] ? [profiles[0].id] : []);
-  const [planId, setPlanId] = useState(plans[0]?.id ?? "");
-  const [pricingOptionId, setPricingOptionId] = useState(plans[0]?.pricingOptions.find((item) => item.is_active)?.id ?? "");
+  const initialProfile = profiles.find((profile) => profile.id === initialProfileId) ?? profiles[0];
+  const initialPlan = plans.find((plan) => plan.id === initialPlanId) ?? plans[0];
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialProfile ? [initialProfile.id] : []);
+  const [planId, setPlanId] = useState(initialPlan?.id ?? "");
+  const [pricingOptionId, setPricingOptionId] = useState(initialPlan?.pricingOptions.find((item) => item.is_active)?.id ?? "");
   const [startDate, setStartDate] = useState(todayInput());
   const [snapshot, setSnapshot] = useState<ClubMembershipPriceSnapshot | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);

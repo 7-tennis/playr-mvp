@@ -30,7 +30,8 @@ import type {
   PlayerLevel,
   Profile,
   Rating,
-  Sport
+  Sport,
+  Venue
 } from "@/types/courtside";
 
 export type ProfileOption = Pick<
@@ -63,7 +64,7 @@ export type MatchCandidate = {
 };
 
 export type BookingOption = Pick<CourtBooking, "id" | "start_time" | "end_time" | "player_profile_id"> & {
-  courts: Pick<Court, "name"> | null;
+  courts: (Pick<Court, "name"> & { venue: Pick<Venue, "name"> | null }) | null;
   profiles: Pick<Profile, "first_name" | "last_name" | "is_junior"> | null;
 };
 
@@ -399,7 +400,7 @@ export function formatCourtDateLabel(date: Date) {
 
 export function formatBookingLabel(booking: BookingOption) {
   const player = booking.profiles ? `${booking.profiles.first_name} ${booking.profiles.last_name}${booking.profiles.is_junior ? " (junior)" : ""}` : "Player";
-  return `${booking.courts?.name ?? "Court"} / ${formatDateTime(booking.start_time)} / ${player}`;
+  return `${booking.courts?.venue?.name ?? "Venue"} / ${booking.courts?.name ?? "Court"} / ${formatDateTime(booking.start_time)} / ${player}`;
 }
 
 function challengeStyle(type: "close" | "stronger") {
@@ -850,7 +851,7 @@ export async function loadPlayData(searchParams?: PlaySearchParams): Promise<Pla
     supabase.rpc("match_invites_for_user"),
     supabase
       .from("court_bookings")
-      .select("id,start_time,end_time,player_profile_id,courts:court_id(name),profiles:player_profile_id(first_name,last_name,is_junior)")
+      .select("id,start_time,end_time,player_profile_id,courts:court_id(name,venue:venue_id(name)),profiles:player_profile_id(first_name,last_name,is_junior)")
       .eq("status", "confirmed")
       .gt("start_time", new Date().toISOString())
       .in("player_profile_id", ownProfileIds)

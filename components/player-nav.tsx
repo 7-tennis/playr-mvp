@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 
 const playerLinks = [
-  { href: "/dashboard/book-court", label: "Book", mobileLabel: "Book" },
+  { href: "/dashboard/venues", label: "Venues", mobileLabel: "Venues" },
   { href: "/dashboard/play", label: "Play", mobileLabel: "Play" },
   { href: "/dashboard", label: "MyPlayR", mobileLabel: "MyPlayR", isHub: true },
   { href: "/dashboard/events", label: "Events", mobileLabel: "Events" },

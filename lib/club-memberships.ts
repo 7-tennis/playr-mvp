@@ -163,9 +163,10 @@ export async function loadMembershipCategories(supabase: ServerSupabase, venueId
   return error ? failure([], "categories_load_failed", error) : success((data ?? []) as ClubMembershipCategory[]);
 }
 
-export async function loadMembershipPlans(supabase: ServerSupabase, venueId: string, includeInactive = false): Promise<MembershipDataResult<MembershipPlanView[]>> {
+export async function loadMembershipPlans(supabase: ServerSupabase, venueId: string, includeInactive = false, publicOnly = false): Promise<MembershipDataResult<MembershipPlanView[]>> {
   let planQuery = supabase.from("club_membership_plans").select("*").eq("venue_id", venueId).order("name").order("version", { ascending: false });
   if (!includeInactive) planQuery = planQuery.eq("status", "active").eq("is_legacy", false);
+  if (publicOnly) planQuery = planQuery.eq("is_public", true);
 
   const [plansResult, categoriesResult, optionsResult, rulesResult] = await Promise.all([
     planQuery,

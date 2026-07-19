@@ -3,11 +3,13 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
 import { CancelledSessionCard, SessionRequestCard } from "@/components/session-request-cards";
-import { ArrowRightIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, InviteIcon, MembershipIcon, RatingIcon, SchoolIcon } from "@/components/playr-icons";
+import { ArrowRightIcon, BookingIcon, ClubIcon, EntriesIcon, EventIcon, InviteIcon, RatingIcon, SchoolIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
+import { VenueCard } from "@/components/venue-ui";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
 import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
+import { loadMyVenues } from "@/lib/venues";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type {
@@ -318,6 +320,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     profileIds.push(...juniorRows.map((junior) => junior.id));
   }
 
+  const selectedClubProfileId = profileIds.includes(searchParams?.profile ?? "") ? String(searchParams?.profile) : profile?.id ?? null;
+  const myClubsResult = selectedClubProfileId
+    ? await loadMyVenues(supabase, selectedClubProfileId)
+    : { data: [], error: null };
+
   const now = new Date().toISOString();
   const [{ data: inviteData, error: inviteError }, { data: ratingData, error: ratingError }, { data: entryData, error: entryError }, { data: bookingData, error: bookingError }] =
     profileIds.length > 0
@@ -494,6 +501,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         </div>
       </section>
 
+      {profile ? <section className="mb-6"><div className="mb-4 flex items-end justify-between gap-3"><div><p className="section-kicker">Connected venues</p><h2 className="mt-2 text-2xl font-black text-court-navy">My Clubs</h2></div><Link className="btn-secondary" href={`/dashboard/venues?profile=${selectedClubProfileId ?? profile.id}`}>View Venues</Link></div>{myClubsResult.error ? <div className="ui-empty-card">Club connections could not be loaded right now.</div> : myClubsResult.data.length > 0 ? <div className="grid gap-4 lg:grid-cols-2">{myClubsResult.data.slice(0, 2).map((venue) => <VenueCard key={venue.venueId} profileId={selectedClubProfileId ?? profile.id} venue={venue} />)}</div> : <div className="soft-card p-5"><h3 className="font-black text-court-navy">No club connections yet</h3><p className="mt-2 text-sm text-slate-600">Discover clubs to book courts or view memberships.</p><Link className="btn-primary mt-4" href={`/dashboard/venues?profile=${selectedClubProfileId ?? profile.id}`}>Discover Clubs</Link></div>}</section> : null}
+
       <section className="mb-6">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -549,10 +558,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         </section>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/book-court">
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/venues">
           <BookingIcon size={18} />
-          <span>Book Court</span>
+          <span>Find a Venue</span>
         </Link>
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/play">
           <InviteIcon size={18} />
@@ -561,10 +570,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/events">
           <EventIcon size={18} />
           <span>Browse Events</span>
-        </Link>
-        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/memberships">
-          <MembershipIcon size={18} />
-          <span>Memberships</span>
         </Link>
       </section>
     </PageShell>

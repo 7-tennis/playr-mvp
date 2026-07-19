@@ -19,6 +19,10 @@ function integer(formData: FormData, key: string, fallback: number) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function textList(formData: FormData, key: string) {
+  return text(formData, key).split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean).slice(0, 30);
+}
+
 function localDateTimeIso(value: string) {
   if (!value) return null;
   const parsed = new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(value) ? value : `${value}:00+02:00`);
@@ -54,8 +58,95 @@ function revalidateClubR() {
   revalidatePath("/dashboard/clubr/courts");
   revalidatePath("/dashboard/clubr/notices");
   revalidatePath("/dashboard/clubr/settings");
+  revalidatePath("/dashboard/clubr/settings/public-page");
+  revalidatePath("/dashboard/clubr/settings/guest-booking");
+  revalidatePath("/dashboard/venues");
   revalidatePath("/dashboard/book-court");
   revalidatePath("/dashboard/coachr/schedule");
+}
+
+export async function saveClubPublicSettings(formData: FormData) {
+  const { context, venueId } = await requireClubR("clubr:settings:manage", formData);
+  const visibility = text(formData, "discoveryVisibility");
+  const clubName = text(formData, "clubName");
+  if (!clubName) redirect(resultPath("/dashboard/clubr/settings/public-page", "error", "public_name_required"));
+  const leaderboardVisibility = (key: string) => {
+    const value = text(formData, key);
+    return ["public", "members_only", "hidden"].includes(value) ? value : "hidden";
+  };
+  const { error } = await context.supabase.from("venues").update({
+    address: text(formData, "address") || null,
+    booking_notes: text(formData, "bookingNotes") || null,
+    city: text(formData, "city") || null,
+    contact_email: text(formData, "contactEmail") || null,
+    contact_phone: text(formData, "contactPhone") || null,
+    competition_leaderboard_visibility: leaderboardVisibility("competitionLeaderboardVisibility"),
+    development_leaderboard_visibility: leaderboardVisibility("developmentLeaderboardVisibility"),
+    discovery_visibility: ["public", "members_only", "hidden"].includes(visibility) ? visibility : "hidden",
+    facilities: textList(formData, "facilities"),
+    membership_contact: text(formData, "membershipContact") || null,
+    name: clubName,
+    opening_hours_text: text(formData, "openingHours") || null,
+    parking_information: text(formData, "parkingInformation") || null,
+    participation_leaderboard_visibility: leaderboardVisibility("participationLeaderboardVisibility"),
+    public_description: text(formData, "publicDescription") || null,
+    public_image_url: text(formData, "publicImageUrl") || null,
+    suburb: text(formData, "suburb") || null,
+    surface_types: textList(formData, "surfaceTypes"),
+    town: text(formData, "town") || null,
+    visitor_information: text(formData, "visitorInformation") || null,
+    website_url: text(formData, "websiteUrl") || null
+  }).eq("id", venueId);
+  if (error) {
+    console.error("[clubr] public_settings_save_failed", { code: error.code, venueId });
+    redirect(resultPath("/dashboard/clubr/settings/public-page", "error", "public_settings_failed"));
+  }
+  revalidateClubR();
+  redirect(resultPath("/dashboard/clubr/settings/public-page", "message", "public_settings_updated"));
+}
+
+export async function saveGuestBookingSettings(formData: FormData) {
+  const { context, venueId } = await requireClubR("clubr:settings:manage", formData);
+  const guestOpeningTime = text(formData, "guestOpeningTime") || "08:00";
+  const guestClosingTime = text(formData, "guestClosingTime") || "18:00";
+  if (guestClosingTime <= guestOpeningTime) redirect(resultPath("/dashboard/clubr/settings/guest-booking", "error", "guest_hours_invalid"));
+  const courtIds = formData.getAll("guestCourtIds").flatMap((value) => typeof value === "string" && value ? [value] : []);
+  if (courtIds.length > 0) {
+    const { data: venueCourts, error: venueCourtsError } = await context.supabase
+      .from("courts")
+      .select("id")
+      .eq("venue_id", venueId)
+      .in("id", courtIds);
+    if (venueCourtsError || (venueCourts ?? []).length !== new Set(courtIds).size) {
+      redirect(resultPath("/dashboard/clubr/settings/guest-booking", "error", "guest_courts_invalid"));
+    }
+  }
+  const availabilityVisibility = text(formData, "publicAvailabilityVisibility");
+  const { error } = await context.supabase.from("organisation_booking_settings").upsert({
+    guest_accessible_court_ids: courtIds,
+    guest_advance_booking_days: Math.max(0, Math.min(90, integer(formData, "guestAdvanceBookingDays", 3))),
+    guest_approval_required: checked(formData, "guestApprovalRequired"),
+    guest_booking_period_days: Math.max(1, Math.min(90, integer(formData, "guestBookingPeriodDays", 7))),
+    guest_closing_time: guestClosingTime,
+    guest_email_required: checked(formData, "guestEmailRequired"),
+    guest_future_payment_required: checked(formData, "guestFuturePaymentRequired"),
+    guest_max_duration_minutes: Math.max(15, Math.min(240, integer(formData, "guestMaxDurationMinutes", 60))),
+    guest_name_required: checked(formData, "guestNameRequired"),
+    guest_opening_time: guestOpeningTime,
+    guest_phone_required: checked(formData, "guestPhoneRequired"),
+    max_guest_bookings_per_period: Math.max(1, Math.min(100, integer(formData, "maxGuestBookingsPerPeriod", 1))),
+    non_member_booking_enabled: checked(formData, "allowGuestBookings"),
+    non_member_price_cents: Math.max(0, Math.round(Number(text(formData, "guestPrice") || "0") * 100)),
+    public_availability_visibility: ["full", "guest_eligible", "sign_in_required", "after_approval"].includes(availabilityVisibility) ? availabilityVisibility : "sign_in_required",
+    updated_by_user_id: context.user.id,
+    venue_id: venueId
+  }, { onConflict: "venue_id" });
+  if (error) {
+    console.error("[clubr] guest_booking_settings_failed", { code: error.code, venueId });
+    redirect(resultPath("/dashboard/clubr/settings/guest-booking", "error", "guest_settings_failed"));
+  }
+  revalidateClubR();
+  redirect(resultPath("/dashboard/clubr/settings/guest-booking", "message", "guest_settings_updated"));
 }
 
 export async function updateClubMemberStatus(formData: FormData) {
@@ -203,6 +294,7 @@ export async function saveClubNotice(formData: FormData) {
     category,
     ends_at: endsAt,
     is_active: checked(formData, "isActive"),
+    is_public: checked(formData, "isPublic"),
     message,
     starts_at: startsAt,
     title,

@@ -41,6 +41,21 @@ type CourtBookingGridProps = {
   profiles: ProfileOption[];
   bookings: BookingBlock[];
   userProfileIds: string[];
+  routePath: string;
+  venueId: string;
+  venueName: string;
+  bookingType: "member_booking" | "guest_booking";
+  bookableCourtIds: string[];
+  priceLabel: string;
+  paymentNote: string | null;
+  guestContact?: {
+    name: string;
+    email: string;
+    phone: string;
+    requiresName: boolean;
+    requiresEmail: boolean;
+    requiresPhone: boolean;
+  };
 };
 
 function bookingLabel(booking: BookingBlock) {
@@ -59,10 +74,11 @@ function bookingLabel(booking: BookingBlock) {
     .join(" ");
 }
 
-export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMinutes, slots, profiles, bookings, userProfileIds }: CourtBookingGridProps) {
+export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMinutes, slots, profiles, bookings, userProfileIds, routePath, venueId, venueName, bookingType, bookableCourtIds, priceLabel, paymentNote, guestContact }: CourtBookingGridProps) {
   const [activeSlot, setActiveSlot] = useState<Slot | null>(null);
   const router = useRouter();
   const selectedCourt = courts.find((court) => court.id === selectedCourtId) ?? courts[0];
+  const selectedCourtIsBookable = bookableCourtIds.includes(selectedCourtId);
 
   useEffect(() => {
     const refresh = () => router.refresh();
@@ -89,7 +105,7 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMi
             className={`shrink-0 rounded border px-3 py-2 text-sm font-black transition ${
               court.id === selectedCourtId ? "border-court-navy bg-court-navy text-white" : "border-slate-200 bg-white text-court-navy hover:border-court-teal hover:bg-court-mist"
             }`}
-            href={`/dashboard/book-court?date=${selectedDate}&court=${court.id}`}
+            href={`${routePath}?profile=${profiles[0]?.id ?? ""}&date=${selectedDate}&court=${court.id}`}
             key={court.id}
           >
             {court.name}
@@ -100,11 +116,12 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMi
       <div className="surface-card p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-xl font-black text-court-navy">{selectedCourt?.name ?? "Court"}</h2>
-            <p className="text-sm text-slate-600">Tap an available slot to confirm a {slotMinutes}-minute booking.</p>
+            <h2 className="text-xl font-black text-court-navy">{venueName} · {selectedCourt?.name ?? "Court"}</h2>
+            <p className="text-sm text-slate-600">Tap an available slot to confirm a {slotMinutes}-minute {bookingType === "member_booking" ? "member" : "guest"} booking.</p>
           </div>
           <form className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
             <input name="court" type="hidden" value={selectedCourtId} />
+            <input name="profile" type="hidden" value={profiles[0]?.id ?? ""} />
             <label className="text-sm font-semibold text-slate-700">
               Choose date
               <input className="mt-1 w-full rounded border border-slate-300 px-3 py-3 focus-ring sm:py-2" name="date" type="date" defaultValue={selectedDate} />
@@ -126,21 +143,23 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMi
             });
             const isPast = new Date(slot.startTime).getTime() <= Date.now();
             const isUserBooking = Boolean(booking?.player_profile_id && userProfileIds.includes(booking.player_profile_id));
-            const disabled = Boolean(booking) || isPast || profiles.length === 0;
+            const disabled = Boolean(booking) || isPast || profiles.length === 0 || !selectedCourtIsBookable;
             const stateLabel = booking
               ? isUserBooking
                 ? "Your booking"
                 : "Unavailable"
               : isPast
                 ? "Past"
-                : profiles.length === 0
+                : !selectedCourtIsBookable
+                  ? "Members only"
+                  : profiles.length === 0
                   ? "Create a profile first"
                   : "Available";
             const stateClass = booking
               ? isUserBooking
                 ? "border-court-teal bg-court-mist text-court-navy"
                 : "border-slate-200 bg-slate-50 text-slate-500"
-              : isPast || profiles.length === 0
+              : isPast || profiles.length === 0 || !selectedCourtIsBookable
                 ? "border-slate-200 bg-slate-50 text-slate-500"
                 : "border-emerald-200 bg-white text-court-navy hover:border-court-teal hover:shadow-court";
 
@@ -168,7 +187,7 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMi
               <div>
                 <h2 className="text-xl font-black text-court-navy">Book {selectedCourt?.name}</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  {activeSlot.timeLabel} for {slotMinutes} minutes. Choose whether this is for you or a linked junior before confirming.
+                  {venueName} · {activeSlot.timeLabel} · {priceLabel}
                 </p>
               </div>
               <button className="rounded border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50" onClick={() => setActiveSlot(null)} type="button">
@@ -177,10 +196,12 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMi
             </div>
             <form action={createCourtBooking} className="mt-5 grid gap-4">
               <input name="courtId" type="hidden" value={selectedCourtId} />
+              <input name="venueId" type="hidden" value={venueId} />
               <input name="startTime" type="hidden" value={activeSlot.startTime} />
-              <input name="returnTo" type="hidden" value={`/dashboard/book-court?date=${selectedDate}&court=${selectedCourtId}`} />
+              <input name="endTime" type="hidden" value={activeSlot.endTime} />
+              <input name="returnTo" type="hidden" value={`${routePath}?profile=${profiles[0]?.id ?? ""}&date=${selectedDate}&court=${selectedCourtId}`} />
               <label className="text-sm font-semibold text-slate-700">
-                Booking for <span className="font-normal text-slate-500">(choose yourself or a linked junior)</span>
+                Booking for
                 <select className="mt-2 w-full rounded border border-slate-300 px-3 py-3 focus-ring" name="profileId" required>
                   {profiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>
@@ -188,19 +209,18 @@ export function CourtBookingGrid({ courts, selectedCourtId, selectedDate, slotMi
                     </option>
                   ))}
                 </select>
-                <span className="mt-2 block text-xs font-normal leading-5 text-slate-600">
-                  Parents and guardians can book for linked junior profiles from this list.
-                </span>
+                <span className="mt-2 block text-xs font-normal leading-5 text-slate-600">Change the selected player from the club page before choosing a court.</span>
               </label>
+              {bookingType === "guest_booking" && guestContact ? <div className="grid gap-3 rounded border border-slate-200 bg-slate-50 p-3"><p className="text-sm font-black text-court-navy">Guest contact</p><label className="text-sm font-semibold text-slate-700">Name<input className="mt-1 w-full rounded border border-slate-300 px-3 py-3 focus-ring" defaultValue={guestContact.name} name="guestName" required={guestContact.requiresName} /></label><label className="text-sm font-semibold text-slate-700">Email<input className="mt-1 w-full rounded border border-slate-300 px-3 py-3 focus-ring" defaultValue={guestContact.email} name="guestEmail" required={guestContact.requiresEmail} type="email" /></label><label className="text-sm font-semibold text-slate-700">Phone<input className="mt-1 w-full rounded border border-slate-300 px-3 py-3 focus-ring" defaultValue={guestContact.phone} name="guestPhone" required={guestContact.requiresPhone} /></label></div> : null}
               <label className="text-sm font-semibold text-slate-700">
                 Notes <span className="font-normal text-slate-500">(optional)</span>
                 <textarea className="mt-2 min-h-20 w-full rounded border border-slate-300 px-3 py-2 focus-ring" name="notes" placeholder="Add anything the club should know." />
               </label>
               <button className="rounded bg-court-teal px-4 py-3 font-bold text-white transition hover:bg-teal-500" type="submit">
-                Confirm booking
+                Confirm {bookingType === "member_booking" ? "member" : "guest"} booking
               </button>
               <p className="text-xs leading-5 text-slate-500">
-                This reserves the court only. Any club fees, lessons, or programme payments are handled separately for now.
+                {paymentNote ?? "This reserves the court only. Any club fees are handled separately for now."}
               </p>
             </form>
           </div>
