@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { PageShell } from "@/components/page-shell";
 import { CancelledSessionCard, SessionRequestCard } from "@/components/session-request-cards";
+import { OrganisationCard, OrganisationEmptyState, PlayerOrganisationSummary } from "@/components/player-organisations";
 import { StatusAlert } from "@/components/status-alert";
 import {
   BadgeIcon,
@@ -15,7 +16,6 @@ import {
   DistrictIcon,
   EventIcon,
   InviteIcon,
-  MembershipIcon,
   MatchIcon,
   ParticipationIcon,
   PrivateIcon,
@@ -28,6 +28,7 @@ import {
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
 import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
+import { loadPlayerClubMemberships, loadPlayerOrganisations } from "@/lib/player-organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type {
@@ -37,24 +38,14 @@ import type {
   EntryStatus,
   JuniorAchievement,
   JuniorRatingHistory,
-  MemberStatus,
   MatchInviteStatus,
   MatchInviteType,
   MatchVerificationStatus,
-  OrganisationLinkStatus,
   Profile,
   Rating,
   RatingChange,
   Venue
 } from "@/types/courtside";
-
-type AcademyDetailLink = {
-  id: string;
-  status: OrganisationLinkStatus;
-  connection_context: Record<string, unknown>;
-  proposal_status: string;
-  venue: Pick<Venue, "id" | "name" | "status"> | null;
-};
 
 type AcademyDetailAssignment = {
   organisation_player_link_id: string | null;
@@ -251,21 +242,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function memberStatusLabel(status: MemberStatus | null | undefined) {
-  switch (status) {
-    case "member":
-      return "Active member";
-    case "pending":
-      return "Membership pending";
-    case "inactive":
-      return "Inactive membership";
-    case "non_member":
-      return "Non-member";
-    default:
-      return "Membership details to be confirmed";
-  }
-}
-
 function familyRole(player: Profile, parentProfile: Profile) {
   if (player.id === parentProfile.id) {
     return "Main Member / Account Holder";
@@ -342,7 +318,8 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     { data: matchData, error: matchError },
     { data: achievementData, error: achievementError },
     { data: juniorHistoryData, error: juniorHistoryError },
-    { data: academyLinkData },
+    organisationResult,
+    membershipResult,
     { data: academyAssignmentData },
     { data: academyLessonData },
     { data: privateAcademySessionData, error: privateAcademySessionError },
@@ -377,12 +354,8 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
           .order("created_at", { ascending: false })
           .limit(5)
       : Promise.resolve({ data: [], error: null }),
-    supabase
-      .from("organisation_player_links")
-      .select("id,status,connection_context,proposal_status,venue:venue_id(id,name,status)")
-      .eq("player_profile_id", player.id)
-      .in("status", ["pending", "active", "suspended"])
-      .order("created_at", { ascending: false }),
+    loadPlayerOrganisations(supabase, [player.id]),
+    loadPlayerClubMemberships(supabase, player.id),
     supabase
       .from("coach_player_assignments")
       .select("organisation_player_link_id,coach:coach_profile_id(id,first_name,last_name)")
@@ -448,7 +421,11 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
   const juniorHistory = juniorHistoryError
     ? []
     : ((juniorHistoryData ?? []) as Pick<JuniorRatingHistory, "id" | "previous_rating" | "new_rating" | "change_amount" | "reason" | "created_at">[]);
-  const academyLinks = (academyLinkData ?? []) as unknown as AcademyDetailLink[];
+  const organisations = organisationResult.data;
+  const membershipByVenueId = new Map<string, (typeof membershipResult.data)[number]>();
+  membershipResult.data.forEach((membership) => {
+    if (!membershipByVenueId.has(membership.venueId)) membershipByVenueId.set(membership.venueId, membership);
+  });
   const academyAssignments = (academyAssignmentData ?? []) as unknown as AcademyDetailAssignment[];
   const academyAssignmentByLink = new Map(academyAssignments.filter((assignment) => assignment.organisation_player_link_id).map((assignment) => [assignment.organisation_player_link_id as string, assignment]));
   const academyLessons = (academyLessonData ?? []) as unknown as AcademyDetailLesson[];
@@ -458,12 +435,10 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     if (!academyLessonByVenue.has(lesson.venue_id)) academyLessonByVenue.set(lesson.venue_id, lesson);
   });
 
-  const clubName = bookings[0]?.courts?.venues?.name ?? upcomingEntries.find((entry) => entry.events?.location)?.events?.location ?? null;
   const playerType = player.is_junior ? playrJuniorStageLabel(player.junior_stage) : parentProfile.id === player.id && parentProfile.parent_profile_id === null ? "Parent / Member" : "Member";
   const ratingText = player.is_junior ? formatJuniorRating(player.junior_stage, player.junior_rating) : rating ? rating.rating_value.toFixed(1) : "No active rating yet";
   const confidenceText = player.is_junior ? formatLabel(player.junior_rating_confidence) : rating ? formatLabel(rating.confidence) : "No rating yet";
   const participationText = player.is_junior ? `${player.participation_score} pts` : `${player.participation_score ?? 0} pts`;
-  const profileHref = `/dashboard/profile?member=${player.id}#member-details`;
   const requestReturnTo = `/dashboard/players/${player.id}#lesson-requests`;
   const pendingSessionRequests = sessionRequests.filter((request) => isPendingSessionRequest(request.status));
   const recentSessionRequests = sessionRequests.filter((request) => !isPendingSessionRequest(request.status)).slice(0, 8);
@@ -490,11 +465,8 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
         <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#lesson-requests">
           Lessons
         </a>
-        <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#membership">
-          Membership
-        </a>
-        <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#academies">
-          Academies
+        <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#organisations">
+          Organisations
         </a>
         <a className="whitespace-nowrap rounded px-3 py-2 text-court-navy hover:bg-court-mist" href="#private-details">
           Private Details
@@ -514,8 +486,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
                   icon={<RatingIcon rating={player.is_junior ? player.junior_rating : rating?.rating_value ?? null} size={16} stage={player.is_junior ? player.junior_stage : "member"} />}
                   value={ratingText}
                 />
-                <InfoLine icon={<SchoolIcon size={16} />} muted value="No school linked" />
-                <InfoLine icon={<ClubIcon size={16} />} muted={!clubName} value={clubName ?? "No club linked"} />
+                <PlayerOrganisationSummary organisations={organisations} />
               </div>
             </div>
           </div>
@@ -585,72 +556,41 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
         </section>
       ) : null}
 
-      <section className="surface-card mt-5 p-4 sm:p-5" id="academies">
-        <div className="flex items-start justify-between gap-3"><div><p className="section-kicker">Connected organisations</p><h2 className="mt-1 text-lg font-black text-court-navy">Academies</h2></div><ClubIcon className="text-court-teal" size={20} /></div>
-        {academyLinks.length > 0 ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {academyLinks.map((link) => {
-              const assignment = academyAssignmentByLink.get(link.id);
-              const lesson = link.venue?.id ? academyLessonByVenue.get(link.venue.id) : null;
-              const linkedSessions = link.venue?.id ? privateAcademySessions.filter((session) => session.academy_id === link.venue?.id) : [];
-              const proposalValue = link.connection_context.proposal;
-              const proposal = proposalValue && typeof proposalValue === "object" && !Array.isArray(proposalValue) ? proposalValue as Record<string, unknown> : null;
-              const schedule = proposal ? [proposal.day, proposal.startTime].filter((value) => typeof value === "string" && value).join(" · ") : "";
+      <section className="surface-card mt-5 p-4 sm:p-6" id="organisations">
+        <div className="flex items-start justify-between gap-3"><div><p className="section-kicker">Player connections</p><h2 className="mt-1 text-xl font-black text-court-navy">Organisations</h2><p className="mt-1 text-sm leading-6 text-slate-600">Clubs, academies, schools and districts connected to this player.</p></div><ClubIcon className="text-court-teal" size={22} /></div>
+        {organisationResult.error ? (
+          <div className="ui-empty-card mt-4">Organisation connections could not be loaded right now. The rest of this player profile is still available.</div>
+        ) : organisations.length > 0 ? (
+          <div className="mt-5 grid items-stretch gap-4 md:grid-cols-2">
+            {organisations.map((organisation) => {
+              const venueId = organisation.venue?.id;
+              const assignment = academyAssignmentByLink.get(organisation.id);
+              const lesson = venueId ? academyLessonByVenue.get(venueId) : null;
+              const linkedSessions = venueId ? privateAcademySessions.filter((session) => session.academy_id === venueId) : [];
+              const isAcademy = organisation.venue?.organisation_type === "academy" || organisation.venue?.organisation_type === "club_academy";
               return (
-                <article className="rounded-lg border border-court-teal/25 bg-court-mist p-4" key={link.id}>
-                  <div className="flex items-start justify-between gap-2"><h3 className="font-black text-court-navy">{link.venue?.name ?? "Academy"}</h3><span className={`ui-chip ${link.status === "active" && link.venue?.status !== "inactive" ? "ui-chip-success" : "ui-chip-warning"}`}>{link.venue?.status === "inactive" ? "Organisation inactive" : link.status === "active" ? "Connection active" : link.status === "suspended" ? "Connection paused" : "Invitation pending"}</span></div>
-                  <p className="mt-3 text-sm font-semibold text-slate-700">Coach: {assignment?.coach ? playerName(assignment.coach) : "To be assigned"}</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-700">Lesson: {lesson ? formatDateTime(lesson.start_time) : schedule || (link.proposal_status === "proposed" ? "Proposal details to be confirmed" : "No lesson scheduled yet")}</p>
-                  {lesson ? <p className="mt-1 text-sm text-slate-600">Venue: {lesson.external_venue?.name ?? lesson.court?.name ?? lesson.custom_location ?? "To be confirmed"}</p> : proposal && typeof proposal.venue === "string" ? <p className="mt-1 text-sm text-slate-600">Venue: {proposal.venue}</p> : null}
-                  {linkedSessions.length > 0 ? (
-                    <details className="ui-collapsible mt-4 border-t border-court-teal/20 pt-3">
-                      <summary className="flex cursor-pointer items-center justify-between gap-3 text-sm font-black text-court-navy"><span>My Academy Sessions · {linkedSessions.length}</span><span className="ui-collapsible-chevron"><ChevronDownIcon size={16} /></span></summary>
-                      <div className="mt-3 divide-y divide-court-teal/15">
-                        {linkedSessions.map((session) => (
-                          <div className="py-3 first:pt-0 last:pb-0" key={session.session_id}>
-                            <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-black text-court-navy">{session.session_name}</p><span className="ui-chip ui-chip-brand">{formatLabel(session.session_type)}</span></div>
-                            <p className="mt-1 text-sm font-semibold text-slate-700">{session.next_start_time ? formatDateTime(session.next_start_time) : "No upcoming occurrence"}</p>
-                            <p className="mt-1 text-xs font-semibold text-slate-500">{session.coach_name} · {session.location_name ?? "Venue to be confirmed"}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  ) : null}
-                </article>
+                <OrganisationCard
+                  key={organisation.id}
+                  organisation={organisation}
+                  playerProfileId={player.id}
+                  meta={{
+                    membership: venueId ? membershipByVenueId.get(venueId) ?? null : null,
+                    supportingDetails: isAcademy && (assignment?.coach || lesson || linkedSessions.length) ? (
+                      <>
+                        {assignment?.coach ? <p><span className="font-bold text-slate-800">Coach:</span> {playerName(assignment.coach)}</p> : null}
+                        {lesson ? <p><span className="font-bold text-slate-800">Next lesson:</span> {formatDateTime(lesson.start_time)}</p> : null}
+                        {linkedSessions.length ? <p><span className="font-bold text-slate-800">Active sessions:</span> {linkedSessions.length}</p> : null}
+                      </>
+                    ) : null
+                  }}
+                />
               );
             })}
           </div>
-        ) : <EmptyState text="No academy connections yet." />}
+        ) : <div className="mt-5"><OrganisationEmptyState /></div>}
       </section>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <CollapsibleCard
-          badge={
-            <span className="ui-chip ui-chip-brand">
-              <MembershipIcon size={14} /> Private
-            </span>
-          }
-          eyebrow="Membership"
-          id="membership"
-          summary={`${memberStatusLabel(player.member_status)} · ${clubName ?? "No club linked"} · Renewal to be confirmed`}
-          title="Membership Details"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <DetailRow label="Membership Status" value={memberStatusLabel(player.member_status)} />
-            <DetailRow label="Membership Type" value="Membership details to be confirmed" />
-            <DetailRow label="Renewal Date" value="Renewal date to be confirmed" />
-            <DetailRow label="Club" value={clubName ?? "No club linked yet"} />
-            <DetailRow label="Pricing" value="Pricing to be confirmed" />
-            <DetailRow label="Benefits" value="Benefits depend on your club setup" />
-          </div>
-          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-court-teal/25 bg-court-mist p-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-bold leading-6 text-court-navy">Membership and billing rules are managed in the private Profile hub.</p>
-            <Link className="btn-secondary shrink-0" href={profileHref}>
-              Open Profile
-            </Link>
-          </div>
-        </CollapsibleCard>
-
+      <div className="mt-5">
         <CollapsibleCard
           badge={
             <span className="ui-chip ui-chip-brand">
