@@ -26,7 +26,7 @@ export async function markNotificationRead(formData: FormData) {
   const notificationId = text(formData, "notificationId");
 
   if (!notificationId) {
-    redirect("/dashboard/notifications?error=invalid_notification");
+    redirect("/dashboard/messages?error=invalid_notification");
   }
 
   const { supabase, user } = await getNotificationContext();
@@ -38,11 +38,12 @@ export async function markNotificationRead(formData: FormData) {
 
   if (error) {
     console.error("PlayR notification mark-read failed", { userId: user.id, notificationId, error });
-    redirect("/dashboard/notifications?error=mark_read_failed");
+    redirect("/dashboard/messages?error=mark_read_failed");
   }
 
   revalidatePath("/dashboard/notifications");
-  redirect("/dashboard/notifications?marked=read");
+  revalidatePath("/dashboard/messages");
+  redirect("/dashboard/messages?marked=read");
 }
 
 export async function markAllNotificationsRead() {
@@ -55,9 +56,10 @@ export async function markAllNotificationsRead() {
 
   if (error) {
     console.error("PlayR notifications mark-all-read failed", { userId: user.id, error });
-    redirect("/dashboard/notifications?error=mark_all_failed");
+    redirect("/dashboard/messages?error=mark_all_failed");
   }
 
   revalidatePath("/dashboard/notifications");
-  redirect("/dashboard/notifications?marked=all");
+  revalidatePath("/dashboard/messages");
+  redirect("/dashboard/messages?marked=all");
 }

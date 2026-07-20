@@ -17,12 +17,12 @@ export default async function VenuesPage({ searchParams }: { searchParams?: { pr
   const selectedProfile = selectManagedVenueProfile(profilesResult.data, searchParams?.profile);
   if (!selectedProfile) {
     return (
-      <PageShell eyebrow="Venues" subtitle="Find a club, book courts and explore memberships." title="Where would you like to play or join?">
+      <PageShell eyebrow="Places to play" subtitle="Find clubs, courts and places to play." title="Venues">
         <section className="empty-state">
           <ClubIcon className="mx-auto text-court-teal" size={28} />
           <h2 className="section-title mt-3">Create your player profile first</h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">Your club relationships and booking rules are linked to your PlayR card.</p>
-          <Link className="btn-primary mt-5" href="/dashboard/profile">Create Profile</Link>
+          <Link className="btn-primary mt-5" href="/dashboard/settings">Create Profile</Link>
         </section>
       </PageShell>
     );
@@ -36,9 +36,9 @@ export default async function VenuesPage({ searchParams }: { searchParams?: { pr
   const discoverable = discovery.data.filter((venue) => !myClubIds.has(venue.venueId));
 
   return (
-    <PageShell eyebrow="Venues" subtitle="Your clubs, court access and membership options in one place." title="Where would you like to play or join?">
+    <PageShell eyebrow="Places to play" subtitle="Find clubs, courts and places to play." title="Venues">
       <VenueProfileSelector profiles={profilesResult.data} search={searchParams?.q} selectedProfileId={selectedProfile.id} />
-      {profilesResult.error ? <div className="mb-5 rounded border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">{profilesResult.error.message}</div> : null}
+      {profilesResult.error ? <div className="mb-5 rounded border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">Player choices could not be loaded right now.</div> : null}
 
       <section className="mb-8">
         <div className="mb-4 flex items-end justify-between gap-3">
@@ -46,7 +46,7 @@ export default async function VenuesPage({ searchParams }: { searchParams?: { pr
           <span className="ui-chip ui-chip-brand">{myClubs.data.length}</span>
         </div>
         {myClubs.error ? (
-          <div className="ui-empty-card">{myClubs.error.message}</div>
+          <div className="ui-empty-card">Your linked clubs could not be loaded right now.</div>
         ) : myClubs.data.length > 0 ? (
           <div className="grid gap-4 lg:grid-cols-2">{myClubs.data.map((venue) => <VenueCard key={venue.venueId} profileId={selectedProfile.id} venue={venue} />)}</div>
         ) : (
@@ -66,7 +66,7 @@ export default async function VenuesPage({ searchParams }: { searchParams?: { pr
           <button className="btn-primary" type="submit">Search</button>
         </form>
         {discovery.error ? (
-          <div className="ui-empty-card">{discovery.error.message} Refresh the page to try again.</div>
+          <div className="ui-empty-card">Venue discovery could not be loaded right now. Refresh the page to try again.</div>
         ) : discoverable.length > 0 ? (
           <div className="grid gap-4 lg:grid-cols-2">{discoverable.map((venue) => <VenueCard key={venue.venueId} profileId={selectedProfile.id} venue={venue} />)}</div>
         ) : (

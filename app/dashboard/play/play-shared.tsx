@@ -207,7 +207,7 @@ export function errorMessage(value?: string) {
     case "booking_not_allowed":
       return "Choose one of your own future court bookings, or send the invite without a booking.";
     case "missing_booking_slot":
-      return "Choose an available court and time slot before booking through Play.";
+      return "Choose an available court and time slot before booking through Compete.";
     case "booking_window":
       return "Choose a court time in the next 7 days.";
     case "court_unavailable":

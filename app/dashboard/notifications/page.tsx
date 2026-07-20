@@ -11,11 +11,17 @@ import type { Notification, NotificationType } from "@/types/courtside";
 
 export const dynamic = "force-dynamic";
 
-type NotificationsPageProps = {
+type MessagesPageProps = {
   searchParams?: {
     error?: string;
     marked?: string;
   };
+};
+
+type MessageContext = {
+  playerName: string;
+  sourceName: string;
+  sourceType: string;
 };
 
 const notificationVisuals: Record<NotificationType, { className: string }> = {
@@ -108,9 +114,9 @@ function notificationIcon(type: NotificationType) {
 function statusMessage(marked?: string) {
   switch (marked) {
     case "read":
-      return "Notification marked as read.";
+      return "Message marked as read.";
     case "all":
-      return "All notifications marked as read.";
+      return "All messages marked as read.";
     default:
       return null;
   }
@@ -119,11 +125,11 @@ function statusMessage(marked?: string) {
 function errorMessage(error?: string) {
   switch (error) {
     case "invalid_notification":
-      return "That notification could not be found.";
+      return "That message could not be found.";
     case "mark_read_failed":
-      return "We could not mark that notification as read.";
+      return "We could not mark that message as read.";
     case "mark_all_failed":
-      return "We could not mark notifications as read.";
+      return "We could not mark messages as read.";
     default:
       return null;
   }
@@ -144,7 +150,25 @@ function sortNotifications(notifications: Notification[]) {
   });
 }
 
-function NotificationCard({ notification }: { notification: Notification }) {
+function metadataId(notification: Notification, keys: string[]) {
+  for (const key of keys) {
+    const value = notification.metadata[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return null;
+}
+
+function messageSource(type: NotificationType) {
+  if (type.startsWith("match_") || type.includes("invitation") || type === "parent_approval_required") return "Match & invitation";
+  if (type.startsWith("event_")) return "Competition";
+  if (type.startsWith("court_") || type.startsWith("upcoming_booking")) return "Booking";
+  if (type.startsWith("lesson_") || type === "coach_invitation") return "Academy";
+  if (type.startsWith("membership_")) return "Club & membership";
+  if (type === "new_message") return "Message";
+  return "PlayR update";
+}
+
+function NotificationCard({ context, notification }: { context: MessageContext; notification: Notification }) {
   const unread = !notification.read_at;
   const actionRequired = notification.action_required || notification.status === "action_required";
   const resolved = notification.status === "resolved" || notification.status === "expired";
@@ -157,12 +181,14 @@ function NotificationCard({ notification }: { notification: Notification }) {
           <div className={`grid h-11 w-11 shrink-0 place-items-center rounded ${visual.className}`}>{notificationIcon(notification.type)}</div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-black text-court-navy">{notification.title}</h2>
+              <h3 className="text-lg font-black text-court-navy">{notification.title}</h3>
               <span className={`ui-chip ${unread ? "ui-chip-brand" : "ui-chip-muted"}`}>{unread ? "Unread" : "Read"}</span>
               {actionRequired ? <span className="ui-chip ui-chip-warning">Action required</span> : null}
               {resolved ? <span className="ui-chip ui-chip-success">{notification.status === "expired" ? "Expired" : "Resolved"}</span> : null}
               <span className="ui-chip ui-chip-muted">{formatLabel(notification.type)}</span>
             </div>
+            <p className="mt-1 text-sm font-black text-court-teal">{context.sourceName}</p>
+            <p className="mt-0.5 text-xs font-bold text-slate-600">{context.playerName} · {context.sourceType}</p>
             <p className="mt-2 text-sm leading-6 text-slate-700">{notification.message}</p>
             <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-500">{formatDateTime(notification.created_at)}</p>
           </div>
@@ -188,11 +214,11 @@ function NotificationCard({ notification }: { notification: Notification }) {
   );
 }
 
-export default async function NotificationsPage({ searchParams }: NotificationsPageProps) {
+export default async function MessagesPage({ searchParams }: MessagesPageProps) {
   if (!hasSupabaseConfig()) {
     return (
-      <PageShell eyebrow="Notifications" title="Supabase is not configured.">
-        <div className="ui-empty-card">Add Supabase environment variables to use in-app notifications.</div>
+      <PageShell eyebrow="Communication" subtitle="Updates from PlayR and your linked organisations." title="Messages">
+        <div className="ui-empty-card">Add Supabase environment variables to use messages.</div>
       </PageShell>
     );
   }
@@ -221,16 +247,35 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
   const notifications = sortNotifications((data ?? []) as Notification[]);
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
   const actionRequiredCount = notifications.filter((notification) => notification.action_required || notification.status === "action_required").length;
+  const profileIds = [...new Set(notifications.flatMap((notification) => [notification.profile_id, notification.junior_profile_id]).filter((value): value is string => Boolean(value)))];
+  const venueIds = [...new Set(notifications.map((notification) => metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"])).filter((value): value is string => Boolean(value)))];
+  const [{ data: profileData }, { data: venueData }] = await Promise.all([
+    profileIds.length > 0 ? supabase.from("profiles").select("id,first_name,last_name,is_junior").in("id", profileIds) : { data: [] },
+    venueIds.length > 0 ? supabase.from("venues").select("id,name").in("id", venueIds) : { data: [] }
+  ]);
+  const profileNames = new Map((profileData ?? []).map((profile) => [profile.id as string, `${profile.first_name} ${profile.last_name}${profile.is_junior ? " · Junior" : " · Adult Profile"}`]));
+  const venueNames = new Map((venueData ?? []).map((venue) => [venue.id as string, venue.name as string]));
+  const contextFor = (notification: Notification): MessageContext => {
+    const playerId = notification.junior_profile_id ?? notification.profile_id;
+    const venueId = metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"]);
+    return {
+      playerName: playerId ? profileNames.get(playerId) ?? "Linked player" : "PlayR account",
+      sourceName: venueId ? venueNames.get(venueId) ?? "Linked organisation" : "PlayR",
+      sourceType: messageSource(notification.type)
+    };
+  };
+  const actionItems = notifications.filter((notification) => notification.action_required || notification.status === "action_required");
+  const recentItems = notifications.filter((notification) => !actionItems.some((item) => item.id === notification.id));
 
   return (
     <PageShell
-      eyebrow="Notifications"
-      subtitle="Private updates about invites, events, bookings and player progress."
-      title="Notifications"
+      eyebrow="Communication"
+      subtitle="Updates from PlayR and your linked organisations."
+      title="Messages"
     >
       <StatusAlert className="mb-5" message={statusMessage(searchParams?.marked)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
-      {error ? <StatusAlert className="mb-5" message="Notifications could not be loaded right now." tone="error" /> : null}
+      {error ? <StatusAlert className="mb-5" message="Messages could not be loaded right now." tone="error" /> : null}
 
       <div className="grid gap-5">
         <section className="surface-card p-4 sm:p-5">
@@ -251,19 +296,28 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
         </section>
 
         {notifications.length > 0 ? (
-          <section className="grid gap-3">
-            {notifications.map((notification) => (
-              <NotificationCard key={notification.id} notification={notification} />
-            ))}
-          </section>
+          <>
+            {actionItems.length > 0 ? (
+              <section aria-labelledby="action-required" className="grid gap-3">
+                <div><p className="section-kicker">Priority</p><h2 className="section-title mt-1" id="action-required">Action Required</h2></div>
+                {actionItems.map((notification) => <NotificationCard context={contextFor(notification)} key={notification.id} notification={notification} />)}
+              </section>
+            ) : null}
+            {recentItems.length > 0 ? (
+              <section aria-labelledby="recent-updates" className="grid gap-3">
+                <div><p className="section-kicker">Inbox</p><h2 className="section-title mt-1" id="recent-updates">Recent Messages & Updates</h2></div>
+                {recentItems.map((notification) => <NotificationCard context={contextFor(notification)} key={notification.id} notification={notification} />)}
+              </section>
+            ) : null}
+          </>
         ) : (
           <section className="empty-state">
-            <h2 className="section-title">No notifications yet</h2>
+            <h2 className="section-title">No new messages</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-              Important updates about invites, events and progress will appear here.
+              Updates from your clubs, academies and competitions will appear here.
             </p>
             <Link className="btn-primary mt-5" href="/dashboard">
-              Back to MyPlayR
+              View your players
             </Link>
           </section>
         )}

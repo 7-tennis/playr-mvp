@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/app/auth/actions";
 import { PlayerBottomNav, PlayerDesktopNav } from "@/components/player-nav";
-import { NotificationIcon } from "@/components/playr-icons";
+import { SettingsIcon } from "@/components/playr-icons";
 import { canAccessClubR, canAccessCoachR, loadActiveRoleRow, normalizeStoredRole, roleLabel, type UserRole } from "@/lib/permissions";
 import { appRoleForOrganisationMembership, loadActiveOrganisationPreference, loadOrganisationMembershipsForUser, pickActiveOrganisationMembership } from "@/lib/organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
@@ -67,7 +67,7 @@ export async function SiteHeader() {
           </Link>
 
           {isLoggedIn ? (
-            <PlayerDesktopNav adminHref={adminHref} adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} />
+            <PlayerDesktopNav adminHref={adminHref} adminLabel={adminLabel} messageCount={unreadNotifications} showAdmin={isAdmin} showCoach={isCoach} />
           ) : (
             <nav className="hidden items-center gap-5 text-sm font-bold text-slate-200 md:flex" aria-label="Public navigation">
               <Link className="rounded transition hover:text-white focus-ring" href="/events">
@@ -83,16 +83,11 @@ export async function SiteHeader() {
             {isLoggedIn ? (
               <>
                 <Link
-                  aria-label={unreadNotifications > 0 ? `${unreadNotifications} unread notifications` : "Notifications"}
-                  className="relative inline-flex h-11 w-11 items-center justify-center rounded-playr-md border border-white/20 bg-white/10 text-white shadow-playr-subtle transition hover:border-court-teal hover:bg-white/15 focus-ring"
-                  href="/dashboard/notifications"
+                  aria-label="Open settings"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-playr-md border border-white/20 bg-white/10 text-white shadow-playr-subtle transition hover:border-court-teal hover:bg-white/15 focus-ring"
+                  href="/dashboard/settings"
                 >
-                  <NotificationIcon size={18} />
-                  {unreadNotifications > 0 ? (
-                    <span className="absolute -right-1 -top-1 min-w-[1.25rem] rounded-full bg-court-lime px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-court-navy ring-2 ring-court-navy">
-                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                    </span>
-                  ) : null}
+                  <SettingsIcon size={19} />
                 </Link>
                 <form action={signOut}>
                   <button className="min-h-11 rounded-playr-md border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white shadow-playr-subtle transition hover:bg-white/15 focus-ring" type="submit">
@@ -113,7 +108,7 @@ export async function SiteHeader() {
           </div>
         </div>
       </header>
-      {isLoggedIn ? <PlayerBottomNav /> : null}
+      {isLoggedIn ? <PlayerBottomNav messageCount={unreadNotifications} /> : null}
     </>
   );
 }

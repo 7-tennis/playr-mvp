@@ -36,7 +36,7 @@ export function PlayerProfileCard({
 
   return (
     <Link aria-label={`View ${name} profile`} className="group block rounded-playr-lg focus-ring" href={href}>
-      <PlayRCard as="article" className={`h-full overflow-hidden group-hover:ring-4 ${stage.border} ${stage.ring}`} variant="interactive">
+      <PlayRCard as="article" className={`h-full overflow-hidden ring-1 ring-slate-950/5 shadow-playr-card group-hover:-translate-y-0.5 group-hover:ring-4 group-hover:shadow-playr-elevated ${stage.border} ${stage.ring}`} variant="interactive">
         <div className={`${stage.gradient} p-4 sm:p-5`}>
           <div className="flex items-start gap-3">
             <div className={`grid h-14 w-14 shrink-0 place-items-center rounded-playr-md border text-base font-black shadow-sm ${stage.avatar}`}>{initials}</div>

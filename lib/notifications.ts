@@ -69,5 +69,6 @@ export async function createNotification(supabase: SupabaseServerClient, input: 
   }
 
   revalidatePath("/dashboard/notifications");
+  revalidatePath("/dashboard/messages");
   return data.id as string;
 }

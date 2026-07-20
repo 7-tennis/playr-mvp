@@ -23,7 +23,7 @@ export default async function PlanMatchPage({ searchParams }: PlanMatchPageProps
 
   if (playData.kind === "no-config") {
     return (
-      <PageShell eyebrow="Play" title="Supabase is not configured.">
+      <PageShell eyebrow="Compete" title="Supabase is not configured.">
         <div className="ui-empty-card">Add Supabase environment variables to use match planning.</div>
       </PageShell>
     );
@@ -31,7 +31,7 @@ export default async function PlanMatchPage({ searchParams }: PlanMatchPageProps
 
   if (playData.kind === "no-profile") {
     return (
-      <PageShell eyebrow="Play" title="Create your Player Profile first.">
+      <PageShell eyebrow="Compete" title="Create your Player Profile first.">
         <div className="empty-state">
           <p className="text-slate-700">You need an adult player profile before starting match requests.</p>
           <Link className="btn-primary mt-5" href="/dashboard/profile">
@@ -49,10 +49,10 @@ export default async function PlanMatchPage({ searchParams }: PlanMatchPageProps
   const preferredSummary = `${selectedCourt?.name ?? "Court to be confirmed"} · ${formatCourtDateLabel(dayStart)}${availableSlots[0] ? ` · options from ${availableSlots[0].timeLabel}` : ""}`;
 
   return (
-    <PageShell eyebrow="Play" subtitle="Challenge first. Confirm court and time once both players agree." title="Match Invite + Court Booking">
+    <PageShell eyebrow="Compete" subtitle="Challenge first. Confirm court and time once both players agree." title="Match Invite + Court Booking">
       <div className="mb-5">
-        <Link className="font-bold text-court-blue" href="/dashboard/play">
-          Back to Play
+        <Link className="font-bold text-court-blue" href="/dashboard/compete">
+          Back to Compete
         </Link>
       </div>
       <StatusAlert className="mb-5" message={inviteMessage(searchParams?.invite)} tone="success" />

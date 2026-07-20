@@ -3,33 +3,41 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import { BookingIcon, EntriesIcon, EventIcon, MatchIcon, StageIcon } from "@/components/playr-icons";
+import { LeaderboardIcon, LocationIcon, MatchIcon, MessagesIcon, StageIcon } from "@/components/playr-icons";
 import { playrNavigationVisuals } from "@/lib/navigation-visuals";
+import { isPlayerNavigationActive, playerNavigationDestinations, type PlayerNavigationKey } from "@/lib/player-navigation";
 
-const playerLinks = [
-  { href: "/dashboard/venues", label: "Book", icon: BookingIcon, matches: ["/dashboard/venues", "/dashboard/book-court", "/dashboard/my-bookings", "/dashboard/memberships"] },
-  { href: "/dashboard/play", label: "Play", icon: MatchIcon, matches: ["/dashboard/play"] },
-  { href: "/dashboard", label: "MyPlayR", icon: StageIcon, matches: ["/dashboard", "/dashboard/players"], isHub: true },
-  { href: "/dashboard/events", label: "Compete", icon: EventIcon, matches: ["/dashboard/events", "/dashboard/my-entries", "/dashboard/results"] },
-  { href: "/dashboard/profile", label: "Profile", icon: EntriesIcon, matches: ["/dashboard/profile", "/dashboard/juniors", "/dashboard/notifications"] }
-];
+const playerIcons = {
+  venues: LocationIcon,
+  compete: MatchIcon,
+  myplayr: StageIcon,
+  messages: MessagesIcon,
+  rankings: LeaderboardIcon
+} satisfies Record<PlayerNavigationKey, typeof StageIcon>;
 
-function pathMatches(pathname: string, match: string) {
-  return pathname === match || (match !== "/dashboard" && pathname.startsWith(`${match}/`));
-}
+function NavigationCount({ count }: { count: number }) {
+  if (count <= 0) return null;
 
-function isActivePath(pathname: string, matches: string[]) {
-  return matches.some((match) => pathMatches(pathname, match));
+  return (
+    <span
+      aria-label={`${count} unread ${count === 1 ? "message" : "messages"}`}
+      className="absolute right-1 top-1 min-w-[1.15rem] rounded-full bg-court-lime px-1 py-0.5 text-center text-[9px] font-black leading-none text-court-navy ring-2 ring-court-navy"
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
 }
 
 export function PlayerDesktopNav({
   adminHref = "/admin",
   adminLabel = "ClubR Admin",
+  messageCount = 0,
   showAdmin,
   showCoach
 }: {
   adminHref?: string;
   adminLabel?: string;
+  messageCount?: number;
   showAdmin: boolean;
   showCoach: boolean;
 }) {
@@ -37,15 +45,16 @@ export function PlayerDesktopNav({
 
   return (
     <nav className={playrNavigationVisuals.desktopNav} aria-label="Player navigation">
-      {playerLinks.map((link) => {
-        const active = isActivePath(pathname, link.matches);
-        const Icon = link.icon;
+      {playerNavigationDestinations.map((link) => {
+        const active = isPlayerNavigationActive(pathname, link);
+        const Icon = playerIcons[link.key];
 
         return (
           <Link
             aria-current={active ? "page" : undefined}
             className={clsx(
               playrNavigationVisuals.desktopItem,
+              "relative",
               link.isHub
                 ? active ? playrNavigationVisuals.desktopHub : "bg-white/10 text-white hover:bg-white/15"
                 : active ? playrNavigationVisuals.desktopActive : playrNavigationVisuals.desktopInactive
@@ -55,6 +64,7 @@ export function PlayerDesktopNav({
           >
             <Icon size={17} />
             <span>{link.label}</span>
+            {link.key === "messages" ? <NavigationCount count={messageCount} /> : null}
           </Link>
         );
       })}
@@ -68,7 +78,7 @@ export function PlayerDesktopNav({
   );
 }
 
-export function PlayerBottomNav() {
+export function PlayerBottomNav({ messageCount = 0 }: { messageCount?: number }) {
   const pathname = usePathname();
 
   if (pathname.startsWith("/dashboard/coachr") || pathname.startsWith("/dashboard/clubr") || pathname.startsWith("/admin")) return null;
@@ -76,9 +86,9 @@ export function PlayerBottomNav() {
   return (
     <nav aria-label="Player navigation" className={playrNavigationVisuals.mobileBar}>
       <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
-        {playerLinks.map((link) => {
-          const active = isActivePath(pathname, link.matches);
-          const Icon = link.icon;
+        {playerNavigationDestinations.map((link) => {
+          const active = isPlayerNavigationActive(pathname, link);
+          const Icon = playerIcons[link.key];
 
           return (
             <Link
@@ -94,6 +104,7 @@ export function PlayerBottomNav() {
             >
               <Icon size={link.isHub ? 20 : 18} />
               <span className="max-w-full break-words">{link.label}</span>
+              {link.key === "messages" ? <NavigationCount count={messageCount} /> : null}
               {active && !link.isHub ? <span aria-hidden className="absolute bottom-1 h-0.5 w-5 rounded-full bg-court-teal" /> : null}
             </Link>
           );

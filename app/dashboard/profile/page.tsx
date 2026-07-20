@@ -480,6 +480,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
             </span>
           }
           eyebrow="Account & Privacy"
+          id="account-settings"
           summary={`${user.email ?? "Login email unavailable"} · ${defaultMarketingConsent ? "Marketing updates on" : "Marketing updates off"}`}
           title="Account Settings"
         >

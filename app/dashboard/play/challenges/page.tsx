@@ -28,7 +28,7 @@ export default async function ChallengesPage({ searchParams }: ChallengesPagePro
 
   if (playData.kind === "no-config") {
     return (
-      <PageShell eyebrow="Play" title="Supabase is not configured.">
+      <PageShell eyebrow="Compete" title="Supabase is not configured.">
         <div className="ui-empty-card">Add Supabase environment variables to use challenges.</div>
       </PageShell>
     );
@@ -36,7 +36,7 @@ export default async function ChallengesPage({ searchParams }: ChallengesPagePro
 
   if (playData.kind === "no-profile") {
     return (
-      <PageShell eyebrow="Play" title="Create your Player Profile first.">
+      <PageShell eyebrow="Compete" title="Create your Player Profile first.">
         <div className="empty-state">
           <p className="text-slate-700">You need an adult player profile before sending challenges.</p>
           <Link className="btn-primary mt-5" href="/dashboard/profile">
@@ -50,10 +50,10 @@ export default async function ChallengesPage({ searchParams }: ChallengesPagePro
   const { candidateDetailsByProfileId, candidateRatingsByProfileId, closeSuggestions, ownProfiles, ownRatingsByProfileId, selectedProfile, strongerSuggestions } = playData.data;
 
   return (
-    <PageShell eyebrow="Play" subtitle="Find a balanced match or test yourself against a stronger player." title="Challenge Players">
+    <PageShell eyebrow="Compete" subtitle="Find a balanced match or test yourself against a stronger player." title="Challenge Players">
       <div className="mb-5">
-        <Link className="font-bold text-court-blue" href="/dashboard/play">
-          Back to Play
+        <Link className="font-bold text-court-blue" href="/dashboard/compete">
+          Back to Compete
         </Link>
       </div>
       <StatusAlert className="mb-5" message={inviteMessage(searchParams?.invite)} tone="success" />

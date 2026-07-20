@@ -124,7 +124,7 @@ function JuniorCard({ activity, junior, organisations }: { activity?: PlayerActi
 export default async function DashboardPage({ searchParams }: { searchParams?: { profile?: string; request?: string; request_error?: string } }) {
   if (!hasSupabaseConfig()) {
     return (
-      <PageShell eyebrow="MyPlayR" title="Supabase is not configured.">
+      <PageShell eyebrow="Player profiles" title="Supabase is not configured.">
         <div className="rounded-lg border border-slate-200 bg-white p-6">
           <p className="text-slate-700">Add Supabase environment variables to use account and profile features.</p>
         </div>
@@ -233,7 +233,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   const ratings = ratingError ? [] : ((ratingData ?? []) as Rating[]);
   const adultRating = profile ? ratings.find((rating) => rating.profile_id === profile.id) ?? null : null;
   return (
-    <PageShell eyebrow="MyPlayR" subtitle="Your players, progress and upcoming tennis activity." title="MyPlayR">
+    <PageShell eyebrow="Player profiles" subtitle="View your profile and linked junior players." title="Your Players">
       <StatusAlert className="mb-5" message={searchParams?.profile === "saved" ? "Profile saved." : null} tone="success" />
       <StatusAlert className="mb-5" message={searchParams?.request === "approved" ? "Lesson confirmed. The new court and time are booked." : searchParams?.request === "declined" ? "Request declined. No unapproved booking changes were made." : searchParams?.request === "makeup_requested" ? "Lesson time requested. The court will be booked after coach approval." : null} tone="success" />
       <StatusAlert className="mb-5" message={searchParams?.request_error === "time_unavailable" ? "This time is no longer available. The original session has not changed." : searchParams?.request_error ? "The lesson request could not be completed. No schedule or booking changes were made." : null} tone="error" />
@@ -249,13 +249,13 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         <SectionHeader
           action={<PlayRLinkButton href="/dashboard/juniors" variant="outline">Manage Juniors</PlayRLinkButton>}
           className="mb-4"
-          description="Your primary player profile and linked junior players."
-          title="My PlayR Cards"
+          description="Adult and linked junior profiles."
+          title="Player cards"
         />
 
         {organisationResult.error ? <SectionError className="mb-4" description="Organisation summaries could not be loaded right now. Your player cards are still available." /> : null}
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-2">
           <MemberCard activity={profile ? activitySummaries.get(profile.id) ?? null : null} organisations={profile ? organisationsByProfileId.get(profile.id) ?? [] : []} profile={profile} rating={adultRating} />
 
           {juniorRows.map((junior) => (

@@ -94,7 +94,9 @@ Use `FormField`, `Input`, `Textarea`, and `Select`, or the compatibility class `
 
 The default shell is hybrid rather than full dark mode: deep navy outer chrome frames a light `playr-page-surface`, while reading surfaces and forms remain light. Player navigation visuals are centralised in `lib/navigation-visuals.ts`.
 
-The mobile player bar uses five labelled destinations—Book, Play, MyPlayR, Compete and Profile—with MyPlayR in the centre. It floats above the device safe area, keeps 44px-plus targets, and uses `aria-current="page"` for the selected route. Desktop navigation uses the same icons, gradient and active-state language. Role-specific ClubR and CoachR navigation remains separate.
+The mobile player bar uses five labelled destinations—Venues, Compete, MyPlayR, Messages and Rankings—with MyPlayR in the centre. It floats above the device safe area, keeps 44px-plus targets, and uses `aria-current="page"` for the selected route. Desktop navigation uses the same icons, gradient and active-state language. Active-route matching is centralised in `lib/player-navigation.ts`; the real unread count belongs to Messages, while account and privacy actions open from the header Settings control. Role-specific ClubR and CoachR navigation remains separate.
+
+Player profile cards use `shadow-playr-card`, a subtle outer ring and `shadow-playr-elevated` on pointer hover. This is the shared floating treatment: it improves separation without changing stage gradients, card height or content hierarchy.
 
 ## Accessibility and motion
 

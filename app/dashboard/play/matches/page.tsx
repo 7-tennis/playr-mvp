@@ -30,7 +30,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
 
   if (playData.kind === "no-config") {
     return (
-      <PageShell eyebrow="Play" title="Supabase is not configured.">
+      <PageShell eyebrow="Compete" title="Supabase is not configured.">
         <div className="ui-empty-card">Add Supabase environment variables to use match queues.</div>
       </PageShell>
     );
@@ -38,7 +38,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
 
   if (playData.kind === "no-profile") {
     return (
-      <PageShell eyebrow="Play" title="Create your Player Profile first.">
+      <PageShell eyebrow="Compete" title="Create your Player Profile first.">
         <div className="empty-state">
           <p className="text-slate-700">You need an adult player profile before managing match invites.</p>
           <Link className="btn-primary mt-5" href="/dashboard/profile">
@@ -63,10 +63,10 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   } = playData.data;
 
   return (
-    <PageShell eyebrow="Play" subtitle="Pending, accepted, sent and result-ready matches in one focused queue." title="Upcoming Matches">
+    <PageShell eyebrow="Compete" subtitle="Pending, accepted, sent and result-ready matches in one focused queue." title="Upcoming Matches">
       <div className="mb-5">
-        <Link className="font-bold text-court-blue" href="/dashboard/play">
-          Back to Play
+        <Link className="font-bold text-court-blue" href="/dashboard/compete">
+          Back to Compete
         </Link>
       </div>
       <StatusAlert className="mb-5" message={inviteMessage(searchParams?.invite)} tone="success" />
