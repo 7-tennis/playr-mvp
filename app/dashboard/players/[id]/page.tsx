@@ -5,6 +5,7 @@ import { CollapsibleCard } from "@/components/collapsible-card";
 import { PageShell } from "@/components/page-shell";
 import { CancelledSessionCard, SessionRequestCard } from "@/components/session-request-cards";
 import { OrganisationCard, OrganisationEmptyState, PlayerOrganisationSummary } from "@/components/player-organisations";
+import { MetricCard, PlayRBadge, PlayRCard, SectionError, SectionHeader } from "@/components/playr-ui";
 import { StatusAlert } from "@/components/status-alert";
 import {
   BadgeIcon,
@@ -185,23 +186,15 @@ function InfoLine({ icon, value, muted = false }: { icon: ReactNode; value: stri
 }
 
 function StatChip({ icon, value, label }: { icon: ReactNode; value: string | number; label: string }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm">
-      <p className="flex items-center gap-2 text-lg font-black text-court-navy">
-        {icon}
-        <span>{value}</span>
-      </p>
-      <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-    </div>
-  );
+  return <MetricCard icon={icon} label={label} value={value} />;
 }
 
 function SectionCard({ children, id, title }: { children: ReactNode; id?: string; title: string }) {
   return (
-    <section className="surface-card p-4 sm:p-5" id={id}>
+    <PlayRCard as="section" className="p-4 sm:p-5" id={id}>
       <h2 className="text-lg font-black text-court-navy">{title}</h2>
       <div className="mt-4">{children}</div>
-    </section>
+    </PlayRCard>
   );
 }
 
@@ -473,14 +466,14 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
         </a>
       </nav>
 
-      <section className={`overflow-hidden rounded-lg border bg-white shadow-court ${accent.border}`} id="overview">
+      <PlayRCard as="section" className={`overflow-hidden shadow-playr-card ${accent.border}`} id="overview" variant="default">
         <div className={`h-2 ${accent.strip}`} />
         <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className={`grid h-20 w-20 shrink-0 place-items-center rounded-lg text-2xl font-black ${accent.avatar}`}>{playerInitials(player)}</div>
             <div className="min-w-0">
               <h2 className="text-3xl font-black text-court-navy">{playerName(player)}</h2>
-              <span className={`mt-2 inline-flex rounded px-2.5 py-1 text-xs font-black uppercase tracking-wide ${accent.badge}`}>{playerType}</span>
+              <PlayRBadge className={`mt-2 border-transparent ${accent.badge}`} size="sm">{playerType}</PlayRBadge>
               <div className="mt-4 grid gap-2">
                 <InfoLine
                   icon={<RatingIcon rating={player.is_junior ? player.junior_rating : rating?.rating_value ?? null} size={16} stage={player.is_junior ? player.junior_stage : "member"} />}
@@ -499,7 +492,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
             <StatChip icon={<BookingIcon size={18} />} label={plural(bookings.length, "Booking", "Bookings")} value={bookings.length} />
           </div>
         </div>
-      </section>
+      </PlayRCard>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <SectionCard title="Leaderboard">
@@ -556,10 +549,10 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
         </section>
       ) : null}
 
-      <section className="surface-card mt-5 p-4 sm:p-6" id="organisations">
-        <div className="flex items-start justify-between gap-3"><div><p className="section-kicker">Player connections</p><h2 className="mt-1 text-xl font-black text-court-navy">Organisations</h2><p className="mt-1 text-sm leading-6 text-slate-600">Clubs, academies, schools and districts connected to this player.</p></div><ClubIcon className="text-court-teal" size={22} /></div>
+      <PlayRCard as="section" className="mt-5 p-4 sm:p-6" id="organisations">
+        <SectionHeader description="Clubs, academies, schools and districts connected to this player." icon={<ClubIcon className="text-court-teal" size={22} />} title="Organisations" />
         {organisationResult.error ? (
-          <div className="ui-empty-card mt-4">Organisation connections could not be loaded right now. The rest of this player profile is still available.</div>
+          <SectionError className="mt-4" description="Organisation connections could not be loaded right now. The rest of this player profile is still available." />
         ) : organisations.length > 0 ? (
           <div className="mt-5 grid items-stretch gap-4 md:grid-cols-2">
             {organisations.map((organisation) => {
@@ -588,7 +581,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
             })}
           </div>
         ) : <div className="mt-5"><OrganisationEmptyState /></div>}
-      </section>
+      </PlayRCard>
 
       <div className="mt-5">
         <CollapsibleCard

@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { ArrowRightIcon, BookingIcon, ClubIcon, LocationIcon, MembershipIcon } from "@/components/playr-icons";
+import { IconContainer, PlayRBadge, PlayRButton, PlayRCard, PlayRLinkButton, type PlayRBadgeVariant } from "@/components/playr-ui";
 import type { ManagedVenueProfile, VenueCardData } from "@/lib/venues";
-import { profileDisplayName, venueRelationshipChip, venueRelationshipLabel } from "@/lib/venues";
+import { profileDisplayName, venueRelationshipLabel } from "@/lib/venues";
+import type { VenueRelationshipType } from "@/types/courtside";
 
 export function VenueProfileSelector({
   profiles,
@@ -18,7 +19,7 @@ export function VenueProfileSelector({
       {search ? <input name="q" type="hidden" value={search} /> : null}
       <label className="text-sm font-black text-court-navy">
         Playing as
-        <select className="mt-1.5 w-full rounded border border-slate-300 bg-white px-3 py-3 focus-ring" defaultValue={selectedProfileId} name="profile">
+        <select className="form-control mt-1.5" defaultValue={selectedProfileId} name="profile">
           {profiles.map((profile) => (
             <option key={profile.id} value={profile.id}>
               {profileDisplayName(profile)}{profile.is_junior ? " · Junior" : ""}
@@ -26,9 +27,16 @@ export function VenueProfileSelector({
           ))}
         </select>
       </label>
-      <button className="btn-secondary" type="submit">Switch Profile</button>
+      <PlayRButton type="submit" variant="outline">Switch Profile</PlayRButton>
     </form>
   );
+}
+
+function relationshipBadge(type: VenueRelationshipType): PlayRBadgeVariant {
+  if (type === "member") return "active";
+  if (type === "pending") return "pending";
+  if (type === "former_member") return "inactive";
+  return "neutral";
 }
 
 function relationshipAction(venue: VenueCardData, profileId: string) {
@@ -41,19 +49,19 @@ function relationshipAction(venue: VenueCardData, profileId: string) {
 export function VenueCard({ venue, profileId }: { venue: VenueCardData; profileId: string }) {
   const actionLabel = venue.relationship.relationshipType === "pending" ? "View Application" : "Open Club";
   return (
-    <article className="surface-card overflow-hidden">
-      <div className="h-1.5 bg-gradient-to-r from-court-navy via-court-teal to-emerald-500" />
+    <PlayRCard as="article" className="overflow-hidden">
+      <div className="playr-gradient-club h-1.5" />
       <div className="p-4 sm:p-5">
         <div className="flex items-start gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded bg-court-mist text-court-navy">
+          <IconContainer>
             <ClubIcon size={20} />
-          </div>
+          </IconContainer>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <h3 className="text-lg font-black text-court-navy">{venue.venueName}</h3>
-              <span className={`ui-chip ${venueRelationshipChip(venue.relationship.relationshipType)}`}>
+              <PlayRBadge dot variant={relationshipBadge(venue.relationship.relationshipType)}>
                 {venueRelationshipLabel(venue.relationship.relationshipType)}
-              </span>
+              </PlayRBadge>
             </div>
             {venue.locationSummary ? <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600"><LocationIcon size={14} /> {venue.locationSummary}</p> : null}
           </div>
@@ -72,10 +80,10 @@ export function VenueCard({ venue, profileId }: { venue: VenueCardData; profileI
                 ? venue.guestBookingAvailable ? "Guest booking is available while you explore rejoining." : "View current membership options to rejoin."
                 : venue.guestBookingAvailable ? "Guest bookings available" : "Membership information available"}
         </p>
-        <Link className="btn-primary mt-4 w-full justify-between" href={relationshipAction(venue, profileId)}>
+        <PlayRLinkButton className="mt-4 w-full justify-between" href={relationshipAction(venue, profileId)} variant="primary">
           {actionLabel}<ArrowRightIcon size={16} />
-        </Link>
+        </PlayRLinkButton>
       </div>
-    </article>
+    </PlayRCard>
   );
 }

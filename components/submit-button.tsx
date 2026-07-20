@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { LoadingSpinner, playrButtonClasses } from "@/components/playr-ui";
 
 type SubmitButtonProps = {
   children: string;
@@ -14,11 +15,12 @@ export function SubmitButton({ children, pendingText, className = "" }: SubmitBu
   return (
     <button
       aria-disabled={pending}
-      className={`${className} disabled:cursor-not-allowed disabled:opacity-70`}
+      aria-busy={pending}
+      className={className || playrButtonClasses()}
       disabled={pending}
       type="submit"
     >
-      {pending ? pendingText : children}
+      {pending ? <><LoadingSpinner />{pendingText}</> : children}
     </button>
   );
 }

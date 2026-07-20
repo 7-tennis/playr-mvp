@@ -12,9 +12,10 @@ export function StatusAlert({ message, tone = "info", className = "" }: StatusAl
   const styles = {
     success: "border-emerald-200 bg-emerald-50 text-emerald-950",
     warning: "border-amber-200 bg-amber-50 text-amber-950",
-    error: "border-amber-200 bg-amber-50 text-amber-950",
-    info: "border-slate-200 bg-white text-slate-700"
+    info: "border-blue-200 bg-blue-50 text-blue-950"
   };
 
-  return <p className={`rounded-lg border p-4 text-sm leading-6 ${styles[tone]} ${className}`}>{message}</p>;
+  if (tone === "error") return <SectionError className={className} description={message} title="Something went wrong" />;
+  return <p className={`rounded-playr-lg border p-4 text-sm leading-6 ${styles[tone]} ${className}`} role="status">{message}</p>;
 }
+import { SectionError } from "@/components/playr-ui";

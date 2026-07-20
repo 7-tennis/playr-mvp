@@ -5,6 +5,7 @@ import { PageShell } from "@/components/page-shell";
 import { CancelledSessionCard, SessionRequestCard } from "@/components/session-request-cards";
 import { ArrowRightIcon, BookingIcon, EventIcon, InviteIcon, RatingIcon } from "@/components/playr-icons";
 import { PlayerOrganisationSummary } from "@/components/player-organisations";
+import { PlayRBadge, PlayRCard, PlayRLinkButton, SectionError, SectionHeader } from "@/components/playr-ui";
 import { StatusAlert } from "@/components/status-alert";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
@@ -119,14 +120,14 @@ function MemberCard({
 
   return (
     <Link aria-label={`Open ${name} profile`} className="group block rounded-lg focus-ring" href={href}>
-      <article className={`overflow-hidden rounded-lg border bg-white shadow-sm transition group-hover:-translate-y-0.5 group-hover:shadow-court group-hover:ring-4 ${accent.border} ${accent.ring}`}>
+      <PlayRCard as="article" className={`overflow-hidden group-hover:ring-4 ${accent.border} ${accent.ring}`} variant="interactive">
         <div className={`h-1.5 ${accent.strip}`} />
         <div className="p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg text-sm font-black ${accent.avatar}`}>{playerInitials(profile)}</div>
             <div className="min-w-0 flex-1">
               <h3 className="truncate text-xl font-black text-court-navy">{name}</h3>
-              <span className={`mt-1 inline-flex rounded px-2 py-1 text-xs font-black uppercase tracking-wide ${accent.badge}`}>{memberType}</span>
+              <PlayRBadge className={`mt-1 border-transparent ${accent.badge}`} size="sm">{memberType}</PlayRBadge>
             </div>
           </div>
 
@@ -146,7 +147,7 @@ function MemberCard({
             <ArrowRightIcon size={16} />
           </div>
         </div>
-      </article>
+      </PlayRCard>
     </Link>
   );
 }
@@ -158,14 +159,14 @@ function JuniorCard({ junior, activity, organisations }: { junior: JuniorCardPro
 
   return (
     <Link aria-label={`Open ${name} player detail`} className="group block rounded-lg focus-ring" href={`/dashboard/players/${junior.id}`}>
-      <article className={`overflow-hidden rounded-lg border bg-white shadow-sm transition group-hover:-translate-y-0.5 group-hover:shadow-court group-hover:ring-4 ${accent.border} ${accent.ring}`}>
+      <PlayRCard as="article" className={`overflow-hidden group-hover:ring-4 ${accent.border} ${accent.ring}`} variant="interactive">
         <div className={`h-1.5 ${accent.strip}`} />
         <div className="p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg text-sm font-black ${accent.avatar}`}>{playerInitials(junior)}</div>
             <div className="min-w-0 flex-1">
               <h3 className="truncate text-xl font-black text-court-navy">{name}</h3>
-              <span className={`mt-1 inline-flex rounded px-2 py-1 text-xs font-black uppercase tracking-wide ${accent.badge}`}>{stageLabel}</span>
+              <PlayRBadge className={`mt-1 border-transparent ${accent.badge}`} size="sm">{stageLabel}</PlayRBadge>
             </div>
           </div>
 
@@ -188,7 +189,7 @@ function JuniorCard({ junior, activity, organisations }: { junior: JuniorCardPro
             <ArrowRightIcon size={16} />
           </div>
         </div>
-      </article>
+      </PlayRCard>
     </Link>
   );
 }
@@ -368,17 +369,14 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
       </section>
 
       <section className="mb-6">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="section-kicker">Family hub</p>
-            <h2 className="mt-2 text-2xl font-black text-court-navy">My PlayR Cards</h2>
-          </div>
-          <Link className="btn-secondary" href="/dashboard/juniors">
-            Manage Juniors
-          </Link>
-        </div>
+        <SectionHeader
+          action={<PlayRLinkButton href="/dashboard/juniors" variant="outline">Manage Juniors</PlayRLinkButton>}
+          className="mb-4"
+          description="Your primary player profile and linked junior players."
+          title="My PlayR Cards"
+        />
 
-        {organisationResult.error ? <div className="ui-empty-card mb-4">Organisation summaries could not be loaded right now. Your player cards are still available.</div> : null}
+        {organisationResult.error ? <SectionError className="mb-4" description="Organisation summaries could not be loaded right now. Your player cards are still available." /> : null}
 
         <div className="grid gap-5 lg:grid-cols-2">
           <MemberCard activity={memberActivity} juniorCount={juniorRows.length} organisations={profile ? organisationsByProfileId.get(profile.id) ?? [] : []} profile={profile} rating={adultRating} />

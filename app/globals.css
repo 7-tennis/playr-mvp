@@ -4,6 +4,31 @@
 
 :root {
   color-scheme: light;
+  --surface-page: 247 251 251;
+  --surface-card: 255 255 255;
+  --surface-muted: 248 250 252;
+  --surface-elevated: 255 255 255;
+  --text-primary: 16 32 51;
+  --text-secondary: 51 65 85;
+  --text-muted: 100 116 139;
+  --border-subtle: 226 232 240;
+  --border-strong: 148 163 184;
+  --focus-ring: 20 184 166;
+  --semantic-success: 4 120 87;
+  --semantic-warning: 146 64 14;
+  --semantic-error: 185 28 28;
+  --semantic-info: 29 78 216;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --shadow-subtle: 0 1px 2px rgba(8, 36, 58, 0.05);
+  --shadow-card: 0 8px 24px rgba(8, 36, 58, 0.08);
+  --shadow-elevated: 0 18px 48px rgba(8, 36, 58, 0.14);
+  --shadow-floating: 0 20px 60px rgba(8, 36, 58, 0.18);
+  --motion-fast: 120ms;
+  --motion-standard: 200ms;
+  --motion-slow: 300ms;
 }
 
 * {
@@ -12,8 +37,8 @@
 
 body {
   margin: 0;
-  background: #f7fbfb;
-  color: #102033;
+  background: rgb(var(--surface-page));
+  color: rgb(var(--text-primary));
   padding-bottom: 5rem;
 }
 
@@ -28,15 +53,15 @@ a {
 }
 
 .focus-ring {
-  @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-court-teal;
+  @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-playr-focus;
 }
 
 .surface-card {
-  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+  @apply rounded-playr-lg border border-playr-border-subtle bg-playr-surface-card shadow-playr-subtle;
 }
 
 .soft-card {
-  @apply rounded-lg border border-slate-200 bg-slate-50;
+  @apply rounded-playr-lg border border-playr-border-subtle bg-playr-surface-muted;
 }
 
 .empty-state {
@@ -134,11 +159,49 @@ a.coachr-compact-card:hover {
 }
 
 .btn-primary {
-  @apply inline-flex justify-center rounded bg-court-blue px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-playr-md bg-court-blue px-4 py-2.5 text-sm font-bold text-white shadow-playr-subtle transition duration-standard hover:bg-blue-700 hover:shadow-playr-card active:translate-y-px active:shadow-none focus-ring disabled:pointer-events-none disabled:opacity-50;
 }
 
 .btn-secondary {
-  @apply inline-flex justify-center rounded border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-court-navy transition hover:border-court-teal hover:bg-court-mist;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-playr-md border border-playr-border-strong bg-playr-surface-card px-4 py-2.5 text-sm font-bold text-court-navy transition duration-standard hover:border-court-teal hover:bg-court-mist active:translate-y-px focus-ring disabled:pointer-events-none disabled:opacity-50;
+}
+
+.form-control {
+  @apply min-h-11 w-full rounded-playr-md border border-playr-border-strong bg-playr-surface-card px-3 py-2.5 text-sm text-playr-text-primary shadow-playr-subtle outline-none transition duration-fast placeholder:text-playr-text-muted hover:border-slate-500 focus:border-court-teal focus:ring-2 focus:ring-court-teal/20 disabled:cursor-not-allowed disabled:bg-playr-surface-muted disabled:text-playr-text-muted;
+}
+
+.form-control-error {
+  @apply border-red-400 focus:border-red-600 focus:ring-red-200;
+}
+
+.playr-gradient-brand {
+  @apply bg-court-blue;
+  background-image: linear-gradient(110deg, #08243a, #1266f1 55%, #14b8a6);
+}
+
+.playr-gradient-club {
+  background-image: linear-gradient(90deg, #08243a, #14b8a6, #10b981);
+}
+
+.playr-gradient-academy {
+  background-image: linear-gradient(90deg, #08243a, #1266f1, #14b8a6);
+}
+
+.playr-gradient-school {
+  background-image: linear-gradient(90deg, #08243a, #1d4ed8, #1266f1);
+}
+
+.playr-gradient-district {
+  background-image: linear-gradient(90deg, #020617, #08243a, #14b8a6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 @media (min-width: 768px) {
