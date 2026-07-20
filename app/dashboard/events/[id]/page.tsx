@@ -23,6 +23,7 @@ import {
 } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDateTime, formatJuniorStage, formatLabel, formatPrice } from "@/lib/courtside-format";
+import { eventAudienceLabel, eventHostKind, eventHostLabel, eventVisual, isRatingRelevantEvent } from "@/lib/event-visuals";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { CourtSideEvent, EntryStatus, MemberStatus, PaymentStatus, Profile } from "@/types/courtside";
@@ -48,53 +49,6 @@ type EventDetailProps = {
     player?: string;
     error?: string;
   };
-};
-
-type EventVisual = {
-  border: string;
-  strip: string;
-  badge: string;
-  icon: string;
-};
-
-const DEFAULT_VISUAL: EventVisual = {
-  border: "border-court-teal/35",
-  strip: "bg-court-teal",
-  badge: "bg-court-mist text-court-teal",
-  icon: "bg-court-teal text-white"
-};
-
-const EVENT_VISUALS: Record<string, EventVisual> = {
-  red: {
-    border: "border-red-300",
-    strip: "bg-red-500",
-    badge: "bg-red-50 text-red-700",
-    icon: "bg-red-500 text-white"
-  },
-  orange: {
-    border: "border-orange-300",
-    strip: "bg-orange-500",
-    badge: "bg-orange-50 text-orange-700",
-    icon: "bg-orange-500 text-white"
-  },
-  green: {
-    border: "border-emerald-300",
-    strip: "bg-emerald-500",
-    badge: "bg-emerald-50 text-emerald-700",
-    icon: "bg-emerald-500 text-white"
-  },
-  yellow: {
-    border: "border-amber-300",
-    strip: "bg-amber-400",
-    badge: "bg-amber-50 text-amber-700",
-    icon: "bg-amber-400 text-court-navy"
-  },
-  navy: {
-    border: "border-court-navy/20",
-    strip: "bg-court-navy",
-    badge: "bg-court-navy text-white",
-    icon: "bg-court-navy text-white"
-  }
 };
 
 function errorMessage(error?: string) {
@@ -130,120 +84,18 @@ function priceForProfile(event: CourtSideEvent, memberStatus: MemberStatus) {
   return memberStatus === "member" ? event.member_price : event.non_member_price;
 }
 
-function eventText(event: CourtSideEvent) {
-  return [event.title, event.description, event.event_type, event.category, event.age_group, event.location]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function includesAny(value: string, terms: string[]) {
-  return terms.some((term) => value.includes(term));
-}
-
-function eventStageKey(event: CourtSideEvent) {
-  const text = eventText(event);
-
-  if (includesAny(text, ["red ball", "red_ball", "red-ball"])) {
-    return "red";
-  }
-
-  if (includesAny(text, ["orange ball", "orange_ball", "orange-ball"])) {
-    return "orange";
-  }
-
-  if (includesAny(text, ["green ball", "green_ball", "green-ball"])) {
-    return "green";
-  }
-
-  if (includesAny(text, ["yellow ball", "yellow_ball", "yellow-ball"])) {
-    return "yellow";
-  }
-
-  return null;
-}
-
-function eventAudienceLabel(event: CourtSideEvent) {
-  const stage = eventStageKey(event);
-
-  if (stage) {
-    return `${stage.charAt(0).toUpperCase()}${stage.slice(1)} Ball`;
-  }
-
-  const text = eventText(event);
-  if (includesAny(text, ["junior", "kids", "children", "primary"])) {
-    return "Junior";
-  }
-
-  if (includesAny(text, ["adult", "open", "senior"])) {
-    return "Adult/Open";
-  }
-
-  return formatLabel(event.age_group ?? event.category ?? event.event_type ?? event.sport);
-}
-
-function eventVisual(event: CourtSideEvent) {
-  const stage = eventStageKey(event);
-
-  if (stage) {
-    return EVENT_VISUALS[stage];
-  }
-
-  const text = eventText(event);
-  if (includesAny(text, ["adult", "open", "league", "tournament"])) {
-    return EVENT_VISUALS.navy;
-  }
-
-  return DEFAULT_VISUAL;
-}
-
-function hostLabel(event: CourtSideEvent) {
-  const text = eventText(event);
-
-  if (text.includes("school")) {
-    return "School Event";
-  }
-
-  if (text.includes("district")) {
-    return "District Event";
-  }
-
-  if (text.includes("club")) {
-    return "Club Event";
-  }
-
-  if (text.includes("academy")) {
-    return "Academy Event";
-  }
-
-  if (text.includes("coach")) {
-    return "Coach Event";
-  }
-
-  if (text.includes("playr")) {
-    return "PlayR Event";
-  }
-
-  return null;
-}
-
 function hostIcon(event: CourtSideEvent) {
-  const text = eventText(event);
+  const kind = eventHostKind(event);
 
-  if (text.includes("school")) {
+  if (kind === "school") {
     return <SchoolIcon size={14} />;
   }
 
-  if (text.includes("district")) {
+  if (kind === "district") {
     return <DistrictIcon size={14} />;
   }
 
   return <ClubIcon size={14} />;
-}
-
-function isRatingRelevant(event: CourtSideEvent) {
-  const text = eventText(event);
-  return includesAny(text, ["rating", "rated", "matchplay", "match play", "competition", "competitive", "tournament", "league", "results"]);
 }
 
 function eventCostLabel(event: CourtSideEvent) {
@@ -337,11 +189,11 @@ export default async function DashboardEventDetailPage({ params, searchParams }:
   const isFuture = new Date(event.start_datetime).getTime() > Date.now();
   const isOpen = event.status === "published" && isFuture;
   const visual = eventVisual(event);
-  const host = hostLabel(event);
-  const ratingRelevant = isRatingRelevant(event);
+  const host = eventHostLabel(event);
+  const ratingRelevant = isRatingRelevantEvent(event);
 
-  const { data: countData } = await supabase.rpc("event_entry_count", { check_event_id: event.id });
-  const entryCount = typeof countData === "number" ? countData : 0;
+  const { data: countData } = await supabase.rpc("get_public_event_entry_counts", { p_event_ids: [event.id] });
+  const entryCount = ((countData ?? []) as Array<{ entry_count: number }>)[0]?.entry_count ?? 0;
   const spotsLeft = event.max_entries ? Math.max(event.max_entries - entryCount, 0) : null;
   const isFull = spotsLeft === 0;
 
@@ -400,7 +252,7 @@ export default async function DashboardEventDetailPage({ params, searchParams }:
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
 
       <section className={`mb-6 overflow-hidden rounded-lg border bg-white shadow-court ${visual.border}`}>
-        <div className={`h-1.5 ${visual.strip}`} />
+        <div className={`flex min-h-24 items-end justify-between gap-4 bg-gradient-to-r ${visual.gradient} p-5 text-white sm:p-6`}><div><p className="text-xs font-black uppercase tracking-[0.18em]">{formatLabel(event.event_type)}</p><p className="mt-2 text-lg font-black">{eventAudienceLabel(event)}</p></div><EventIcon size={34} /></div>
         <div className="p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className={`grid h-16 w-16 shrink-0 place-items-center rounded ${visual.icon} text-2xl font-black`}>

@@ -5,6 +5,7 @@ import { PageShell } from "@/components/page-shell";
 import { BadgeIcon, BookingIcon, EventIcon, InviteIcon, LeaderboardIcon, MembershipIcon, NotificationIcon, RatingIcon, ShopIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
+import { hubKindForNotification, hubKindForOrganisation, messageHubVisuals, type MessageHubKind } from "@/lib/message-visuals";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { Notification, NotificationType } from "@/types/courtside";
@@ -14,11 +15,14 @@ export const dynamic = "force-dynamic";
 type MessagesPageProps = {
   searchParams?: {
     error?: string;
+    hub?: string;
     marked?: string;
   };
 };
 
 type MessageContext = {
+  hubId: string;
+  hubKind: MessageHubKind;
   playerName: string;
   sourceName: string;
   sourceType: string;
@@ -251,21 +255,33 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
   const venueIds = [...new Set(notifications.map((notification) => metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"])).filter((value): value is string => Boolean(value)))];
   const [{ data: profileData }, { data: venueData }] = await Promise.all([
     profileIds.length > 0 ? supabase.from("profiles").select("id,first_name,last_name,is_junior").in("id", profileIds) : { data: [] },
-    venueIds.length > 0 ? supabase.from("venues").select("id,name").in("id", venueIds) : { data: [] }
+    venueIds.length > 0 ? supabase.from("venues").select("id,name,organisation_type").in("id", venueIds) : { data: [] }
   ]);
   const profileNames = new Map((profileData ?? []).map((profile) => [profile.id as string, `${profile.first_name} ${profile.last_name}${profile.is_junior ? " · Junior" : " · Adult Profile"}`]));
-  const venueNames = new Map((venueData ?? []).map((venue) => [venue.id as string, venue.name as string]));
+  const venues = new Map((venueData ?? []).map((venue) => [venue.id as string, venue]));
   const contextFor = (notification: Notification): MessageContext => {
     const playerId = notification.junior_profile_id ?? notification.profile_id;
     const venueId = metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"]);
+    const venue = venueId ? venues.get(venueId) : null;
+    const hubKind = venue ? hubKindForOrganisation(venue.organisation_type) : hubKindForNotification(notification.type);
     return {
+      hubId: venue ? `organisation-${venue.id}` : hubKind,
+      hubKind,
       playerName: playerId ? profileNames.get(playerId) ?? "Linked player" : "PlayR account",
-      sourceName: venueId ? venueNames.get(venueId) ?? "Linked organisation" : "PlayR",
+      sourceName: venue?.name ?? (hubKind === "competition" ? "PlayR Competition" : "PlayR"),
       sourceType: messageSource(notification.type)
     };
   };
   const actionItems = notifications.filter((notification) => notification.action_required || notification.status === "action_required");
   const recentItems = notifications.filter((notification) => !actionItems.some((item) => item.id === notification.id));
+  const hubs = Array.from(notifications.reduce((map, notification) => {
+    const context = contextFor(notification);
+    const current = map.get(context.hubId) ?? { context, items: [] as Notification[] };
+    current.items.push(notification);
+    map.set(context.hubId, current);
+    return map;
+  }, new Map<string, { context: MessageContext; items: Notification[] }>()).values()).sort((left, right) => new Date(right.items[0].created_at).getTime() - new Date(left.items[0].created_at).getTime());
+  const activeHub = hubs.find((hub) => hub.context.hubId === searchParams?.hub) ?? null;
 
   return (
     <PageShell
@@ -303,10 +319,31 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
                 {actionItems.map((notification) => <NotificationCard context={contextFor(notification)} key={notification.id} notification={notification} />)}
               </section>
             ) : null}
-            {recentItems.length > 0 ? (
+            <section aria-labelledby="message-hubs">
+              <div><p className="section-kicker">Sources</p><h2 className="section-title mt-1" id="message-hubs">Organisation & Source Hubs</h2><p className="mt-2 text-sm text-slate-600">Only sources with communication for your account appear here.</p></div>
+              <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {hubs.map((hub) => {
+                  const visual = messageHubVisuals[hub.context.hubKind];
+                  const hubUnread = hub.items.filter((item) => !item.read_at).length;
+                  const hubActions = hub.items.filter((item) => item.action_required || item.status === "action_required").length;
+                  return (
+                    <Link className="group overflow-hidden rounded-playr-lg border border-playr-border-subtle bg-white shadow-playr-subtle transition hover:-translate-y-0.5 hover:shadow-playr-card focus-ring" href={`/dashboard/messages?hub=${encodeURIComponent(hub.context.hubId)}`} key={hub.context.hubId}>
+                      <div className={`bg-gradient-to-r ${visual.accent} px-4 py-3 text-white`}><p className="text-xs font-black uppercase tracking-[0.16em]">{visual.label} hub</p></div>
+                      <div className="p-4"><div className="flex items-start gap-3"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded ${visual.icon}`}>{notificationIcon(hub.items[0].type)}</span><div className="min-w-0"><h3 className="truncate text-lg font-black text-court-navy">{hub.context.sourceName}</h3><p className="mt-1 text-xs font-bold text-slate-600">Latest for {hub.context.playerName}</p></div></div><div className="mt-4 flex flex-wrap gap-2"><span className="ui-chip ui-chip-muted">{hub.items.length} update{hub.items.length === 1 ? "" : "s"}</span>{hubUnread > 0 ? <span className="ui-chip ui-chip-brand">{hubUnread} unread</span> : null}{hubActions > 0 ? <span className="ui-chip ui-chip-warning">{hubActions} action</span> : null}</div></div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+            {activeHub ? (
+              <section aria-labelledby="active-hub" className="grid gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="section-kicker">{messageHubVisuals[activeHub.context.hubKind].label} hub</p><h2 className="section-title mt-1" id="active-hub">{activeHub.context.sourceName}</h2></div><Link className="btn-secondary" href="/dashboard/messages">Back to all messages</Link></div>
+                {activeHub.items.map((notification) => <NotificationCard context={contextFor(notification)} key={notification.id} notification={notification} />)}
+              </section>
+            ) : recentItems.length > 0 ? (
               <section aria-labelledby="recent-updates" className="grid gap-3">
-                <div><p className="section-kicker">Inbox</p><h2 className="section-title mt-1" id="recent-updates">Recent Messages & Updates</h2></div>
-                {recentItems.map((notification) => <NotificationCard context={contextFor(notification)} key={notification.id} notification={notification} />)}
+                <div><p className="section-kicker">Inbox</p><h2 className="section-title mt-1" id="recent-updates">Recent Updates</h2><p className="mt-2 text-sm text-slate-600">A concise cross-source view; open a hub for its full history.</p></div>
+                {recentItems.slice(0, 5).map((notification) => <NotificationCard context={contextFor(notification)} key={notification.id} notification={notification} />)}
               </section>
             ) : null}
           </>

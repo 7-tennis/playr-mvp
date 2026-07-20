@@ -19,6 +19,18 @@ import {
 } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDate, formatDateTime, formatJuniorStage, formatLabel, formatPrice } from "@/lib/courtside-format";
+import {
+  eventAudienceLabel,
+  eventHostKind,
+  eventHostLabel,
+  eventMatchesProfile,
+  eventSearchText,
+  eventVisual,
+  isAdultEvent,
+  isJuniorEvent,
+  isRatingRelevantEvent,
+  isSocialEvent
+} from "@/lib/event-visuals";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { CourtSideEvent, EntryStatus, MemberStatus, PaymentStatus, Profile } from "@/types/courtside";
@@ -56,13 +68,6 @@ type DashboardEventsPageProps = {
   };
 };
 
-type EventVisual = {
-  border: string;
-  strip: string;
-  badge: string;
-  icon: string;
-};
-
 const EVENT_VIEWS = [
   { id: "recommended", label: "Recommended" },
   { id: "current", label: "Current" },
@@ -86,46 +91,6 @@ const MORE_EVENT_FILTERS = [
 ] as const;
 
 const EVENT_FILTERS = [...PRIMARY_EVENT_FILTERS, ...MORE_EVENT_FILTERS] as const;
-
-const DEFAULT_VISUAL: EventVisual = {
-  border: "border-court-teal/35",
-  strip: "bg-court-teal",
-  badge: "bg-court-mist text-court-teal",
-  icon: "bg-court-teal text-white"
-};
-
-const EVENT_VISUALS: Record<string, EventVisual> = {
-  red: {
-    border: "border-red-300",
-    strip: "bg-red-500",
-    badge: "bg-red-50 text-red-700",
-    icon: "bg-red-500 text-white"
-  },
-  orange: {
-    border: "border-orange-300",
-    strip: "bg-orange-500",
-    badge: "bg-orange-50 text-orange-700",
-    icon: "bg-orange-500 text-white"
-  },
-  green: {
-    border: "border-emerald-300",
-    strip: "bg-emerald-500",
-    badge: "bg-emerald-50 text-emerald-700",
-    icon: "bg-emerald-500 text-white"
-  },
-  yellow: {
-    border: "border-amber-300",
-    strip: "bg-amber-400",
-    badge: "bg-amber-50 text-amber-700",
-    icon: "bg-amber-400 text-court-navy"
-  },
-  navy: {
-    border: "border-court-navy/20",
-    strip: "bg-court-navy",
-    badge: "bg-court-navy text-white",
-    icon: "bg-court-navy text-white"
-  }
-};
 
 function errorMessage(error?: string) {
   switch (error) {
@@ -160,133 +125,18 @@ function priceForProfile(event: CourtSideEvent, memberStatus: MemberStatus) {
   return memberStatus === "member" ? event.member_price : event.non_member_price;
 }
 
-function eventText(event: CourtSideEvent) {
-  return [event.title, event.description, event.event_type, event.category, event.age_group, event.location]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function includesAny(value: string, terms: string[]) {
-  return terms.some((term) => value.includes(term));
-}
-
-function eventStageKey(event: CourtSideEvent) {
-  const text = eventText(event);
-
-  if (includesAny(text, ["red ball", "red_ball", "red-ball"])) {
-    return "red";
-  }
-
-  if (includesAny(text, ["orange ball", "orange_ball", "orange-ball"])) {
-    return "orange";
-  }
-
-  if (includesAny(text, ["green ball", "green_ball", "green-ball"])) {
-    return "green";
-  }
-
-  if (includesAny(text, ["yellow ball", "yellow_ball", "yellow-ball"])) {
-    return "yellow";
-  }
-
-  return null;
-}
-
-function eventAudienceLabel(event: CourtSideEvent) {
-  const stage = eventStageKey(event);
-
-  if (stage) {
-    return `${stage.charAt(0).toUpperCase()}${stage.slice(1)} Ball`;
-  }
-
-  const text = eventText(event);
-  if (includesAny(text, ["junior", "kids", "children", "primary"])) {
-    return "Junior";
-  }
-
-  if (includesAny(text, ["adult", "open", "senior"])) {
-    return "Adult/Open";
-  }
-
-  return formatLabel(event.age_group ?? event.category ?? event.event_type ?? event.sport);
-}
-
-function eventVisual(event: CourtSideEvent) {
-  const stage = eventStageKey(event);
-
-  if (stage) {
-    return EVENT_VISUALS[stage];
-  }
-
-  const text = eventText(event);
-  if (includesAny(text, ["adult", "open", "league", "tournament"])) {
-    return EVENT_VISUALS.navy;
-  }
-
-  return DEFAULT_VISUAL;
-}
-
-function hostLabel(event: CourtSideEvent) {
-  const text = eventText(event);
-
-  if (text.includes("school")) {
-    return "School Event";
-  }
-
-  if (text.includes("district")) {
-    return "District Event";
-  }
-
-  if (text.includes("club")) {
-    return "Club Event";
-  }
-
-  if (text.includes("academy")) {
-    return "Academy Event";
-  }
-
-  if (text.includes("coach")) {
-    return "Coach Event";
-  }
-
-  if (text.includes("playr")) {
-    return "PlayR Event";
-  }
-
-  return null;
-}
-
 function hostIcon(event: CourtSideEvent) {
-  const text = eventText(event);
+  const kind = eventHostKind(event);
 
-  if (text.includes("school")) {
+  if (kind === "school") {
     return <SchoolIcon size={14} />;
   }
 
-  if (text.includes("district")) {
+  if (kind === "district") {
     return <DistrictIcon size={14} />;
   }
 
   return <ClubIcon size={14} />;
-}
-
-function isRatingRelevant(event: CourtSideEvent) {
-  const text = eventText(event);
-  return includesAny(text, ["rating", "rated", "matchplay", "match play", "competition", "competitive", "tournament", "league", "results"]);
-}
-
-function isSocialEvent(event: CourtSideEvent) {
-  return includesAny(eventText(event), ["social", "fun", "friendly", "americano"]);
-}
-
-function isJuniorEvent(event: CourtSideEvent) {
-  return eventStageKey(event) !== null || includesAny(eventText(event), ["junior", "kids", "children", "primary"]);
-}
-
-function isAdultEvent(event: CourtSideEvent) {
-  const text = eventText(event);
-  return includesAny(text, ["adult", "open", "senior"]) || !isJuniorEvent(event);
 }
 
 function eventCostLabel(event: CourtSideEvent) {
@@ -332,42 +182,24 @@ function profileSelectLabel(profile: EntryProfileOption, event: CourtSideEvent) 
   return `${label} - ${formatPrice(priceForProfile(event, profile.member_status))}`;
 }
 
-function eventMatchesProfile(event: CourtSideEvent, profile: EntryProfileOption) {
-  const text = eventText(event);
-  const stage = eventStageKey(event);
-
-  if (profile.is_junior) {
-    if (profile.junior_stage) {
-      const stageText = profile.junior_stage.replace("_", " ");
-      if (text.includes(stageText) || text.includes(profile.junior_stage) || text.includes(formatJuniorStage(profile.junior_stage).toLowerCase())) {
-        return true;
-      }
-    }
-
-    return stage === null && isJuniorEvent(event);
-  }
-
-  return isAdultEvent(event);
-}
-
 function filterMatches(event: EventWithEntryCount, filter: string) {
   switch (filter) {
     case "competitive":
-      return isRatingRelevant(event);
+      return isRatingRelevantEvent(event);
     case "junior":
       return isJuniorEvent(event);
     case "adult":
       return isAdultEvent(event);
     case "club":
-      return eventText(event).includes("club");
+      return eventSearchText(event).includes("club");
     case "school":
-      return eventText(event).includes("school");
+      return eventSearchText(event).includes("school");
     case "district":
-      return eventText(event).includes("district");
+      return eventSearchText(event).includes("district");
     case "social":
       return isSocialEvent(event);
     case "rating":
-      return isRatingRelevant(event);
+      return isRatingRelevantEvent(event);
     default:
       return true;
   }
@@ -430,11 +262,11 @@ function SpotlightEventCard({
   profile: EntryProfileOption | null;
 }) {
   const visual = eventVisual(event);
-  const host = hostLabel(event);
+  const host = eventHostLabel(event);
 
   return (
     <section className={`mb-4 overflow-hidden rounded-lg border bg-white shadow-sm ${visual.border}`}>
-      <div className={`h-1 ${visual.strip}`} />
+      <div className={`bg-gradient-to-r ${visual.gradient} px-4 py-3 text-white`}><p className="text-xs font-black uppercase tracking-[0.18em]">{eventAudienceLabel(event)} · {formatLabel(event.event_type)}</p></div>
       <div className="p-4 sm:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
@@ -463,7 +295,7 @@ function SpotlightEventCard({
               <span className="ui-chip ui-chip-muted">
                 <LocationIcon size={14} /> {event.location ?? "Venue TBC"}
               </span>
-              {isRatingRelevant(event) ? (
+              {isRatingRelevantEvent(event) ? (
                 <span className="ui-chip ui-chip-navy">
                   <RatingIcon size={14} /> Rating
                 </span>
@@ -491,7 +323,7 @@ function EventCard({
   returnTo: string;
 }) {
   const visual = eventVisual(event);
-  const host = hostLabel(event);
+  const host = eventHostLabel(event);
   const enteredProfileIds = new Set(activeEntries.map((entry) => entry.profile_id));
   const availableProfiles = profiles.filter((profile) => !enteredProfileIds.has(profile.id));
   const spotsLeft = event.max_entries && event.entry_count !== null ? Math.max(event.max_entries - event.entry_count, 0) : null;
@@ -500,7 +332,7 @@ function EventCard({
 
   return (
     <article className={`overflow-hidden rounded-lg border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-court ${visual.border}`}>
-      <div className={`h-1.5 ${visual.strip}`} />
+      <div className={`flex min-h-16 items-center justify-between bg-gradient-to-r ${visual.gradient} px-4 py-3 text-white sm:px-5`}><p className="text-xs font-black uppercase tracking-[0.18em]">{formatLabel(event.event_type)} · {eventAudienceLabel(event)}</p><EventIcon size={24} /></div>
       <div className="p-4 sm:p-5">
         <div className="flex gap-3">
           <div className={`grid h-11 w-11 shrink-0 place-items-center rounded ${visual.icon} font-black`}>
@@ -546,7 +378,7 @@ function EventCard({
           <span className="ui-chip ui-chip-muted">
             <ParticipationIcon size={14} /> Rewards TBC
           </span>
-          {isRatingRelevant(event) ? (
+          {isRatingRelevantEvent(event) ? (
             <span className="ui-chip ui-chip-navy">
               <RatingIcon size={14} /> Rating relevant
             </span>
@@ -642,15 +474,12 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
     .gte("start_datetime", now)
     .order("start_datetime", { ascending: true });
 
-  const upcomingEvents = await Promise.all(
-    ((upcomingEventData ?? []) as CourtSideEvent[]).map(async (event) => {
-      const { data: countData } = await supabase.rpc("event_entry_count", { check_event_id: event.id });
-      return {
-        ...event,
-        entry_count: typeof countData === "number" ? countData : null
-      };
-    })
-  );
+  const loadedUpcomingEvents = (upcomingEventData ?? []) as CourtSideEvent[];
+  const { data: entryCountData } = loadedUpcomingEvents.length > 0
+    ? await supabase.rpc("get_public_event_entry_counts", { p_event_ids: loadedUpcomingEvents.slice(0, 200).map((event) => event.id) })
+    : { data: [] };
+  const entryCounts = new Map(((entryCountData ?? []) as Array<{ event_id: string; entry_count: number }>).map((row) => [row.event_id, row.entry_count]));
+  const upcomingEvents = loadedUpcomingEvents.map((event) => ({ ...event, entry_count: entryCounts.get(event.id) ?? null }));
 
   const { data: closedEventData } = await supabase
     .from("events")
