@@ -1,15 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
-import { CancelledSessionCard, SessionRequestCard } from "@/components/session-request-cards";
-import { ArrowRightIcon, BookingIcon, EventIcon, InviteIcon, RatingIcon } from "@/components/playr-icons";
-import { PlayerOrganisationSummary } from "@/components/player-organisations";
-import { PlayRBadge, PlayRCard, PlayRLinkButton, SectionError, SectionHeader } from "@/components/playr-ui";
+import { BookingIcon, EventIcon, InviteIcon, ParticipationIcon, RatingIcon, StageIcon } from "@/components/playr-icons";
+import { PlayerProfileCard } from "@/components/player-profile-card";
+import { PlayRLinkButton, SectionError, SectionHeader } from "@/components/playr-ui";
 import { StatusAlert } from "@/components/status-alert";
-import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
-import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
-import { playrAccentForJuniorStage, playrAccents, playrJuniorStageLabel } from "@/lib/playr-ui";
+import { formatJuniorRating } from "@/lib/courtside-format";
+import { juniorParticipationLeads, playerStageVisual } from "@/lib/player-stage-visuals";
 import { loadPlayerOrganisations, type PlayerOrganisation } from "@/lib/player-organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
@@ -56,6 +53,7 @@ type JuniorCardProfile = Pick<
   | "junior_rating"
   | "junior_rating_confidence"
   | "participation_score"
+  | "stage_readiness_score"
 >;
 
 type ActivityCounts = {
@@ -80,117 +78,49 @@ function playerInitials(profile: Pick<Profile, "first_name" | "last_name"> | nul
   return `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase();
 }
 
-function InfoRow({ icon, value, muted = false }: { icon: ReactNode; value: string; muted?: boolean }) {
-  return (
-    <p className={`flex min-w-0 items-center gap-2 text-sm ${muted ? "text-slate-500" : "text-slate-700"}`}>
-      {icon}
-      <span className="truncate">{value}</span>
-    </p>
-  );
-}
-
-function CounterPill({ icon, count, label }: { icon: ReactNode; count: number; label: string }) {
-  return (
-    <div className="ui-counter">
-      {icon}
-      <span>{count}</span>
-      <span className="hidden truncate sm:inline">{label}</span>
-    </div>
-  );
-}
-
 function MemberCard({
   profile,
   rating,
-  activity,
-  juniorCount,
   organisations
 }: {
   profile: Profile | null;
   rating: Rating | null;
-  activity: ActivityCounts;
-  juniorCount: number;
   organisations: PlayerOrganisation[];
 }) {
   const name = profile ? playerName(profile) : "Set up your profile";
-  const memberType = juniorCount > 0 ? "Parent / Member" : "Member";
   const ratingText = rating ? rating.rating_value.toFixed(1) : "No active rating yet";
-  const accent = playrAccents.member;
   const href = profile ? `/dashboard/players/${profile.id}` : "/dashboard/profile";
 
   return (
-    <Link aria-label={`Open ${name} profile`} className="group block rounded-lg focus-ring" href={href}>
-      <PlayRCard as="article" className={`overflow-hidden group-hover:ring-4 ${accent.border} ${accent.ring}`} variant="interactive">
-        <div className={`h-1.5 ${accent.strip}`} />
-        <div className="p-4 sm:p-5">
-          <div className="flex items-start gap-3">
-            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg text-sm font-black ${accent.avatar}`}>{playerInitials(profile)}</div>
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate text-xl font-black text-court-navy">{name}</h3>
-              <PlayRBadge className={`mt-1 border-transparent ${accent.badge}`} size="sm">{memberType}</PlayRBadge>
-            </div>
-          </div>
-
-          <div className={`mt-4 space-y-2 rounded ${accent.tint} p-3`}>
-            <InfoRow icon={<RatingIcon rating={rating?.rating_value ?? null} size={16} stage="member" />} value={ratingText} />
-            <PlayerOrganisationSummary organisations={organisations} />
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <CounterPill count={activity.invites} icon={<InviteIcon size={15} />} label={activity.invites === 1 ? "Invite" : "Invites"} />
-            <CounterPill count={activity.events} icon={<EventIcon size={15} />} label={activity.events === 1 ? "Event" : "Events"} />
-            <CounterPill count={activity.bookings} icon={<BookingIcon size={15} />} label={activity.bookings === 1 ? "Booking" : "Bookings"} />
-          </div>
-
-          <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-black text-court-navy">
-            <span>Open Card</span>
-            <ArrowRightIcon size={16} />
-          </div>
-        </div>
-      </PlayRCard>
-    </Link>
+    <PlayerProfileCard
+      href={href}
+      initials={playerInitials(profile)}
+      name={name}
+      organisations={organisations}
+      primaryMetric={{ icon: <RatingIcon rating={rating?.rating_value ?? null} size={15} stage="member" />, label: "Rating", value: ratingText }}
+      secondaryMetric={profile ? { icon: <ParticipationIcon size={15} />, label: "Participation", value: `${profile.participation_score ?? 0} pts` } : null}
+      stage={playerStageVisual(false, null)}
+    />
   );
 }
 
-function JuniorCard({ junior, activity, organisations }: { junior: JuniorCardProfile; activity: ActivityCounts; organisations: PlayerOrganisation[] }) {
+function JuniorCard({ junior, organisations }: { junior: JuniorCardProfile; organisations: PlayerOrganisation[] }) {
   const name = playerName(junior);
-  const accent = playrAccentForJuniorStage(junior.junior_stage);
-  const stageLabel = playrJuniorStageLabel(junior.junior_stage);
+  const stage = playerStageVisual(true, junior.junior_stage);
+  const participationFirst = juniorParticipationLeads(junior.junior_stage);
+  const ratingMetric = { icon: <RatingIcon rating={junior.junior_rating} size={15} stage={junior.junior_stage} />, label: "Rating", value: formatJuniorRating(junior.junior_stage, junior.junior_rating) };
+  const participationMetric = { icon: <ParticipationIcon size={15} />, label: "Participation", value: `${junior.participation_score} pts` };
 
   return (
-    <Link aria-label={`Open ${name} player detail`} className="group block rounded-lg focus-ring" href={`/dashboard/players/${junior.id}`}>
-      <PlayRCard as="article" className={`overflow-hidden group-hover:ring-4 ${accent.border} ${accent.ring}`} variant="interactive">
-        <div className={`h-1.5 ${accent.strip}`} />
-        <div className="p-4 sm:p-5">
-          <div className="flex items-start gap-3">
-            <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg text-sm font-black ${accent.avatar}`}>{playerInitials(junior)}</div>
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate text-xl font-black text-court-navy">{name}</h3>
-              <PlayRBadge className={`mt-1 border-transparent ${accent.badge}`} size="sm">{stageLabel}</PlayRBadge>
-            </div>
-          </div>
-
-          <div className={`mt-4 space-y-2 rounded ${accent.tint} p-3`}>
-            <InfoRow
-              icon={<RatingIcon rating={junior.junior_rating} size={16} stage={junior.junior_stage} />}
-              value={`${formatJuniorRating(junior.junior_stage, junior.junior_rating)} / ${formatLabel(junior.junior_rating_confidence)}`}
-            />
-            <PlayerOrganisationSummary organisations={organisations} />
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <CounterPill count={activity.invites} icon={<InviteIcon size={15} />} label={activity.invites === 1 ? "Invite" : "Invites"} />
-            <CounterPill count={activity.events} icon={<EventIcon size={15} />} label={activity.events === 1 ? "Event" : "Events"} />
-            <CounterPill count={activity.bookings} icon={<BookingIcon size={15} />} label={activity.bookings === 1 ? "Booking" : "Bookings"} />
-          </div>
-
-          <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-black text-court-navy">
-            <span>Open Card</span>
-            <ArrowRightIcon size={16} />
-          </div>
-        </div>
-      </PlayRCard>
-    </Link>
+    <PlayerProfileCard
+      href={`/dashboard/players/${junior.id}`}
+      initials={playerInitials(junior)}
+      name={name}
+      organisations={organisations}
+      primaryMetric={participationFirst ? participationMetric : ratingMetric}
+      secondaryMetric={participationFirst ? { icon: <StageIcon size={15} />, label: "Stage readiness", value: `${junior.stage_readiness_score}%` } : participationMetric}
+      stage={stage}
+    />
   );
 }
 
@@ -228,7 +158,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   if (profile) {
     const { data: juniorData, error: juniorError } = await supabase
       .from("profiles")
-      .select("id,first_name,last_name,junior_stage,junior_rating,junior_rating_confidence,participation_score")
+      .select("id,first_name,last_name,junior_stage,junior_rating,junior_rating_confidence,participation_score,stage_readiness_score")
       .eq("parent_profile_id", profile.id)
       .eq("is_junior", true)
       .order("participation_score", { ascending: false });
@@ -282,19 +212,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     console.error("CourtSide dashboard bookings load failed", { userId: user.id, error: bookingError });
   }
 
-  const [sessionRequests, privateSessionActivityResults] = profileIds.length > 0
-    ? await Promise.all([
-        loadPlayerSessionRequests(supabase, profileIds),
-        Promise.all(profileIds.map(async (profileId) => (await loadPrivatePlayerSessionActivity(supabase, profileId)).map((activity) => ({ ...activity, playerProfileId: profileId }))))
-      ])
-    : [[], []];
-  const privateSessionActivity = privateSessionActivityResults.flat();
-  const pendingSessionRequests = sessionRequests.filter((request) => isPendingSessionRequest(request.status));
-  const recentSessionRequests = sessionRequests.filter((request) => !isPendingSessionRequest(request.status)).slice(0, 6);
-  const requestByOccurrence = new Map(sessionRequests.map((request) => [request.occurrence_id, request]));
-  const cancelledSessions = privateSessionActivity
-    .filter((activity) => activity.occurrence_status === "cancelled" || activity.occurrence_status === "rain" || activity.occurrence_status === "sick")
-    .slice(0, 4);
   const organisationsByProfileId = new Map<string, PlayerOrganisation[]>();
   profileIds.forEach((profileId) => organisationsByProfileId.set(profileId, []));
   organisationResult.data.forEach((organisation) => {
@@ -334,7 +251,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
 
   const ratings = ratingError ? [] : ((ratingData ?? []) as Rating[]);
   const adultRating = profile ? ratings.find((rating) => rating.profile_id === profile.id) ?? null : null;
-  const memberActivity = profile ? activityByProfileId.get(profile.id) ?? emptyActivity() : emptyActivity();
   const totalPendingInvites = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.invites, 0);
   const totalUpcomingEvents = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.events, 0);
   const totalUpcomingBookings = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.bookings, 0);
@@ -379,10 +295,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         {organisationResult.error ? <SectionError className="mb-4" description="Organisation summaries could not be loaded right now. Your player cards are still available." /> : null}
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <MemberCard activity={memberActivity} juniorCount={juniorRows.length} organisations={profile ? organisationsByProfileId.get(profile.id) ?? [] : []} profile={profile} rating={adultRating} />
+          <MemberCard organisations={profile ? organisationsByProfileId.get(profile.id) ?? [] : []} profile={profile} rating={adultRating} />
 
           {juniorRows.map((junior) => (
-            <JuniorCard activity={activityByProfileId.get(junior.id) ?? emptyActivity()} junior={junior} key={junior.id} organisations={organisationsByProfileId.get(junior.id) ?? []} />
+            <JuniorCard junior={junior} key={junior.id} organisations={organisationsByProfileId.get(junior.id) ?? []} />
           ))}
 
           {profile && juniorRows.length === 0 ? (
@@ -397,17 +313,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           ) : null}
         </div>
       </section>
-
-      {(pendingSessionRequests.length > 0 || cancelledSessions.length > 0 || recentSessionRequests.length > 0) ? (
-        <section className="mb-6" id="lesson-requests">
-          <div className="mb-4"><p className="section-kicker">CoachR</p><h2 className="mt-2 text-2xl font-black text-court-navy">Lesson Changes</h2><p className="mt-1 text-sm text-slate-600">Requests and cancelled private lessons across your PlayR cards.</p></div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {pendingSessionRequests.map((request) => <SessionRequestCard key={request.id} request={request} returnTo="/dashboard#lesson-requests" viewer="player" />)}
-            {cancelledSessions.map((activity) => <CancelledSessionCard activity={activity} existingRequest={requestByOccurrence.get(activity.occurrence_id) ?? null} key={`${activity.playerProfileId}:${activity.occurrence_id}`} playerProfileId={activity.playerProfileId} returnTo="/dashboard#lesson-requests" />)}
-          </div>
-          {recentSessionRequests.length > 0 ? <details className="ui-collapsible mt-3 rounded-lg border border-slate-200 bg-white p-3"><summary className="flex cursor-pointer items-center justify-between text-sm font-black text-court-navy"><span>Request History</span><ArrowRightIcon className="ui-collapsible-chevron rotate-90" size={16} /></summary><div className="mt-3 grid gap-3 lg:grid-cols-2">{recentSessionRequests.map((request) => <SessionRequestCard compact key={request.id} request={request} returnTo="/dashboard#lesson-requests" viewer="player" />)}</div></details> : null}
-        </section>
-      ) : null}
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/venues">

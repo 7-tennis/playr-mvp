@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowRightIcon, ClubIcon, DistrictIcon, SchoolIcon, StageIcon } from "@/components/playr-icons";
+import { ArrowRightIcon, ChevronDownIcon, ClubIcon, DistrictIcon, SchoolIcon, StageIcon } from "@/components/playr-icons";
 import { EmptyState, IconContainer, PlayRBadge, PlayRCard, PlayRLinkButton, type PlayRBadgeVariant } from "@/components/playr-ui";
 import { formatDate, formatLabel } from "@/lib/courtside-format";
 import { organisationVisuals } from "@/lib/design-tokens";
@@ -53,6 +53,8 @@ export function PlayerOrganisationSummary({ organisations }: { organisations: Pl
 export type OrganisationCardMeta = {
   membership?: PlayerClubMembership | null;
   supportingDetails?: ReactNode;
+  details?: ReactNode;
+  detailsLabel?: string;
 };
 
 export function OrganisationCard({
@@ -99,6 +101,16 @@ export function OrganisationCard({
           {location ? <p><span className="font-bold text-slate-800">Location:</span> {location}</p> : null}
           {meta?.supportingDetails}
         </div>
+
+        {meta?.details ? (
+          <details className="ui-collapsible mt-4 rounded-playr-md border border-slate-200 bg-white/85 p-3">
+            <summary className="flex cursor-pointer items-center justify-between gap-3 text-sm font-black text-court-navy focus-ring">
+              <span>{meta.detailsLabel ?? "View Details"}</span>
+              <span className="ui-collapsible-chevron"><ChevronDownIcon size={16} /></span>
+            </summary>
+            <div className="mt-3 border-t border-slate-200 pt-3">{meta.details}</div>
+          </details>
+        ) : null}
 
         {canOpenClub ? (
           <PlayRLinkButton

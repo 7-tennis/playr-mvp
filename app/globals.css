@@ -195,6 +195,36 @@ a.coachr-compact-card:hover {
   background-image: linear-gradient(90deg, #020617, #08243a, #14b8a6);
 }
 
+.playr-gradient-player-adult {
+  background-color: #08243a;
+  background-image: linear-gradient(120deg, #08243a 0%, #1266f1 58%, #14b8a6 100%);
+}
+
+.playr-gradient-player-red {
+  background-color: #be123c;
+  background-image: linear-gradient(120deg, #9f1239 0%, #ef4444 58%, #fb7185 100%);
+}
+
+.playr-gradient-player-orange {
+  background-color: #c2410c;
+  background-image: linear-gradient(120deg, #9a3412 0%, #f97316 55%, #fbbf24 100%);
+}
+
+.playr-gradient-player-green {
+  background-color: #047857;
+  background-image: linear-gradient(120deg, #065f46 0%, #10b981 58%, #84cc16 100%);
+}
+
+.playr-gradient-player-yellow {
+  background-color: #facc15;
+  background-image: linear-gradient(120deg, #f59e0b 0%, #facc15 55%, #bef264 100%);
+}
+
+.playr-gradient-player-neutral {
+  background-color: #334155;
+  background-image: linear-gradient(120deg, #1e293b 0%, #64748b 58%, #94a3b8 100%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;

@@ -1,6 +1,6 @@
 import type { JuniorStage } from "@/types/courtside";
 
-export type PlayRAccentKey = "member" | "red" | "orange" | "green" | "yellow";
+export type PlayRAccentKey = "member" | "red" | "orange" | "green" | "yellow" | "neutral";
 
 export type PlayRAccent = {
   border: string;
@@ -57,6 +57,15 @@ export const playrAccents: Record<PlayRAccentKey, PlayRAccent> = {
     avatar: "bg-amber-400 text-court-navy",
     ring: "group-hover:ring-amber-200",
     icon: "text-amber-500"
+  },
+  neutral: {
+    border: "border-slate-300",
+    strip: "bg-slate-500",
+    tint: "bg-slate-50",
+    badge: "bg-slate-100 text-slate-700",
+    avatar: "bg-slate-600 text-white",
+    ring: "group-hover:ring-slate-200",
+    icon: "text-slate-500"
   }
 };
 
@@ -73,10 +82,10 @@ export function playrStageKey(stage: JuniorStage | string | null | undefined): P
       return "green";
     case "yellow_ball":
     case "yellow":
+      return "yellow";
     case "not_sure":
-      return "yellow";
     default:
-      return "yellow";
+      return "neutral";
   }
 }
 
