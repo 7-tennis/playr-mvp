@@ -62,7 +62,7 @@ export function ClubRBottomNav({ role: _role }: { role: UserRole }) {
   return (
     <nav
       aria-label="ClubR navigation"
-      className="fixed inset-x-3 bottom-3 z-40 rounded-2xl border border-court-teal/20 bg-white/95 p-2 shadow-[0_-12px_35px_rgba(8,36,58,0.18)] backdrop-blur md:hidden"
+      className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 rounded-2xl border border-court-teal/20 bg-white/95 p-2 shadow-[0_-12px_35px_rgba(8,36,58,0.18)] backdrop-blur md:hidden"
     >
       <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
         {clubRLinks.map((link) => {

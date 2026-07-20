@@ -12,7 +12,7 @@ Semantic CSS variables live in `app/globals.css`; Tailwind aliases live in `tail
 
 ### Colour
 
-- Surfaces: `playr-surface-page`, `playr-surface-card`, `playr-surface-muted`, `playr-surface-elevated`
+- Surfaces: `playr-surface-page`, `playr-surface-card`, `playr-surface-muted`, `playr-surface-elevated`, `playr-surface-shell`, `playr-surface-chrome`
 - Text: `playr-text-primary`, `playr-text-secondary`, `playr-text-muted`
 - Borders and focus: `playr-border-subtle`, `playr-border-strong`, `playr-focus`
 - Brand compatibility: `court-navy`, `court-blue`, `court-green`, `court-teal`, `court-lime`, `court-mist`, `court-ink`
@@ -21,7 +21,7 @@ Semantic CSS variables live in `app/globals.css`; Tailwind aliases live in `tail
 
 ### Gradients
 
-The controlled set is `playr-gradient-brand`, `playr-gradient-club`, `playr-gradient-academy`, `playr-gradient-school` and `playr-gradient-district`. Use them for primary buttons, small accent strips or controlled branded surfaces. Do not put long text directly over them.
+The controlled set includes the brand and organisation gradients plus `playr-gradient-navigation`, `playr-gradient-navigation-active`, and the stage-specific player gradients. Use them for primary buttons, small accent strips, identity surfaces, or navigation chrome. Do not put long text directly over them.
 
 ### Spacing
 
@@ -30,7 +30,7 @@ Use Tailwind's shared rhythm: `1` (4px), `2` (8px), `3` (12px), `4` (16px), `5` 
 ### Radius and shadow
 
 - Radius: `rounded-playr-sm`, `rounded-playr-md`, `rounded-playr-lg`, `rounded-playr-xl`, or `rounded-full`
-- Shadow: `shadow-playr-subtle`, `shadow-playr-card`, `shadow-playr-elevated`, `shadow-playr-floating`
+- Shadow: `shadow-playr-subtle`, `shadow-playr-card`, `shadow-playr-elevated`, `shadow-playr-floating`, `shadow-playr-navigation`
 
 Standard cards use `lg`; controls use `md`; major identity cards may use `xl`; badges and avatars use `full`.
 
@@ -89,6 +89,12 @@ Use `FormField`, `Input`, `Textarea`, and `Select`, or the compatibility class `
 - Tablet: two-column card grids where content remains readable
 - Desktop: controlled widths (`standard`, `wide`, `reading`) and horizontal actions without adding density
 - Long titles and badges must wrap; no shared component requires horizontal scrolling
+
+## Application shell and navigation
+
+The default shell is hybrid rather than full dark mode: deep navy outer chrome frames a light `playr-page-surface`, while reading surfaces and forms remain light. Player navigation visuals are centralised in `lib/navigation-visuals.ts`.
+
+The mobile player bar uses five labelled destinations—Book, Play, MyPlayR, Compete and Profile—with MyPlayR in the centre. It floats above the device safe area, keeps 44px-plus targets, and uses `aria-current="page"` for the selected route. Desktop navigation uses the same icons, gradient and active-state language. Role-specific ClubR and CoachR navigation remains separate.
 
 ## Accessibility and motion
 

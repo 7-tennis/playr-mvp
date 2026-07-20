@@ -3,7 +3,8 @@ import type { Config } from "tailwindcss";
 const config: Config = {
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}"
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./lib/**/*.{js,ts,jsx,tsx,mdx}"
   ],
   theme: {
     extend: {
@@ -22,7 +23,9 @@ const config: Config = {
             page: "rgb(var(--surface-page) / <alpha-value>)",
             card: "rgb(var(--surface-card) / <alpha-value>)",
             muted: "rgb(var(--surface-muted) / <alpha-value>)",
-            elevated: "rgb(var(--surface-elevated) / <alpha-value>)"
+            elevated: "rgb(var(--surface-elevated) / <alpha-value>)",
+            shell: "rgb(var(--surface-shell) / <alpha-value>)",
+            chrome: "rgb(var(--surface-chrome) / <alpha-value>)"
           },
           text: {
             primary: "rgb(var(--text-primary) / <alpha-value>)",
@@ -53,7 +56,8 @@ const config: Config = {
         "playr-subtle": "var(--shadow-subtle)",
         "playr-card": "var(--shadow-card)",
         "playr-elevated": "var(--shadow-elevated)",
-        "playr-floating": "var(--shadow-floating)"
+        "playr-floating": "var(--shadow-floating)",
+        "playr-navigation": "var(--shadow-navigation)"
       },
       transitionDuration: {
         fast: "var(--motion-fast)",

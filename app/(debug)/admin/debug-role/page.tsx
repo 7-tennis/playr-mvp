@@ -73,7 +73,7 @@ function rowTone(item: DiagnosticItem) {
 export default async function DebugRolePage() {
   if (!hasSupabaseConfig()) {
     return (
-      <main className="mx-auto min-h-[70vh] max-w-4xl px-4 py-10">
+      <main className="playr-page-surface mx-auto min-h-[70vh] w-full max-w-4xl px-4 py-10 sm:my-5 sm:w-[calc(100%-2rem)] sm:rounded-playr-xl">
         <p className="text-sm font-black uppercase tracking-wide text-court-teal">Role Debug</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-court-navy">Supabase is not configured.</h1>
       </main>
@@ -96,7 +96,7 @@ export default async function DebugRolePage() {
     console.warn("[playr-debug-role]", unauthenticatedDiagnostics);
 
     return (
-      <main className="mx-auto min-h-[70vh] max-w-4xl px-4 py-10">
+      <main className="playr-page-surface mx-auto min-h-[70vh] w-full max-w-4xl px-4 py-10 sm:my-5 sm:w-[calc(100%-2rem)] sm:rounded-playr-xl">
         <p className="text-sm font-black uppercase tracking-wide text-court-teal">Role Debug</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-court-navy">No authenticated user found.</h1>
         <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
@@ -190,7 +190,7 @@ export default async function DebugRolePage() {
   ];
 
   return (
-    <main className="mx-auto min-h-[70vh] max-w-5xl px-4 py-10">
+    <main className="playr-page-surface mx-auto min-h-[70vh] w-full max-w-5xl px-4 py-10 sm:my-5 sm:w-[calc(100%-2rem)] sm:rounded-playr-xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-black uppercase tracking-wide text-court-teal">Temporary Diagnostic</p>

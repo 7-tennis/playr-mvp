@@ -31,7 +31,7 @@ export default async function HomePage() {
   const isLoggedIn = await getHomeSession();
 
   return (
-    <main>
+    <main className="bg-playr-surface-page">
       <section className="bg-court-navy text-white">
         <div className="mx-auto grid min-h-[520px] max-w-6xl content-center gap-10 px-4 py-16 md:grid-cols-[1.1fr_0.9fr] md:items-center">
           <div>

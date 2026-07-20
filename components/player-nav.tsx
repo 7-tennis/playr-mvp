@@ -3,21 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
+import { BookingIcon, EntriesIcon, EventIcon, MatchIcon, StageIcon } from "@/components/playr-icons";
+import { playrNavigationVisuals } from "@/lib/navigation-visuals";
 
 const playerLinks = [
-  { href: "/dashboard/venues", label: "Venues", mobileLabel: "Venues" },
-  { href: "/dashboard/play", label: "Play", mobileLabel: "Play" },
-  { href: "/dashboard", label: "MyPlayR", mobileLabel: "MyPlayR", isHub: true },
-  { href: "/dashboard/events", label: "Events", mobileLabel: "Events" },
-  { href: "/dashboard/shop", label: "Shop", mobileLabel: "Shop" }
+  { href: "/dashboard/venues", label: "Book", icon: BookingIcon, matches: ["/dashboard/venues", "/dashboard/book-court", "/dashboard/my-bookings", "/dashboard/memberships"] },
+  { href: "/dashboard/play", label: "Play", icon: MatchIcon, matches: ["/dashboard/play"] },
+  { href: "/dashboard", label: "MyPlayR", icon: StageIcon, matches: ["/dashboard", "/dashboard/players"], isHub: true },
+  { href: "/dashboard/events", label: "Compete", icon: EventIcon, matches: ["/dashboard/events", "/dashboard/my-entries", "/dashboard/results"] },
+  { href: "/dashboard/profile", label: "Profile", icon: EntriesIcon, matches: ["/dashboard/profile", "/dashboard/juniors", "/dashboard/notifications"] }
 ];
 
-function isActivePath(pathname: string, href: string) {
-  if (href === "/dashboard") {
-    return pathname === href;
-  }
+function pathMatches(pathname: string, match: string) {
+  return pathname === match || (match !== "/dashboard" && pathname.startsWith(`${match}/`));
+}
 
-  return pathname === href || pathname.startsWith(`${href}/`);
+function isActivePath(pathname: string, matches: string[]) {
+  return matches.some((match) => pathMatches(pathname, match));
 }
 
 export function PlayerDesktopNav({
@@ -34,119 +36,69 @@ export function PlayerDesktopNav({
   const pathname = usePathname();
 
   return (
-    <nav className="hidden items-center gap-1 text-sm font-bold text-slate-700 md:flex" aria-label="Player navigation">
+    <nav className={playrNavigationVisuals.desktopNav} aria-label="Player navigation">
       {playerLinks.map((link) => {
-        const active = isActivePath(pathname, link.href);
+        const active = isActivePath(pathname, link.matches);
+        const Icon = link.icon;
 
         return (
           <Link
             aria-current={active ? "page" : undefined}
             className={clsx(
-              "rounded px-3 py-2 transition",
-              link.isHub && active
-                ? "bg-court-navy text-white"
-                : link.isHub
-                  ? "bg-court-mist text-court-navy hover:bg-court-navy hover:text-white"
-                  : active
-                    ? "bg-court-mist text-court-navy"
-                    : "hover:bg-slate-100 hover:text-court-blue"
+              playrNavigationVisuals.desktopItem,
+              link.isHub
+                ? active ? playrNavigationVisuals.desktopHub : "bg-white/10 text-white hover:bg-white/15"
+                : active ? playrNavigationVisuals.desktopActive : playrNavigationVisuals.desktopInactive
             )}
             href={link.href}
             key={link.href}
           >
-            {link.label}
+            <Icon size={17} />
+            <span>{link.label}</span>
           </Link>
         );
       })}
       {showCoach ? (
-        <Link
-          className={clsx(
-            "ml-2 rounded border px-3 py-2 transition",
-            pathname.startsWith("/dashboard/coachr")
-              ? "border-court-teal bg-court-mist text-court-navy"
-              : "border-slate-200 text-court-navy hover:border-court-teal"
-          )}
-          href="/dashboard/coachr"
-        >
-          CoachR
-        </Link>
+        <Link aria-current={pathname.startsWith("/dashboard/coachr") ? "page" : undefined} className="ml-1 inline-flex min-h-11 items-center rounded-playr-md border border-white/20 px-3 py-2 text-slate-100 transition duration-fast hover:bg-white/10 focus-ring" href="/dashboard/coachr">CoachR</Link>
       ) : null}
       {showAdmin ? (
-        <Link
-          className={clsx(
-            "ml-2 rounded border px-3 py-2 transition",
-            pathname.startsWith(adminHref)
-              ? "border-court-teal bg-court-mist text-court-navy"
-              : "border-slate-200 text-court-navy hover:border-court-teal"
-          )}
-          href={adminHref}
-        >
-          {adminLabel}
-        </Link>
+        <Link aria-current={pathname.startsWith(adminHref) ? "page" : undefined} className="ml-1 inline-flex min-h-11 items-center rounded-playr-md border border-white/20 px-3 py-2 text-slate-100 transition duration-fast hover:bg-white/10 focus-ring" href={adminHref}>{adminLabel}</Link>
       ) : null}
     </nav>
   );
 }
 
-export function PlayerBottomNav({
-  adminHref = "/admin",
-  adminLabel = "ClubR Admin",
-  showAdmin,
-  showCoach
-}: {
-  adminHref?: string;
-  adminLabel?: string;
-  showAdmin: boolean;
-  showCoach: boolean;
-}) {
+export function PlayerBottomNav() {
   const pathname = usePathname();
 
-  if (pathname.startsWith("/dashboard/coachr") || pathname.startsWith("/dashboard/clubr")) {
-    return null;
-  }
+  if (pathname.startsWith("/dashboard/coachr") || pathname.startsWith("/dashboard/clubr") || pathname.startsWith("/admin")) return null;
 
   return (
-    <nav
-      aria-label="Player navigation"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 py-2 shadow-[0_-12px_35px_rgba(8,36,58,0.12)] backdrop-blur md:hidden"
-    >
+    <nav aria-label="Player navigation" className={playrNavigationVisuals.mobileBar}>
       <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
         {playerLinks.map((link) => {
-          const active = isActivePath(pathname, link.href);
+          const active = isActivePath(pathname, link.matches);
+          const Icon = link.icon;
 
           return (
             <Link
               aria-current={active ? "page" : undefined}
               className={clsx(
-                "grid min-h-12 place-items-center rounded px-1 text-center text-[11px] font-black transition",
+                playrNavigationVisuals.mobileItem,
                 link.isHub
-                  ? "bg-court-navy text-white shadow-court"
-                  : active
-                    ? "bg-court-mist text-court-navy"
-                    : "text-slate-600 hover:bg-court-mist hover:text-court-navy"
+                  ? active ? playrNavigationVisuals.mobileHubActive : playrNavigationVisuals.mobileHubInactive
+                  : active ? playrNavigationVisuals.mobileActive : playrNavigationVisuals.mobileInactive
               )}
               href={link.href}
               key={link.href}
             >
-              {link.mobileLabel}
+              <Icon size={link.isHub ? 20 : 18} />
+              <span className="max-w-full break-words">{link.label}</span>
+              {active && !link.isHub ? <span aria-hidden className="absolute bottom-1 h-0.5 w-5 rounded-full bg-court-teal" /> : null}
             </Link>
           );
         })}
       </div>
-      {showCoach ? (
-        <div className="mx-auto mt-2 max-w-md">
-          <Link className="block rounded bg-court-mist px-3 py-2 text-center text-xs font-black text-court-navy" href="/dashboard/coachr">
-            CoachR
-          </Link>
-        </div>
-      ) : null}
-      {showAdmin ? (
-        <div className="mx-auto mt-2 max-w-md">
-          <Link className="block rounded bg-court-mist px-3 py-2 text-center text-xs font-black text-court-navy" href={adminHref}>
-            {adminLabel}
-          </Link>
-        </div>
-      ) : null}
     </nav>
   );
 }

@@ -59,21 +59,21 @@ export async function SiteHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/92 backdrop-blur">
+      <header className="playr-gradient-navigation sticky top-0 z-30 border-b border-white/10 text-white shadow-playr-card">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link className="flex shrink-0 items-center gap-2 font-black tracking-tight text-court-navy" href={brandHref}>
-            <span className="grid h-9 w-9 place-items-center rounded bg-court-teal text-white">PR</span>
+          <Link className="flex shrink-0 items-center gap-2 rounded-playr-md font-black tracking-tight text-white focus-ring" href={brandHref}>
+            <span className="playr-gradient-navigation-active grid h-9 w-9 place-items-center rounded-playr-md text-white shadow-playr-card">PR</span>
             <span>PlayR</span>
           </Link>
 
           {isLoggedIn ? (
             <PlayerDesktopNav adminHref={adminHref} adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} />
           ) : (
-            <nav className="hidden items-center gap-5 text-sm font-bold text-slate-700 md:flex" aria-label="Public navigation">
-              <Link className="transition hover:text-court-blue" href="/events">
+            <nav className="hidden items-center gap-5 text-sm font-bold text-slate-200 md:flex" aria-label="Public navigation">
+              <Link className="rounded transition hover:text-white focus-ring" href="/events">
                 Events
               </Link>
-              <Link className="transition hover:text-court-blue" href="/about">
+              <Link className="rounded transition hover:text-white focus-ring" href="/about">
                 About
               </Link>
             </nav>
@@ -84,28 +84,28 @@ export async function SiteHeader() {
               <>
                 <Link
                   aria-label={unreadNotifications > 0 ? `${unreadNotifications} unread notifications` : "Notifications"}
-                  className="relative inline-flex h-10 w-10 items-center justify-center rounded border border-slate-200 bg-white text-court-navy shadow-sm transition hover:border-court-teal hover:bg-court-mist"
+                  className="relative inline-flex h-11 w-11 items-center justify-center rounded-playr-md border border-white/20 bg-white/10 text-white shadow-playr-subtle transition hover:border-court-teal hover:bg-white/15 focus-ring"
                   href="/dashboard/notifications"
                 >
                   <NotificationIcon size={18} />
                   {unreadNotifications > 0 ? (
-                    <span className="absolute -right-1 -top-1 min-w-[1.25rem] rounded-full bg-court-teal px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white ring-2 ring-white">
+                    <span className="absolute -right-1 -top-1 min-w-[1.25rem] rounded-full bg-court-lime px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-court-navy ring-2 ring-court-navy">
                       {unreadNotifications > 9 ? "9+" : unreadNotifications}
                     </span>
                   ) : null}
                 </Link>
                 <form action={signOut}>
-                  <button className="rounded bg-court-blue px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700" type="submit">
+                  <button className="min-h-11 rounded-playr-md border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white shadow-playr-subtle transition hover:bg-white/15 focus-ring" type="submit">
                     Sign out
                   </button>
                 </form>
               </>
             ) : (
               <>
-                <Link className="rounded px-3 py-2 text-sm font-semibold text-court-navy transition hover:bg-court-mist" href="/login">
+                <Link className="min-h-11 rounded-playr-md px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 focus-ring" href="/login">
                   Log in
                 </Link>
-                <Link className="rounded bg-court-blue px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700" href="/signup">
+                <Link className="playr-gradient-navigation-active min-h-11 rounded-playr-md px-3 py-2.5 text-sm font-semibold text-white shadow-playr-card transition hover:brightness-110 focus-ring" href="/signup">
                   Sign up
                 </Link>
               </>
@@ -113,7 +113,7 @@ export async function SiteHeader() {
           </div>
         </div>
       </header>
-      {isLoggedIn ? <PlayerBottomNav adminHref={adminHref} adminLabel={adminLabel} showAdmin={isAdmin} showCoach={isCoach} /> : null}
+      {isLoggedIn ? <PlayerBottomNav /> : null}
     </>
   );
 }

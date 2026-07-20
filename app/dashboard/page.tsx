@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
-import { BookingIcon, EventIcon, InviteIcon, ParticipationIcon, RatingIcon, StageIcon } from "@/components/playr-icons";
+import { ParticipationIcon, RatingIcon, StageIcon } from "@/components/playr-icons";
 import { PlayerProfileCard } from "@/components/player-profile-card";
 import { PlayRLinkButton, SectionError, SectionHeader } from "@/components/playr-ui";
 import { StatusAlert } from "@/components/status-alert";
 import { formatJuniorRating } from "@/lib/courtside-format";
+import { loadPlayerSessionRequests } from "@/lib/coach-session-requests";
+import { buildPlayerActivitySummaries, type PlayerActivitySummary } from "@/lib/player-activity-summary";
 import { juniorParticipationLeads, playerStageVisual } from "@/lib/player-stage-visuals";
 import { loadPlayerOrganisations, type PlayerOrganisation } from "@/lib/player-organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
@@ -29,6 +31,7 @@ type BookingRow = Pick<CourtBooking, "id" | "player_profile_id" | "start_time"> 
 };
 
 type DashboardMatchInvite = {
+  booking_start_time: string | null;
   id: string;
   inviter_profile_id: string;
   opponent_profile_id: string;
@@ -56,18 +59,8 @@ type JuniorCardProfile = Pick<
   | "stage_readiness_score"
 >;
 
-type ActivityCounts = {
-  invites: number;
-  events: number;
-  bookings: number;
-};
-
 function playerName(profile: Pick<Profile, "first_name" | "last_name">) {
   return `${profile.first_name} ${profile.last_name}`;
-}
-
-function emptyActivity(): ActivityCounts {
-  return { invites: 0, events: 0, bookings: 0 };
 }
 
 function playerInitials(profile: Pick<Profile, "first_name" | "last_name"> | null) {
@@ -79,10 +72,12 @@ function playerInitials(profile: Pick<Profile, "first_name" | "last_name"> | nul
 }
 
 function MemberCard({
+  activity,
   profile,
   rating,
   organisations
 }: {
+  activity?: PlayerActivitySummary | null;
   profile: Profile | null;
   rating: Rating | null;
   organisations: PlayerOrganisation[];
@@ -93,6 +88,7 @@ function MemberCard({
 
   return (
     <PlayerProfileCard
+      activity={activity}
       href={href}
       initials={playerInitials(profile)}
       name={name}
@@ -104,7 +100,7 @@ function MemberCard({
   );
 }
 
-function JuniorCard({ junior, organisations }: { junior: JuniorCardProfile; organisations: PlayerOrganisation[] }) {
+function JuniorCard({ activity, junior, organisations }: { activity?: PlayerActivitySummary | null; junior: JuniorCardProfile; organisations: PlayerOrganisation[] }) {
   const name = playerName(junior);
   const stage = playerStageVisual(true, junior.junior_stage);
   const participationFirst = juniorParticipationLeads(junior.junior_stage);
@@ -113,6 +109,7 @@ function JuniorCard({ junior, organisations }: { junior: JuniorCardProfile; orga
 
   return (
     <PlayerProfileCard
+      activity={activity}
       href={`/dashboard/players/${junior.id}`}
       initials={playerInitials(junior)}
       name={name}
@@ -172,7 +169,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   }
 
   const now = new Date().toISOString();
-  const [{ data: inviteData, error: inviteError }, { data: ratingData, error: ratingError }, { data: entryData, error: entryError }, { data: bookingData, error: bookingError }, organisationResult] =
+  const [{ data: inviteData, error: inviteError }, { data: ratingData, error: ratingError }, { data: entryData, error: entryError }, { data: bookingData, error: bookingError }, organisationResult, sessionRequests] =
     profileIds.length > 0
       ? await Promise.all([
           supabase.rpc("match_invites_for_user"),
@@ -189,14 +186,16 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             .eq("status", "confirmed")
             .gte("start_time", now)
             .order("start_time", { ascending: true }),
-          loadPlayerOrganisations(supabase, profileIds)
+          loadPlayerOrganisations(supabase, profileIds),
+          loadPlayerSessionRequests(supabase, profileIds)
         ])
       : [
           { data: [], error: null },
           { data: [], error: null },
           { data: [], error: null },
           { data: [], error: null },
-          { data: [], error: false }
+          { data: [], error: false },
+          []
         ];
 
   if (inviteError) {
@@ -219,41 +218,20 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     organisationsByProfileId.set(organisation.playerProfileId, [...current, organisation]);
   });
 
-  const activityByProfileId = new Map<string, ActivityCounts>();
-  profileIds.forEach((profileId) => {
-    activityByProfileId.set(profileId, emptyActivity());
-  });
-
-  const addActivity = (profileId: string | null | undefined, key: keyof ActivityCounts) => {
-    if (!profileId || !activityByProfileId.has(profileId)) {
-      return;
-    }
-
-    const current = activityByProfileId.get(profileId) ?? emptyActivity();
-    activityByProfileId.set(profileId, { ...current, [key]: current[key] + 1 });
-  };
-
   const invites = inviteError ? [] : ((inviteData ?? []) as DashboardMatchInvite[]);
-  invites
-    .filter((invite) => invite.status === "pending")
-    .forEach((invite) => {
-      addActivity(invite.inviter_profile_id, "invites");
-      addActivity(invite.opponent_profile_id, "invites");
-    });
-
   const upcomingEntries = entryError
     ? []
     : ((entryData ?? []) as unknown as DashboardEventEntry[]).filter((entry) => entry.entry_status !== "cancelled" && entry.events?.start_datetime && entry.events.start_datetime >= now);
-  upcomingEntries.forEach((entry) => addActivity(entry.profile_id, "events"));
-
   const upcomingBookings = bookingError ? [] : ((bookingData ?? []) as unknown as BookingRow[]);
-  upcomingBookings.forEach((booking) => addActivity(booking.player_profile_id, "bookings"));
+  const activitySummaries = buildPlayerActivitySummaries(profileIds, {
+    bookings: upcomingBookings.flatMap((booking) => booking.player_profile_id ? [{ player_profile_id: booking.player_profile_id, start_time: booking.start_time }] : []),
+    events: upcomingEntries.flatMap((entry) => entry.events ? [{ profile_id: entry.profile_id, start_time: entry.events.start_datetime }] : []),
+    invites,
+    lessonRequests: sessionRequests.map((request) => ({ player_profile_id: request.player_profile_id, status: request.status }))
+  }, new Date(now));
 
   const ratings = ratingError ? [] : ((ratingData ?? []) as Rating[]);
   const adultRating = profile ? ratings.find((rating) => rating.profile_id === profile.id) ?? null : null;
-  const totalPendingInvites = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.invites, 0);
-  const totalUpcomingEvents = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.events, 0);
-  const totalUpcomingBookings = Array.from(activityByProfileId.values()).reduce((total, activity) => total + activity.bookings, 0);
   return (
     <PageShell eyebrow="MyPlayR" subtitle="Your players, progress and upcoming tennis activity." title="MyPlayR">
       <StatusAlert className="mb-5" message={searchParams?.profile === "saved" ? "Profile saved." : null} tone="success" />
@@ -267,23 +245,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         />
       ) : null}
 
-      <section className="mb-6 rounded-lg bg-court-navy px-5 py-4 text-white shadow-court">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wide text-court-lime">Match Invites</p>
-            <p className="mt-1 text-2xl font-black">{totalPendingInvites}</p>
-          </div>
-          <div>
-            <p className="text-xs font-black uppercase tracking-wide text-court-lime">Upcoming Events</p>
-            <p className="mt-1 text-2xl font-black">{totalUpcomingEvents}</p>
-          </div>
-          <div>
-            <p className="text-xs font-black uppercase tracking-wide text-court-lime">Upcoming Bookings</p>
-            <p className="mt-1 text-2xl font-black">{totalUpcomingBookings}</p>
-          </div>
-        </div>
-      </section>
-
       <section className="mb-6">
         <SectionHeader
           action={<PlayRLinkButton href="/dashboard/juniors" variant="outline">Manage Juniors</PlayRLinkButton>}
@@ -295,10 +256,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         {organisationResult.error ? <SectionError className="mb-4" description="Organisation summaries could not be loaded right now. Your player cards are still available." /> : null}
 
         <div className="grid gap-5 lg:grid-cols-2">
-          <MemberCard organisations={profile ? organisationsByProfileId.get(profile.id) ?? [] : []} profile={profile} rating={adultRating} />
+          <MemberCard activity={profile ? activitySummaries.get(profile.id) ?? null : null} organisations={profile ? organisationsByProfileId.get(profile.id) ?? [] : []} profile={profile} rating={adultRating} />
 
           {juniorRows.map((junior) => (
-            <JuniorCard junior={junior} key={junior.id} organisations={organisationsByProfileId.get(junior.id) ?? []} />
+            <JuniorCard activity={activitySummaries.get(junior.id) ?? null} junior={junior} key={junior.id} organisations={organisationsByProfileId.get(junior.id) ?? []} />
           ))}
 
           {profile && juniorRows.length === 0 ? (
@@ -314,20 +275,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/venues">
-          <BookingIcon size={18} />
-          <span>Find a Venue</span>
-        </Link>
-        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/play">
-          <InviteIcon size={18} />
-          <span>Send Invite</span>
-        </Link>
-        <Link className="action-card flex items-center gap-3 font-bold text-court-navy" href="/dashboard/events">
-          <EventIcon size={18} />
-          <span>Browse Events</span>
-        </Link>
-      </section>
     </PageShell>
   );
 }

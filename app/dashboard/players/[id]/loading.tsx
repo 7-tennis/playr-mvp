@@ -2,7 +2,7 @@ import { CardSkeleton, MetricSkeleton, PageHeaderSkeleton, PlayRCard, Skeleton }
 
 export default function PlayerDetailLoading() {
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6" aria-busy="true" aria-label="Loading player profile">
+    <main className="playr-page-surface mx-auto min-h-[70vh] w-full max-w-6xl px-4 py-6 sm:my-5 sm:w-[calc(100%-2rem)] sm:rounded-playr-xl sm:px-6" aria-busy="true" aria-label="Loading player profile">
       <PageHeaderSkeleton />
       <Skeleton className="mt-5 h-11 w-36" />
       <PlayRCard className="mt-5 overflow-hidden" loading>

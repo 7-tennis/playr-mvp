@@ -6,7 +6,7 @@ import { hasSupabaseConfig } from "@/utils/supabase/config";
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   if (!hasSupabaseConfig()) {
     return (
-      <main className="mx-auto min-h-[70vh] max-w-3xl px-4 py-10">
+      <main className="playr-page-surface mx-auto min-h-[70vh] w-full max-w-3xl px-4 py-10 sm:my-5 sm:w-[calc(100%-2rem)] sm:rounded-playr-xl">
         <p className="text-sm font-black uppercase tracking-wide text-court-teal">ClubR Admin</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-court-navy md:text-5xl">Supabase is not configured.</h1>
         <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6">
@@ -31,7 +31,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     });
 
     return (
-      <main className="mx-auto min-h-[70vh] max-w-3xl px-4 py-10">
+      <main className="playr-page-surface mx-auto min-h-[70vh] w-full max-w-3xl px-4 py-10 sm:my-5 sm:w-[calc(100%-2rem)] sm:rounded-playr-xl">
         <p className="text-sm font-black uppercase tracking-wide text-court-teal">ClubR Admin</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-court-navy md:text-5xl">Access restricted.</h1>
         <div className="mt-8 rounded-lg border border-slate-200 bg-white p-6">
