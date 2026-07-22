@@ -7,6 +7,7 @@ import clsx from "clsx";
 const adminLinks = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/profiles", label: "Players" },
+  { href: "/admin/rankings", label: "Rankings" },
   { href: "/admin/events", label: "Events" },
   { href: "/admin/entries", label: "Entries" },
   { href: "/admin/results", label: "Results" },

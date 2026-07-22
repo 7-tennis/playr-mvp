@@ -43,7 +43,7 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
 
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(`/login?next=${encodeURIComponent(queryHref(searchParams ?? {}))}`);
 
   const category = safeCategory(searchParams?.category);
   const metric = rankingMetricForCategory(category, searchParams?.metric);
