@@ -1,7 +1,9 @@
 node_modules
 .next
 .vercel
+supabase/.temp/
 .env*.local
 dist
 coverage
 tsconfig.tsbuildinfo
+.env*

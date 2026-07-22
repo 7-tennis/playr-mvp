@@ -88,6 +88,7 @@ begin
       or (p_status = 'hidden' and publication.safeguarding_hidden)
       or (p_status <> 'hidden' and publication.publication_status = p_status and not publication.safeguarding_hidden)
     )
+    and profile.member_status <> 'inactive'
     and (p_category is null or publication.ranking_category = p_category)
     and (p_classification is null or publication.player_classification = p_classification)
     and (safe_search is null or publication.public_display_name ilike '%' || safe_search || '%')
