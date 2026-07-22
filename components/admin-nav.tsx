@@ -21,7 +21,7 @@ export function AdminNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="mb-8 flex gap-2 overflow-x-auto" aria-label="ClubR navigation">
+    <nav className="mb-8 flex gap-2 overflow-x-auto" aria-label="Administration navigation">
       {adminLinks.map((link) => {
         const active = link.href === "/admin" ? pathname === link.href : pathname === link.href || pathname.startsWith(`${link.href}/`);
 

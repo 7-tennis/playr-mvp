@@ -421,6 +421,27 @@ export function SettingsIcon(props: PlayRIconProps) {
   );
 }
 
+export function AppSwitcherIcon(props: PlayRIconProps) {
+  return (
+    <IconShell {...props}>
+      <rect height="6" rx="1" width="6" x="3" y="3" />
+      <rect height="6" rx="1" width="6" x="15" y="3" />
+      <rect height="6" rx="1" width="6" x="3" y="15" />
+      <rect height="6" rx="1" width="6" x="15" y="15" />
+    </IconShell>
+  );
+}
+
+export function SignOutIcon(props: PlayRIconProps) {
+  return (
+    <IconShell {...props}>
+      <path d="M10 5H5v14h5" />
+      <path d="M14 8l4 4-4 4" />
+      <path d="M8 12h10" />
+    </IconShell>
+  );
+}
+
 export function DistrictIcon(props: PlayRIconProps) {
   return (
     <IconShell {...props}>

@@ -28,20 +28,22 @@ function NavigationCount({ count }: { count: number }) {
   );
 }
 
+function isOutsidePlayR(pathname: string) {
+  return pathname.startsWith("/dashboard/coachr")
+    || pathname.startsWith("/dashboard/clubr")
+    || pathname.startsWith("/dashboard/setup/coachr")
+    || pathname.startsWith("/dashboard/setup/clubr")
+    || pathname.startsWith("/admin");
+}
+
 export function PlayerDesktopNav({
-  adminHref = "/admin",
-  adminLabel = "ClubR Admin",
-  messageCount = 0,
-  showAdmin,
-  showCoach
+  messageCount = 0
 }: {
-  adminHref?: string;
-  adminLabel?: string;
   messageCount?: number;
-  showAdmin: boolean;
-  showCoach: boolean;
 }) {
   const pathname = usePathname();
+
+  if (isOutsidePlayR(pathname)) return null;
 
   return (
     <nav className={playrNavigationVisuals.desktopNav} aria-label="Player navigation">
@@ -68,12 +70,6 @@ export function PlayerDesktopNav({
           </Link>
         );
       })}
-      {showCoach ? (
-        <Link aria-current={pathname.startsWith("/dashboard/coachr") ? "page" : undefined} className="ml-1 inline-flex min-h-11 items-center rounded-playr-md border border-white/20 px-3 py-2 text-slate-100 transition duration-fast hover:bg-white/10 focus-ring" href="/dashboard/coachr">CoachR</Link>
-      ) : null}
-      {showAdmin ? (
-        <Link aria-current={pathname.startsWith(adminHref) ? "page" : undefined} className="ml-1 inline-flex min-h-11 items-center rounded-playr-md border border-white/20 px-3 py-2 text-slate-100 transition duration-fast hover:bg-white/10 focus-ring" href={adminHref}>{adminLabel}</Link>
-      ) : null}
     </nav>
   );
 }
@@ -81,7 +77,7 @@ export function PlayerDesktopNav({
 export function PlayerBottomNav({ messageCount = 0 }: { messageCount?: number }) {
   const pathname = usePathname();
 
-  if (pathname.startsWith("/dashboard/coachr") || pathname.startsWith("/dashboard/clubr") || pathname.startsWith("/admin")) return null;
+  if (isOutsidePlayR(pathname)) return null;
 
   return (
     <nav aria-label="Player navigation" className={playrNavigationVisuals.mobileBar}>
