@@ -1,7 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { getPostLoginPathForUser } from "@/lib/auth-routing";
+import { buildAuthConfirmationUrl } from "@/lib/auth-confirmation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 function formText(formData: FormData, key: string) {
@@ -52,11 +54,18 @@ export async function signUpWithPassword(formData: FormData) {
     redirect(`/signup?error=${encoded("Enter an email and password to create your account.")}`);
   }
 
+  const requestHeaders = headers();
+  const forwardedHost = requestHeaders.get("x-forwarded-host");
+  const host = forwardedHost ?? requestHeaders.get("host");
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host?.startsWith("localhost") || host?.startsWith("127.0.0.1") ? "http" : "https");
+  const requestOrigin = host ? `${protocol}://${host}` : "https://playr-mvp.vercel.app";
+  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? requestOrigin;
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
+      emailRedirectTo: buildAuthConfirmationUrl(configuredOrigin, next),
       data: {
         phone: phone || null,
         marketing_consent: marketingConsent,
@@ -65,14 +74,18 @@ export async function signUpWithPassword(formData: FormData) {
     }
   });
 
-  if (error || !data.user) {
-    console.error("CourtSide signup failed", { email, error });
-    redirect(`/signup?error=${encoded("We could not create your account. The email may already be registered, or the password may need to be longer.")}`);
+  if (error) {
+    console.error("[playr-auth] signup_failed", {
+      code: error.code ?? "unknown",
+      name: error.name,
+      status: error.status ?? null
+    });
+    redirect(`/signup?error=${encoded("We could not create your account. Check the address and password, wait a few minutes, then try again.")}`);
   }
 
   if (!data.session) {
     const nextParam = next ? `&next=${encodeURIComponent(next)}` : "";
-    redirect(`/signup?message=${encoded("Check your email to verify your account. Open the confirmation link from Supabase, then return here and log in.")}${nextParam}`);
+    redirect(`/signup?message=${encoded("Check your email and open the newest confirmation link within one hour. Older confirmation emails expire automatically.")}${nextParam}`);
   }
 
   redirect(next ?? "/dashboard/profile");
