@@ -1,4 +1,5 @@
 import { BookingIcon, ClubIcon, MembershipIcon, NotificationIcon, PrivateIcon, StatusIcon } from "@/components/playr-icons";
+import { signOut } from "@/app/auth/actions";
 import { canAccessClubRPermission } from "@/lib/permissions";
 import { ClubRActionCard, ClubRPageFrame, getProtectedClubRPage } from "../clubr-shared";
 
@@ -18,7 +19,12 @@ export default async function ClubRMorePage() {
         {canAccessClubRPermission(context.role, "clubr:diagnostics") ? <ClubRActionCard href="/dashboard/clubr/diagnostics" icon={<StatusIcon size={18} />} text="Restricted schedule and permission checks." title="Diagnostics" /> : null}
         <ClubRActionCard href="/dashboard/profile" icon={<PrivateIcon size={18} />} text="Your private PlayR account." title="My Profile" />
         <ClubRActionCard href="/dashboard" icon={<MembershipIcon size={18} />} text="Return to member and player cards." title="MyPlayR" />
-        <ClubRActionCard href="/logout" icon={<PrivateIcon size={18} />} text="End this signed-in session." title="Sign Out" />
+        <form action={signOut} className="surface-card p-0">
+          <button className="flex h-full w-full items-start gap-3 p-4 text-left" type="submit">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-court-mist text-court-teal"><PrivateIcon size={18} /></span>
+            <span><span className="block font-black text-court-navy">Sign Out</span><span className="mt-1 block text-sm leading-6 text-slate-600">End this signed-in session.</span></span>
+          </button>
+        </form>
         {context.role === "platform_admin" ? <ClubRActionCard href="/admin/organisations" icon={<ClubIcon size={18} />} text="Organisation access and delegation." title="SupeR UseR" /> : null}
       </section>
     </ClubRPageFrame>

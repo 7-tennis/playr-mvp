@@ -4,8 +4,8 @@ import { AppIdentity, AppSwitcher } from "@/components/app-switcher";
 import { PlayerBottomNav, PlayerDesktopNav } from "@/components/player-nav";
 import { SettingsIcon, SignOutIcon } from "@/components/playr-icons";
 import { appAreaDefinitions, type AppAreaDestination } from "@/lib/app-areas";
-import { loadActiveRoleRow, normalizeStoredRole, type UserRole } from "@/lib/permissions";
-import { loadOrganisationMembershipsForUser, productForOrganisationMembership } from "@/lib/organisations";
+import { canAccessCoachR, canAccessClubR, loadActiveRoleRow, normalizeStoredRole, type UserRole } from "@/lib/permissions";
+import { loadOrganisationMembershipsForUser, pickOrganisationMembershipForProduct } from "@/lib/organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
@@ -35,11 +35,15 @@ async function getSessionState() {
     ]);
     const storedRole = normalizeStoredRole(activeRole?.role ?? null);
     const appDestinations: AppAreaDestination[] = [{ ...appAreaDefinitions.playr }];
-    const clubMembership = memberships.find((membership) => productForOrganisationMembership(membership) === "clubr");
-    const coachMembership = memberships.find((membership) => productForOrganisationMembership(membership) === "coachr");
+    const clubMembership = pickOrganisationMembershipForProduct(memberships, "clubr");
+    const coachMembership = pickOrganisationMembershipForProduct(memberships, "coachr");
 
-    if (clubMembership) appDestinations.push({ ...appAreaDefinitions.clubr, membershipId: clubMembership.id });
-    if (coachMembership) appDestinations.push({ ...appAreaDefinitions.coachr, membershipId: coachMembership.id });
+    if (clubMembership || (storedRole !== "platform_admin" && canAccessClubR(storedRole))) {
+      appDestinations.push({ ...appAreaDefinitions.clubr, membershipId: clubMembership?.id });
+    }
+    if (coachMembership || (storedRole !== "platform_admin" && canAccessCoachR(storedRole))) {
+      appDestinations.push({ ...appAreaDefinitions.coachr, membershipId: coachMembership?.id });
+    }
     if (storedRole === "platform_admin") appDestinations.push({ ...appAreaDefinitions.superuser });
 
     return { appDestinations, isLoggedIn: true, role: storedRole, unreadNotifications: unreadCount ?? 0 };

@@ -49,6 +49,8 @@ function statusMessage(message?: string) {
       return "Coach access deactivated.";
     case "coach_invited":
       return "Coach invitation created. Copy and share this secure link with the invited coach.";
+    case "coach_invitation_reused":
+      return "The existing pending coach invitation was recovered safely. Copy and share its secure link.";
     case "invitation_cancelled":
       return "Invitation cancelled.";
     default:
@@ -72,6 +74,8 @@ function errorMessage(error?: string) {
       return "A pending invitation already exists for that coach email and role.";
     case "invite_failed":
       return "Coach invitation could not be created.";
+    case "invite_timeout":
+      return "The invitation request took too long. Your session is still active; retry once to recover any pending invitation safely.";
     case "invitation_cancel_failed":
       return "Coach invitation could not be cancelled.";
     case "invitation_closed":
@@ -234,7 +238,7 @@ export default async function CoachRCoachesPage({ searchParams }: CoachesPagePro
   const searchableProfiles = query
     ? adultProfiles.filter((profile) => `${profile.first_name} ${profile.last_name} ${profile.email ?? ""}`.toLowerCase().includes(query))
     : adultProfiles.slice(0, 40);
-  const canAssignHere = context.role === "head_coach" || context.role === "club_admin" || context.role === "platform_admin";
+  const canAssignHere = context.role === "head_coach" || context.role === "platform_admin";
 
   return (
     <CoachRPageFrame context={context} subtitle="Manage coaches linked to your permitted venue." title="Manage Coaches">

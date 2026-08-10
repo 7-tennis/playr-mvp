@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getPostLoginPathForUser } from "@/lib/auth-routing";
+import { loginPathFor, safeInternalPath } from "@/lib/auth-navigation";
 import { buildAuthConfirmationUrl } from "@/lib/auth-confirmation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
@@ -15,21 +16,13 @@ function encoded(message: string) {
   return encodeURIComponent(message);
 }
 
-function safeNextPath(value: string) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return null;
-  }
-
-  return value;
-}
-
 export async function signInWithPassword(formData: FormData) {
   const email = formText(formData, "email");
   const password = formText(formData, "password");
-  const next = safeNextPath(formText(formData, "next"));
+  const next = safeInternalPath(formText(formData, "next"));
 
   if (!email || !password) {
-    redirect(`/login?error=${encoded("Enter your email and password.")}`);
+    redirect(loginPathFor(next, "Enter your email and password."));
   }
 
   const supabase = await createServerSupabaseClient();
@@ -37,7 +30,7 @@ export async function signInWithPassword(formData: FormData) {
 
   if (error || !data.user) {
     console.error("CourtSide login failed", { email, error });
-    redirect(`/login?error=${encoded("We could not log you in. Check your email and password, and verify your email if you just created your account.")}`);
+    redirect(loginPathFor(next, "We could not log you in. Check your email and password, and verify your email if you just created your account."));
   }
 
   redirect(next ?? (await getPostLoginPathForUser(supabase, data.user.id)));
@@ -47,7 +40,7 @@ export async function signUpWithPassword(formData: FormData) {
   const email = formText(formData, "email");
   const password = formText(formData, "password");
   const phone = formText(formData, "phone");
-  const next = safeNextPath(formText(formData, "next"));
+  const next = safeInternalPath(formText(formData, "next"));
   const marketingConsent = formData.get("marketing_consent") === "on";
 
   if (!email || !password) {

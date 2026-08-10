@@ -4,7 +4,7 @@ import { BookingIcon, ClubIcon, StatusIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDate } from "@/lib/courtside-format";
 import { canManageOrganisationCourtAccess } from "@/lib/organisations";
-import { getPermissionContext } from "@/lib/permissions";
+import { canAccessCoachR, getPermissionContext } from "@/lib/permissions";
 import type { Court, OrganisationCourtAccess, Venue } from "@/types/courtside";
 import { grantOrganisationCourtAccess, revokeOrganisationCourtAccess } from "./actions";
 
@@ -36,9 +36,9 @@ function error(value?: string) {
 }
 
 export default async function CoachRCourtsPage({ searchParams }: CourtAccessPageProps) {
-  const context = await getPermissionContext();
+  const context = await getPermissionContext("coachr");
 
-  if (context.kind !== "authenticated") {
+  if (context.kind !== "authenticated" || !canAccessCoachR(context.role)) {
     return null;
   }
 

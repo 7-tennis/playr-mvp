@@ -1,47 +1,40 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import {
+  canAccessCoachR,
+  canAccessCoachRPermission,
+  canAccessClubAdmin,
+  canAccessClubR,
+  canAccessClubRPermission,
+  canAccessHeadCoach,
+  coachRRequiredRoles,
+  type ClubRPermission,
+  type CoachRPermission,
+  type StoredUserRole,
+  type UserRole
+} from "@/lib/authorization-policy";
 import {
   appRoleForOrganisationMembership,
   loadActiveOrganisationPreference,
   loadAllOrganisationMembershipsForUser,
   pickActiveOrganisationMembership,
+  pickOrganisationMembershipForProduct,
   type OrganisationMembershipWithVenue
 } from "@/lib/organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { OrganisationRole } from "@/types/courtside";
+import { loginPathFor, requestPathFromHeaders } from "@/lib/auth-navigation";
 
-export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "committee" | "reception" | "platform_admin";
-export type StoredUserRole = UserRole | "admin" | "staff";
-export type ClubRPermission =
-  | "clubr"
-  | "clubr:members"
-  | "clubr:members:manage"
-  | "clubr:memberships"
-  | "clubr:memberships:catalog:manage"
-  | "clubr:memberships:applications"
-  | "clubr:memberships:applications:review"
-  | "clubr:memberships:subscriptions"
-  | "clubr:memberships:subscriptions:manage"
-  | "clubr:memberships:billing"
-  | "clubr:memberships:payments:record"
-  | "clubr:roles:manage"
-  | "clubr:bookings"
-  | "clubr:courts"
-  | "clubr:courts:manage"
-  | "clubr:notices"
-  | "clubr:notices:manage"
-  | "clubr:settings"
-  | "clubr:settings:manage"
-  | "clubr:diagnostics";
-export type CoachRPermission =
-  | "coachr"
-  | "coachr:schedule"
-  | "coachr:students"
-  | "coachr:availability"
-  | "coachr:coaches"
-  | "coachr:messages"
-  | "coachr:more"
-  | "coachr:head_coach";
+export {
+  canAccessCoachR,
+  canAccessCoachRPermission,
+  canAccessClubAdmin,
+  canAccessClubR,
+  canAccessClubRPermission,
+  canAccessHeadCoach
+};
+export type { ClubRPermission, CoachRPermission, StoredUserRole, UserRole };
 
 type RoleRow = {
   id: string;
@@ -112,57 +105,6 @@ export function roleLabel(role: UserRole) {
   }
 }
 
-export function canAccessCoachR(role: UserRole) {
-  return role === "coach" || role === "head_coach" || role === "club_admin" || role === "platform_admin";
-}
-
-export function canAccessHeadCoach(role: UserRole) {
-  return role === "head_coach" || role === "platform_admin";
-}
-
-export function canAccessClubAdmin(role: UserRole) {
-  return role === "club_admin" || role === "platform_admin";
-}
-
-export function canAccessClubR(role: UserRole) {
-  return role === "club_admin" || role === "committee" || role === "reception" || role === "platform_admin";
-}
-
-export function canAccessClubRPermission(role: UserRole, permission: ClubRPermission) {
-  if (role === "platform_admin" || role === "club_admin") {
-    return true;
-  }
-
-  if (role === "committee") {
-    return ![
-      "clubr:roles:manage",
-      "clubr:settings:manage",
-      "clubr:diagnostics",
-      "clubr:memberships:catalog:manage",
-      "clubr:memberships:applications:review",
-      "clubr:memberships:subscriptions:manage",
-      "clubr:memberships:payments:record"
-    ].includes(permission);
-  }
-
-  if (role === "reception") {
-    return [
-      "clubr",
-      "clubr:members",
-      "clubr:bookings",
-      "clubr:courts",
-      "clubr:notices",
-      "clubr:settings",
-      "clubr:memberships",
-      "clubr:memberships:applications",
-      "clubr:memberships:subscriptions",
-      "clubr:memberships:billing"
-    ].includes(permission);
-  }
-
-  return false;
-}
-
 export function canManageOwnCoachResources({
   actorRole,
   actorUserId,
@@ -180,7 +122,7 @@ export function canManageOwnCoachResources({
     return true;
   }
 
-  if (actorRole === "club_admin" || actorRole === "head_coach") {
+  if (actorRole === "head_coach") {
     return canManageVenueResources({ actorRole, actorVenueId, resourceVenueId });
   }
 
@@ -200,23 +142,11 @@ export function canManageVenueResources({
     return true;
   }
 
-  if (actorRole !== "club_admin" && actorRole !== "head_coach") {
+  if (actorRole !== "head_coach") {
     return false;
   }
 
   return Boolean(actorVenueId && resourceVenueId && actorVenueId === resourceVenueId);
-}
-
-export function canAccessCoachRPermission(role: UserRole, permission: CoachRPermission) {
-  if (permission === "coachr:coaches") {
-    return role === "club_admin" || canAccessHeadCoach(role);
-  }
-
-  if (permission === "coachr:head_coach") {
-    return canAccessHeadCoach(role);
-  }
-
-  return canAccessCoachR(role);
 }
 
 function safeUserId(userId: string | null | undefined) {
@@ -353,18 +283,27 @@ export async function loadActiveRoleRow(supabase: Awaited<ReturnType<typeof crea
   return roleRow;
 }
 
-export async function getPermissionContext(): Promise<PermissionContext> {
+export async function getPermissionContext(product?: "coachr" | "clubr"): Promise<PermissionContext> {
   if (!hasSupabaseConfig()) {
     return { kind: "no-config" };
   }
 
   const supabase = await createServerSupabaseClient();
   const {
-    data: { user }
+    data: { user },
+    error: authError
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    if (authError) {
+      console.warn("[playr-permissions]", {
+        event: "authenticated_user_lookup_failed",
+        code: authError.code ?? "unknown",
+        status: authError.status ?? null
+      });
+    }
+
+    redirect(loginPathFor(requestPathFromHeaders(headers())));
   }
 
   const [roleRow, adultProfileResult, allOrganisationMemberships, activeOrganisationPreference] = await Promise.all([
@@ -384,7 +323,9 @@ export async function getPermissionContext(): Promise<PermissionContext> {
     : { count: 0 };
   const linkedJuniorCount = count ?? 0;
   const derivedRole: UserRole = linkedJuniorCount > 0 ? "parent" : "player";
-  const activeOrganisationMembership = pickActiveOrganisationMembership(organisationMemberships, activeOrganisationPreference);
+  const activeOrganisationMembership = product
+    ? pickOrganisationMembershipForProduct(organisationMemberships, product, activeOrganisationPreference)
+    : pickActiveOrganisationMembership(organisationMemberships, activeOrganisationPreference);
   const activeOrganisationRole = activeOrganisationMembership?.role ?? null;
   const membershipRole = activeOrganisationMembership ? appRoleForOrganisationMembership(activeOrganisationMembership) : null;
   const storedRole = normalizeStoredRole(roleRow?.role, derivedRole);
@@ -411,7 +352,7 @@ export async function getPermissionContext(): Promise<PermissionContext> {
 }
 
 export async function getCoachRAccess(permission: CoachRPermission = "coachr") {
-  const context = await getPermissionContext();
+  const context = await getPermissionContext("coachr");
 
   if (context.kind === "no-config") {
     return { allowed: false, context, requiredRoles: requiredCoachRRoles(permission) };
@@ -435,13 +376,5 @@ export async function assertCoachRAccess(permission: CoachRPermission = "coachr"
 }
 
 function requiredCoachRRoles(permission: CoachRPermission) {
-  if (permission === "coachr:coaches") {
-    return ["club_admin", "head_coach", "platform_admin"] as UserRole[];
-  }
-
-  if (permission === "coachr:head_coach") {
-    return ["head_coach", "platform_admin"] as UserRole[];
-  }
-
-  return ["coach", "head_coach", "club_admin", "platform_admin"] as UserRole[];
+  return coachRRequiredRoles(permission);
 }

@@ -46,7 +46,7 @@ function parseMembers(value: string) {
 }
 
 async function requireMembershipPermission(venueId: string, permission: "catalog_manage" | "applications_review" | "subscriptions_manage" | "payments_record" | "billing_view") {
-  const context = await getPermissionContext();
+  const context = await getPermissionContext("clubr");
   if (context.kind !== "authenticated" || !venueId || (context.role !== "platform_admin" && context.venueId !== venueId)) {
     throw new Error("clubr_membership_access_denied");
   }

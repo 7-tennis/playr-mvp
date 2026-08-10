@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { signOut } from "@/app/auth/actions";
 import { BookingIcon, ClubIcon, EntriesIcon, MatchIcon, MembershipIcon, NotificationIcon, PrivateIcon, StatusIcon } from "@/components/playr-icons";
 import { loadCoachLessonOptions, profileDisplayName } from "@/lib/coach-lessons";
 import { canManageOrganisationCourtAccess } from "@/lib/organisations";
@@ -85,9 +86,9 @@ export default async function CoachRMorePage() {
           <Link className="btn-secondary" href="/dashboard/profile">
             Settings
           </Link>
-          <Link className="btn-primary" href="/logout">
-            Sign out
-          </Link>
+          <form action={signOut}>
+            <button className="btn-primary" type="submit">Sign out</button>
+          </form>
         </div>
         <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
           <MembershipIcon size={16} /> ClubR administration is only linked where the current role is authorised.

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canManageOrganisationCourtAccess } from "@/lib/organisations";
-import { getPermissionContext } from "@/lib/permissions";
+import { canAccessCoachR, getPermissionContext } from "@/lib/permissions";
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -23,9 +23,9 @@ function returnPath(ownerVenueId: string | null, key: "error" | "message", value
 }
 
 async function courtAccessContext(formData: FormData) {
-  const context = await getPermissionContext();
+  const context = await getPermissionContext("coachr");
 
-  if (context.kind !== "authenticated") {
+  if (context.kind !== "authenticated" || !canAccessCoachR(context.role)) {
     return { context: null, ownerVenueId: null };
   }
 

@@ -2,15 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createCoachInvitation, type CoachInvitationRole } from "@/lib/coach-invitations";
 import { assertCoachRAccess } from "@/lib/permissions";
-import type { OrganisationRole } from "@/types/courtside";
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
 }
 
-const coachInvitationRoles: OrganisationRole[] = ["head_coach", "coach", "assistant_coach"];
+const coachInvitationRoles: CoachInvitationRole[] = ["head_coach", "coach", "assistant_coach"];
 
 function allowedValue<T extends string>(value: string, allowed: T[], fallback: T) {
   return allowed.includes(value as T) ? (value as T) : fallback;
@@ -125,7 +125,7 @@ export async function inviteVenueCoach(formData: FormData) {
   const email = text(formData, "email").toLowerCase();
   const invitedName = text(formData, "invitedName") || null;
   const invitedPhone = text(formData, "invitedPhone") || null;
-  const intendedRole = allowedValue<OrganisationRole>(text(formData, "intendedRole"), coachInvitationRoles, "coach");
+  const intendedRole = allowedValue<CoachInvitationRole>(text(formData, "intendedRole"), coachInvitationRoles, "coach");
 
   if (context.kind !== "authenticated" || !context.venueId || !email) {
     redirect("/dashboard/coachr/coaches?error=missing_fields");
@@ -135,26 +135,55 @@ export async function inviteVenueCoach(formData: FormData) {
     redirect("/dashboard/coachr/coaches?error=access");
   }
 
-  const { data: token, error } = await context.supabase.rpc("create_organisation_invitation", {
-    p_invitation_kind: "coach",
-    p_invited_email: email,
-    p_invited_name: invitedName,
-    p_invited_phone: invitedPhone,
-    p_intended_role: intendedRole,
-    p_metadata: {},
-    p_parent_profile_id: null,
-    p_target_junior_profile_id: null,
-    p_target_profile_id: null,
-    p_venue_id: context.venueId
-  });
+  const result = await createCoachInvitation(
+    {
+      email,
+      invitedName,
+      invitedPhone,
+      role: intendedRole,
+      venueId: context.venueId
+    },
+    {
+      create: async (input) => {
+        const { data, error } = await context.supabase.rpc("create_organisation_invitation", {
+          p_invitation_kind: "coach",
+          p_invited_email: input.email,
+          p_invited_name: input.invitedName,
+          p_invited_phone: input.invitedPhone,
+          p_intended_role: input.role,
+          p_metadata: {},
+          p_parent_profile_id: null,
+          p_target_junior_profile_id: null,
+          p_target_profile_id: null,
+          p_venue_id: input.venueId
+        });
+        return { data, error };
+      },
+      findPending: async (input) => {
+        const { data } = await context.supabase
+          .from("organisation_invitations")
+          .select("token")
+          .eq("venue_id", input.venueId)
+          .eq("invitation_kind", "coach")
+          .eq("intended_role", input.role)
+          .eq("status", "pending")
+          .ilike("invited_email", input.email)
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        return data?.token ?? null;
+      }
+    }
+  );
 
-  if (error || !token) {
-    console.error("Coach invitation failed", { error, role: context.role, venueId: context.venueId });
-    redirect(`/dashboard/coachr/coaches?error=${errorCode(error, "invite_failed")}`);
+  if (!result.ok) {
+    console.error("Coach invitation failed", { error: result.error, role: context.role, venueId: context.venueId });
+    redirect(`/dashboard/coachr/coaches?error=${result.error}`);
   }
 
   revalidateCoachAccess();
-  redirect(`/dashboard/coachr/coaches?message=coach_invited&token=${token}`);
+  redirect(`/dashboard/coachr/coaches?message=${result.reused ? "coach_invitation_reused" : "coach_invited"}&token=${result.token}`);
 }
 
 export async function cancelVenueCoachInvitation(formData: FormData) {

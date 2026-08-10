@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { resolveCourtReadiness } from "@/lib/court-readiness";
-import { getPermissionContext } from "@/lib/permissions";
+import { canAccessCoachR, getPermissionContext } from "@/lib/permissions";
 
 function uuid(value: string | null) {
   return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) ? value : null;
 }
 
 export async function GET(request: Request) {
-  const context = await getPermissionContext();
-  if (context.kind !== "authenticated") return NextResponse.json({ error: "access" }, { status: 401 });
+  const context = await getPermissionContext("coachr");
+  if (context.kind !== "authenticated" || !canAccessCoachR(context.role)) return NextResponse.json({ error: "access" }, { status: 401 });
 
   const url = new URL(request.url);
   const organisationId = uuid(url.searchParams.get("organisation"));

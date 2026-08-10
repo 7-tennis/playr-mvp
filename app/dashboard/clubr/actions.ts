@@ -36,7 +36,7 @@ function resultPath(path: string, key: "error" | "message", value: string) {
 }
 
 async function requireClubR(permission: ClubRPermission, formData: FormData) {
-  const context = await getPermissionContext();
+  const context = await getPermissionContext("clubr");
   const venueId = text(formData, "venueId");
 
   if (

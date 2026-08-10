@@ -146,8 +146,6 @@ export function productForOrganisationRole(role: OrganisationRole | string | nul
 }
 
 export function productForOrganisationMembership(membership: Pick<OrganisationMembershipWithVenue, "role" | "venue">): ProductContext {
-  const organisationType = membership.venue?.organisation_type;
-
   if (membership.role === "sports_coordinator" || membership.role === "team_manager") {
     return "teamr";
   }
@@ -156,12 +154,7 @@ export function productForOrganisationMembership(membership: Pick<OrganisationMe
     return "clubr";
   }
 
-  if (
-    organisationType === "academy" ||
-    membership.role === "head_coach" ||
-    membership.role === "coach" ||
-    membership.role === "assistant_coach"
-  ) {
+  if (membership.role === "head_coach" || membership.role === "coach" || membership.role === "assistant_coach") {
     return "coachr";
   }
 
@@ -169,12 +162,6 @@ export function productForOrganisationMembership(membership: Pick<OrganisationMe
 }
 
 export function appRoleForOrganisationMembership(membership: Pick<OrganisationMembershipWithVenue, "role" | "venue">): UserRole {
-  const product = productForOrganisationMembership(membership);
-
-  if (product === "coachr" && (membership.role === "organisation_admin" || membership.role === "club_manager")) {
-    return "head_coach";
-  }
-
   return appRoleForOrganisationRole(membership.role);
 }
 
@@ -288,6 +275,40 @@ export async function loadActiveOrganisationPreference(supabase: ServerSupabaseC
   return (data as ActiveOrganisationPreference | null) ?? null;
 }
 
+function sortOrganisationMemberships(memberships: OrganisationMembershipWithVenue[]) {
+  return [...memberships].sort((left, right) => {
+    const priorityDelta = organisationRolePriority(right.role) - organisationRolePriority(left.role);
+
+    if (priorityDelta !== 0) {
+      return priorityDelta;
+    }
+
+    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+  });
+}
+
+export function pickOrganisationMembershipForProduct(
+  memberships: OrganisationMembershipWithVenue[],
+  product: Extract<ProductContext, "coachr" | "clubr">,
+  preference: ActiveOrganisationPreference | null = null
+) {
+  const productMemberships = memberships.filter((membership) => productForOrganisationMembership(membership) === product);
+
+  if (productMemberships.length === 0) {
+    return null;
+  }
+
+  if (preference?.product_context === product) {
+    const preferred = sortOrganisationMemberships(productMemberships.filter((membership) => membership.venue_id === preference.venue_id))[0];
+
+    if (preferred) {
+      return preferred;
+    }
+  }
+
+  return sortOrganisationMemberships(productMemberships)[0] ?? null;
+}
+
 export function pickActiveOrganisationMembership(memberships: OrganisationMembershipWithVenue[], preference: ActiveOrganisationPreference | null) {
   if (memberships.length === 0) {
     return null;
@@ -297,24 +318,17 @@ export function pickActiveOrganisationMembership(memberships: OrganisationMember
     const preferredProductMemberships = memberships.filter(
       (membership) => membership.venue_id === preference.venue_id && productForOrganisationMembership(membership) === preference.product_context
     );
-    const preferred = (preferredProductMemberships.length > 0 ? preferredProductMemberships : memberships.filter((membership) => membership.venue_id === preference.venue_id))
-      .filter((membership) => membership.venue_id === preference.venue_id)
-      .sort((left, right) => organisationRolePriority(right.role) - organisationRolePriority(left.role))[0];
+    const preferred = sortOrganisationMemberships(
+      (preferredProductMemberships.length > 0 ? preferredProductMemberships : memberships.filter((membership) => membership.venue_id === preference.venue_id))
+        .filter((membership) => membership.venue_id === preference.venue_id)
+    )[0];
 
     if (preferred) {
       return preferred;
     }
   }
 
-  return [...memberships].sort((left, right) => {
-    const priorityDelta = organisationRolePriority(right.role) - organisationRolePriority(left.role);
-
-    if (priorityDelta !== 0) {
-      return priorityDelta;
-    }
-
-    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
-  })[0] ?? null;
+  return sortOrganisationMemberships(memberships)[0] ?? null;
 }
 
 export async function loadOrganisationInvitationsForVenue(supabase: ServerSupabaseClient, venueId: string) {

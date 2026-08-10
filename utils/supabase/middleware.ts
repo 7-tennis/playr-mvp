@@ -9,13 +9,13 @@ type CookieToSet = {
   options: CookieOptions;
 };
 
-export const createClient = (request: NextRequest) => {
+export const createClient = (request: NextRequest, requestHeaders = new Headers(request.headers)) => {
   const supabaseUrl = getSupabaseUrl();
   const supabaseKey = getSupabasePublishableKey();
 
   let supabaseResponse = NextResponse.next({
     request: {
-      headers: request.headers
+      headers: requestHeaders
     }
   });
 
@@ -35,7 +35,7 @@ export const createClient = (request: NextRequest) => {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         supabaseResponse = NextResponse.next({
           request: {
-            headers: request.headers
+            headers: requestHeaders
           }
         });
         cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options));
@@ -50,7 +50,9 @@ export const createClient = (request: NextRequest) => {
 };
 
 export async function updateSession(request: NextRequest) {
-  const { supabase, getResponse } = createClient(request);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-playr-request-path", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  const { supabase, getResponse } = createClient(request, requestHeaders);
 
   if (supabase) {
     await supabase.auth.getUser();

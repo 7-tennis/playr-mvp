@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/utils/supabase/server";
 
-export async function GET(request: Request) {
-  const supabase = await createServerSupabaseClient();
-  await supabase.auth.signOut();
-  return NextResponse.redirect(new URL("/", request.url));
+export function GET(request: Request) {
+  const destination = new URL("/login", request.url);
+  destination.searchParams.set("message", "Use a Sign out button to end your session safely.");
+  return NextResponse.redirect(destination, 303);
 }

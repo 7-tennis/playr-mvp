@@ -47,7 +47,7 @@ export function clubRScopeLabel(context: AuthenticatedClubRContext, venue: Pick<
 }
 
 export async function getClubRAccess(permission: ClubRPermission = "clubr") {
-  const context = await getPermissionContext();
+  const context = await getPermissionContext("clubr");
 
   if (context.kind === "no-config") {
     return {

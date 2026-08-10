@@ -79,7 +79,7 @@ export default async function CoachRConnectionDiagnosticsPage({ searchParams }: 
   if (content) return content;
   if (access.context.kind !== "authenticated") return null;
 
-  const canView = ["platform_admin", "head_coach", "club_admin"].includes(access.context.role)
+  const canView = ["platform_admin", "head_coach"].includes(access.context.role)
     || ["organisation_admin", "club_manager", "head_coach"].includes(access.context.activeOrganisationRole ?? "");
   const platformVenuesResult = access.context.role === "platform_admin"
     ? await access.context.supabase.from("venues").select("id,name").eq("status", "active").order("name", { ascending: true }).limit(200)

@@ -3,15 +3,12 @@ import { signInWithPassword } from "@/app/auth/actions";
 import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
+import { safeInternalPath } from "@/lib/auth-navigation";
 
 export const dynamic = "force-dynamic";
 
-function safeNextPath(value: string | undefined) {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "";
-}
-
 export default function LoginPage({ searchParams }: { searchParams?: { error?: string; message?: string; next?: string } }) {
-  const next = safeNextPath(searchParams?.next);
+  const next = safeInternalPath(searchParams?.next) ?? "";
 
   return (
     <PageShell eyebrow="Account" title="Log in to manage profiles and entries.">
