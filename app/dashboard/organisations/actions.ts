@@ -6,7 +6,7 @@ import { getPermissionContext } from "@/lib/permissions";
 import { productForOrganisationMembership } from "@/lib/organisations";
 import { loadOrganisationSetup, productSetupPath } from "@/lib/organisation-setup";
 import type { ProductContext } from "@/types/courtside";
-import type { AppAreaId } from "@/lib/app-areas";
+import { appAreaLandingPath, type AppAreaId } from "@/lib/app-areas";
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -87,10 +87,10 @@ export async function switchApplicationArea(formData: FormData) {
   const membershipId = text(formData, "membershipId");
 
   if (context.kind !== "authenticated") redirect("/login");
-  if (appArea === "playr") redirect("/dashboard");
+  if (appArea === "playr") redirect(appAreaLandingPath("playr"));
   if (appArea === "superuser") {
     if (context.role !== "platform_admin") redirect("/dashboard?app=restricted");
-    redirect("/admin/organisations");
+    redirect(appAreaLandingPath("superuser"));
   }
   if (!membershipId || !["clubr", "coachr"].includes(appArea)) redirect("/dashboard?app=invalid");
 
@@ -113,5 +113,5 @@ export async function switchApplicationArea(formData: FormData) {
   }
 
   revalidateOrganisationSurfaces();
-  redirect(appArea === "clubr" ? "/dashboard/clubr" : "/dashboard/coachr");
+  redirect(appAreaLandingPath(appArea));
 }

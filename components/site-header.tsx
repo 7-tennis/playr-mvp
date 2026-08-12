@@ -3,9 +3,10 @@ import { signOut } from "@/app/auth/actions";
 import { AppIdentity, AppSwitcher } from "@/components/app-switcher";
 import { PlayerBottomNav, PlayerDesktopNav } from "@/components/player-nav";
 import { SettingsIcon, SignOutIcon } from "@/components/playr-icons";
-import { appAreaDefinitions, type AppAreaDestination } from "@/lib/app-areas";
-import { canAccessCoachR, canAccessClubR, loadActiveRoleRow, normalizeStoredRole, type UserRole } from "@/lib/permissions";
-import { loadOrganisationMembershipsForUser, pickOrganisationMembershipForProduct } from "@/lib/organisations";
+import type { AppAreaDestination } from "@/lib/app-areas";
+import { appDestinationsForUser } from "@/lib/app-destinations";
+import { loadOrganisationMembershipsForUser } from "@/lib/organisations";
+import { loadActiveRoleRow, normalizeStoredRole, type UserRole } from "@/lib/permissions";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
@@ -34,17 +35,7 @@ async function getSessionState() {
         .is("read_at", null)
     ]);
     const storedRole = normalizeStoredRole(activeRole?.role ?? null);
-    const appDestinations: AppAreaDestination[] = [{ ...appAreaDefinitions.playr }];
-    const clubMembership = pickOrganisationMembershipForProduct(memberships, "clubr");
-    const coachMembership = pickOrganisationMembershipForProduct(memberships, "coachr");
-
-    if (clubMembership || (storedRole !== "platform_admin" && canAccessClubR(storedRole))) {
-      appDestinations.push({ ...appAreaDefinitions.clubr, membershipId: clubMembership?.id });
-    }
-    if (coachMembership || (storedRole !== "platform_admin" && canAccessCoachR(storedRole))) {
-      appDestinations.push({ ...appAreaDefinitions.coachr, membershipId: coachMembership?.id });
-    }
-    if (storedRole === "platform_admin") appDestinations.push({ ...appAreaDefinitions.superuser });
+    const appDestinations = appDestinationsForUser(storedRole, memberships);
 
     return { appDestinations, isLoggedIn: true, role: storedRole, unreadNotifications: unreadCount ?? 0 };
   } catch (error) {

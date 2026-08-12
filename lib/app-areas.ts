@@ -15,6 +15,10 @@ export const appAreaDefinitions: Record<AppAreaId, Omit<AppAreaDestination, "mem
   superuser: { href: "/admin/organisations", id: "superuser", label: "SupeR UseR", shortLabel: "SupeR" }
 };
 
+export function appAreaLandingPath(appArea: AppAreaId) {
+  return appAreaDefinitions[appArea].href;
+}
+
 export function appAreaForPath(pathname: string): AppAreaId {
   if (pathname.startsWith("/admin")) return "superuser";
   if (pathname.startsWith("/dashboard/setup/clubr")) return "clubr";

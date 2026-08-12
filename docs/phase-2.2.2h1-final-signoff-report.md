@@ -1,9 +1,10 @@
 # Phase 2.2.2H.1 — Pilot Evidence, Permission Validation and Final Sign-off
 
-Date: 10 August 2026
+Date: 11 August 2026
 Production: https://playr-mvp.vercel.app
 Supabase: `kpdxwtdzcmxqtklodlyd`
 Auth deployment commit: `4e5f7f7`
+Current production commit: `5ee533f`
 
 ## 1. Executive summary
 
@@ -15,10 +16,10 @@ The deployed confirmation callback and the existing player-only account now pass
 
 Sign-off remains blocked by:
 
-- the supplied coach login is multi-role (Head Coach plus a separate ClubR Manager membership), and a read-only search of all current hosted role sets found no genuine coach-only identity;
-- the Club Admin-to-CoachR scope defect is fixed and locally validated, but the club-admin-only denial still requires deployment and current-production verification;
+- a genuine coach-only identity was created through the normal invitation workflow and resolves to PlayR plus CoachR only, but its app-switcher transition exposed a final navigation blocker that now requires deployment and production verification;
+- the Club Admin-to-CoachR scope defect is deployed in `5ee533f`, but the club-admin-only denial still requires current-production retest evidence;
 - no alternative automated screenshot surface is available, so current-production images must be captured manually.
-- two newly reproduced production flow defects must be deployed and retested: More-page logout prefetch could revoke a valid session, and the resulting lost session prevented normal Coach invitation submission.
+- the More-page session and Coach invitation repairs are deployed in `5ee533f`; the successful coach-only invitation proves the existing-player invitation path, while the remaining session-preservation routes still require recorded production retest evidence.
 
 The authorization repair removes `club_admin` from the single CoachR policy truth, makes product-specific route resolution select only an explicit matching membership, and makes the switcher use that same product classification. Coach/head-coach access, ClubR administration, explicit coach-plus-club-admin multi-role access and platform-admin behavior are preserved.
 
@@ -106,7 +107,7 @@ They contain no user login, email or phone. Private notes identify them as Phase
 | Role | Result | Evidence |
 |---|---|---|
 | Player | Pass | Fresh confirmation, one complete adult profile, derived `player` role, no elevated rows, normal PlayR routes, and direct elevated-route denials all passed in production. |
-| Coach | Partial | The active Head Coach context loads CoachR and denies direct ClubR/SupeR routes, but the account also has a separate ClubR Manager membership. Local and hosted fixture searches found no coach-only identity. |
+| Coach | Partial | A genuine coach-only identity now exists through the normal invitation workflow and resolves to PlayR plus CoachR only. Direct CoachR access succeeds; the app-switcher navigation repair still requires deployment, production isolation retesting and current screenshots. |
 | Club administrator | Fix pending production evidence | The defect was reproduced in production. The corrected explicit-role policy denies CoachR locally while preserving ClubR; deployment and a production denial screenshot remain required. |
 | Platform administrator | Pass | Admin list, actions, audit and public lifecycle passed |
 | Multi-role | Pass | PlayR, CoachR and SupeR areas/independent navigation verified; ClubR direct access verified |
@@ -120,7 +121,7 @@ Database enforcement is not UI-only: anonymous admin RPCs return `401 / 42501`, 
 - Authenticated platform admin `/admin/rankings` → allowed.
 - Authenticated PlayR, CoachR, ClubR and SupeR direct routes → allowed for the current multi-role/admin account.
 - Distinct club-admin session: available and tested after an explicit sign-out from the Head Coach session.
-- Distinct coach-only session: not available; the supplied account is multi-role.
+- Distinct coach-only session: available through the normal invitation workflow; its resolved destinations are PlayR and CoachR only, and final isolation evidence is pending deployment of the app-switcher repair.
 
 For the confirmed player-only account, database authorization evidence shows no `admin_users` role, no organisation membership or active organisation preference, no organisation player link, no linked junior, and no primary-admin or head-coach venue assignment. The application permission resolver therefore derives `player`.
 
@@ -234,6 +235,27 @@ Minimal local repair:
 - the invitation RPC remains transactional, role-checked and RLS-backed; no schema or hosted database change was required.
 
 Local validation: 18/18 tests, lint, TypeScript and production build passed. `git diff --check` passed after the report update. A local HTTP redirect smoke test could not bind a loopback port in the workspace sandbox (`EPERM`); the production build and pure redirect regressions cover the same code path pending deployment.
+
+### 11B. Coach-only app-switcher navigation blocker
+
+The normal Coach invitation workflow successfully created a genuine coach-only identity. In production, its app switcher correctly exposed only PlayR and CoachR and direct `/dashboard/coachr` authorization succeeded for `Coach` at `Timeless Tennis`. Selecting CoachR from PlayR nevertheless appeared not to navigate.
+
+The issue was reproduced before code changes from the signed-in coach-only account. The switcher showed exactly `PlayR` and `CoachR`. Selecting CoachR immediately closed the dropdown while the browser still reported `/dashboard`; the header changed to CoachR and the main area showed an intermediate loading state before the server action eventually completed the redirect to `/dashboard/coachr` several seconds later.
+
+Root cause: membership-backed destinations were rendered as server-action forms, but their submit buttons synchronously called `setOpen(false)` during `onClick`. That unmounted the form while submission/navigation was still in progress and provided no pending feedback. This created a fragile submit/unmount race and made a slow successful action indistinguishable from a failed click. Desktop and mobile use the same component and therefore shared the defect.
+
+Minimal local repair:
+
+- keeps membership-backed forms mounted until their server action redirects;
+- removes the submit-button dropdown-close handler;
+- displays and disables an `Opening <destination>…` pending state;
+- closes the switcher from the pathname effect after successful navigation;
+- centralises switcher destination construction in a pure helper using the same product-membership and role predicates as direct authorization;
+- makes the server action obtain PlayR, CoachR, ClubR and SupeR landing paths from the shared app-area definitions.
+
+Direct-route authorization is unchanged. Local regression coverage now verifies player-only, coach-only, club-admin-only and explicit coach-plus-club-admin destination sets, exact landing paths, and that membership-backed submit forms remain mounted while pending. Deployment and current-production retesting remain required.
+
+Local validation: 23/23 tests, lint, TypeScript, production build and `git diff --check` passed.
 
 ## 12. Responsive QA
 
@@ -372,6 +394,15 @@ Current uncommitted session/invitation repair additionally changes:
 - `tests/auth-session-flow.test.ts`
 - `tests/coach-invitations.test.ts`
 
+Current uncommitted app-switcher repair additionally changes:
+
+- `components/app-switcher.tsx`
+- `components/site-header.tsx`
+- `app/dashboard/organisations/actions.ts`
+- `lib/app-areas.ts`
+- `lib/app-destinations.ts`
+- `tests/app-switcher.test.ts`
+
 The intended H.1 auth file set excludes `.DS_Store` and unrelated files.
 
 ## 16. Commands run
@@ -409,9 +440,9 @@ The repository now includes automated confirmation-flow and authorization-policy
 
 ### Blocking
 
-- Create and verify an actual coach-only account through the normal CoachR invitation flow; no existing hosted identity has only coaching roles.
 - Deploy the authorization repair and verify that the Club Admin account receives an authenticated CoachR denial while retaining ClubR.
-- Deploy and retest More → Settings/Manage Coaches without reauthentication, safe destination restoration after a genuine login, and the existing-user Coach invitation flow.
+- Retest More → Settings/Manage Coaches without reauthentication and safe destination restoration after a genuine login. Normal existing-user Coach invitation creation and acceptance passed; duplicate/pending-invitation recovery still needs production evidence.
+- Deploy the app-switcher repair and verify that the coach-only PlayR → CoachR selection reaches `/dashboard/coachr` with visible pending feedback and without a dead click or partial state.
 - Capture the current manual authorization screenshot checklist.
 
 ### Non-blocking
@@ -437,12 +468,13 @@ The repository now includes automated confirmation-flow and authorization-policy
 | Audit history | Pass |
 | Public rankings | Pass |
 | Player role | Pass |
-| Coach role | Partial — no genuine coach-only hosted identity exists |
+| Coach role | Partial — genuine coach-only identity exists; switcher repair and final isolation evidence pending |
 | Club-admin role | Fix locally validated; production denial pending |
 | Platform-admin role | Pass |
 | Direct-route protection | Partial — local repair passes; deployed Club Admin denial is pending |
 | Authenticated More/settings flow | Fix locally validated; production retest pending |
-| Existing-user Coach invitation | Fix locally validated; production creation/acceptance pending |
+| Existing-user Coach invitation | Partial — normal production creation/acceptance passed; duplicate/pending recovery evidence remains |
+| App-switcher navigation | Fix locally validated; production deployment/retest pending |
 | Mobile | Partial |
 | Desktop | Partial |
 | Screenshots | Fail |
@@ -453,4 +485,4 @@ The repository now includes automated confirmation-flow and authorization-policy
 
 **Do not proceed to Phase 2.3 until listed blockers are resolved.**
 
-The functional database and ranking blockers are resolved. The Club Admin-to-CoachR boundary and the More/invitation session defects are corrected locally and validated, but H.1 still requires deployment, production denial evidence, a successful existing-user Coach invitation, coach-only isolation testing and current screenshots. No additional product feature phase is justified.
+The functional database and ranking blockers are resolved. The Club Admin-to-CoachR boundary and More/invitation session defects are deployed, and the genuine coach-only identity was created successfully. H.1 still requires deployment and production verification of the app-switcher repair, final signed-in isolation testing and current screenshots. No additional product feature phase is justified.

@@ -3,9 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { switchApplicationArea } from "@/app/dashboard/organisations/actions";
 import { AppSwitcherIcon, ChevronDownIcon } from "@/components/playr-icons";
 import { appAreaDefinitions, appAreaForPath, type AppAreaDestination } from "@/lib/app-areas";
+
+function AppSwitcherSubmitButton({ className, label }: { className: string; label: string }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button aria-disabled={pending} className={className} disabled={pending} role="menuitem" type="submit">
+      <span>{pending ? `Opening ${label}…` : label}</span>
+    </button>
+  );
+}
 
 export function AppIdentity() {
   const pathname = usePathname();
@@ -85,10 +96,10 @@ export function AppSwitcher({ destinations }: { destinations: AppAreaDestination
               <form action={switchApplicationArea} key={destination.id}>
                 <input name="appArea" type="hidden" value={destination.id} />
                 <input name="membershipId" type="hidden" value={destination.membershipId} />
-                <button className={className} onClick={() => setOpen(false)} role="menuitem" type="submit">{content}</button>
+                <AppSwitcherSubmitButton className={className} label={destination.label} />
               </form>
             ) : (
-              <Link aria-current={selected ? "page" : undefined} className={className} href={destination.href} key={destination.id} onClick={() => setOpen(false)} role="menuitem">{content}</Link>
+              <Link aria-current={selected ? "page" : undefined} className={className} href={destination.href} key={destination.id} onClick={selected ? () => setOpen(false) : undefined} role="menuitem">{content}</Link>
             );
           })}
         </div>
