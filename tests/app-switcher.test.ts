@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { appDestinationsForUser } from "../lib/app-destinations.ts";
-import { appAreaLandingPath } from "../lib/app-areas.ts";
+import { appAreaLandingPath, authorisedAppAreaForPath } from "../lib/app-areas.ts";
 import type { OrganisationMembershipWithVenue } from "../lib/organisations.ts";
 import type { OrganisationRole, OrganisationType } from "../types/courtside.ts";
 
@@ -75,4 +75,29 @@ test("membership-backed switcher forms remain mounted while their server action 
   assert.match(source, /useFormStatus/);
   assert.match(source, /Opening \$\{label\}/);
   assert.doesNotMatch(source, /<button[^>]+onClick=\{\(\) => setOpen\(false\)\}[^>]+type="submit"/);
+});
+
+test("non-platform users never receive SupeR context from a direct admin URL", () => {
+  for (const role of ["player", "coach", "club_admin"] as const) {
+    const destinations = appDestinationsForUser(role, []);
+
+    assert.equal(authorisedAppAreaForPath("/admin/rankings", destinations), "playr");
+    assert.equal(authorisedAppAreaForPath("/admin/organisations", destinations), "playr");
+    assert.equal(destinations.some(({ id }) => id === "superuser"), false);
+  }
+});
+
+test("platform administrators retain SupeR context on admin routes", () => {
+  const destinations = appDestinationsForUser("platform_admin", []);
+
+  assert.equal(authorisedAppAreaForPath("/admin/rankings", destinations), "superuser");
+  assert.equal(authorisedAppAreaForPath("/admin/organisations", destinations), "superuser");
+  assert.equal(destinations.some(({ id }) => id === "superuser"), true);
+});
+
+test("admin denials describe platform administrator and SupeR authority", () => {
+  const source = readFileSync(new URL("../app/admin/layout.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /only platform administrators with SupeR UseR authority/i);
+  assert.doesNotMatch(source, /does not have ClubR admin permission/i);
 });

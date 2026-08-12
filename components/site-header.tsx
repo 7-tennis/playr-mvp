@@ -59,7 +59,7 @@ export async function SiteHeader() {
     <>
       <header className="playr-gradient-navigation sticky top-0 z-30 border-b border-white/10 text-white shadow-playr-card">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-4">
-          {isLoggedIn ? <AppIdentity /> : <Link className="flex shrink-0 items-center gap-2 rounded-playr-md font-black tracking-tight text-white focus-ring" href="/"><span className="playr-gradient-navigation-active grid h-9 w-9 place-items-center rounded-playr-md text-white shadow-playr-card">PR</span><span>PlayR</span></Link>}
+          {isLoggedIn ? <AppIdentity destinations={appDestinations} /> : <Link className="flex shrink-0 items-center gap-2 rounded-playr-md font-black tracking-tight text-white focus-ring" href="/"><span className="playr-gradient-navigation-active grid h-9 w-9 place-items-center rounded-playr-md text-white shadow-playr-card">PR</span><span>PlayR</span></Link>}
 
           {isLoggedIn ? (
             <PlayerDesktopNav messageCount={unreadNotifications} />

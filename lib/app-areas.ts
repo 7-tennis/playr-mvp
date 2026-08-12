@@ -27,3 +27,9 @@ export function appAreaForPath(pathname: string): AppAreaId {
   if (pathname.startsWith("/dashboard/coachr")) return "coachr";
   return "playr";
 }
+
+export function authorisedAppAreaForPath(pathname: string, destinations: AppAreaDestination[]): AppAreaId {
+  const inferredArea = appAreaForPath(pathname);
+
+  return destinations.some((destination) => destination.id === inferredArea) ? inferredArea : "playr";
+}

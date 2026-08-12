@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { switchApplicationArea } from "@/app/dashboard/organisations/actions";
 import { AppSwitcherIcon, ChevronDownIcon } from "@/components/playr-icons";
-import { appAreaDefinitions, appAreaForPath, type AppAreaDestination } from "@/lib/app-areas";
+import { appAreaDefinitions, authorisedAppAreaForPath, type AppAreaDestination } from "@/lib/app-areas";
 
 function AppSwitcherSubmitButton({ className, label }: { className: string; label: string }) {
   const { pending } = useFormStatus();
@@ -18,9 +18,9 @@ function AppSwitcherSubmitButton({ className, label }: { className: string; labe
   );
 }
 
-export function AppIdentity() {
+export function AppIdentity({ destinations }: { destinations: AppAreaDestination[] }) {
   const pathname = usePathname();
-  const area = appAreaDefinitions[appAreaForPath(pathname)];
+  const area = appAreaDefinitions[authorisedAppAreaForPath(pathname, destinations)];
 
   return (
     <Link className="flex min-w-0 shrink items-center gap-2 rounded-playr-md font-black tracking-tight text-white focus-ring" href={area.href}>
@@ -32,7 +32,7 @@ export function AppIdentity() {
 
 export function AppSwitcher({ destinations }: { destinations: AppAreaDestination[] }) {
   const pathname = usePathname();
-  const currentAreaId = appAreaForPath(pathname);
+  const currentAreaId = authorisedAppAreaForPath(pathname, destinations);
   const currentArea = appAreaDefinitions[currentAreaId];
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
