@@ -20,7 +20,7 @@ function productLanding(product: ProductContext) {
     case "coachr":
       return "/dashboard/coachr";
     case "teamr":
-      return "/dashboard";
+      return "/dashboard/teamr";
     default:
       return "/dashboard";
   }
@@ -33,6 +33,8 @@ function revalidateOrganisationSurfaces() {
   revalidatePath("/dashboard/coachr/coaches");
   revalidatePath("/dashboard/coachr/students");
   revalidatePath("/dashboard/coachr/schedule");
+  revalidatePath("/dashboard/teamr");
+  revalidatePath("/dashboard/teamr/players");
   revalidatePath("/dashboard/organisations/invitations");
 }
 
@@ -92,7 +94,7 @@ export async function switchApplicationArea(formData: FormData) {
     if (context.role !== "platform_admin") redirect("/dashboard?app=restricted");
     redirect(appAreaLandingPath("superuser"));
   }
-  if (!membershipId || !["clubr", "coachr"].includes(appArea)) redirect("/dashboard?app=invalid");
+  if (!membershipId || !["clubr", "coachr", "teamr"].includes(appArea)) redirect("/dashboard?app=invalid");
 
   const membership = context.organisationMemberships.find((item) => item.id === membershipId);
   if (!membership || productForOrganisationMembership(membership) !== appArea) redirect("/dashboard?app=restricted");

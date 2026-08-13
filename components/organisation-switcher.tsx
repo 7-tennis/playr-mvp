@@ -1,6 +1,6 @@
 import { ClubIcon } from "@/components/playr-icons";
 import { switchActiveOrganisation } from "@/app/dashboard/organisations/actions";
-import { organisationRoleLabel, productLabelForOrganisationRole, type OrganisationMembershipWithVenue } from "@/lib/organisations";
+import { organisationRoleLabel, productLabelForOrganisationMembership, type OrganisationMembershipWithVenue } from "@/lib/organisations";
 
 export function OrganisationSwitcher({
   activeMembershipId,
@@ -26,7 +26,7 @@ export function OrganisationSwitcher({
         >
           {memberships.map((membership) => (
             <option key={membership.id} value={membership.id}>
-              {membership.venue?.name ?? "Organisation"} - {organisationRoleLabel(membership.role)} - {productLabelForOrganisationRole(membership.role)}
+              {membership.venue?.name ?? "Organisation"} - {organisationRoleLabel(membership.role)} - {productLabelForOrganisationMembership(membership)}
             </option>
           ))}
         </select>

@@ -8,7 +8,8 @@ import type {
   ProductContext,
   Profile,
   UserRole,
-  Venue
+  Venue,
+  OrganisationType
 } from "@/types/courtside";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
@@ -39,6 +40,8 @@ export const organisationRoles: OrganisationRole[] = [
 export const coachingOrganisationRoles: OrganisationRole[] = ["head_coach", "coach", "assistant_coach"];
 export const coachManagerOrganisationRoles: OrganisationRole[] = ["organisation_admin", "club_manager", "head_coach"];
 export const clubROrganisationRoles: OrganisationRole[] = ["organisation_admin", "club_manager", "committee", "reception"];
+export const teamROrganisationRoles: OrganisationRole[] = ["organisation_admin", "sports_coordinator", "team_manager"];
+export const teamROrganisationTypes: OrganisationType[] = ["school", "district", "school_district"];
 export const organisationMembershipStatuses: OrganisationMembershipStatus[] = ["pending", "active", "declined", "suspended", "removed"];
 
 export function organisationRoleLabel(role: OrganisationRole | string | null | undefined) {
@@ -146,7 +149,11 @@ export function productForOrganisationRole(role: OrganisationRole | string | nul
 }
 
 export function productForOrganisationMembership(membership: Pick<OrganisationMembershipWithVenue, "role" | "venue">): ProductContext {
-  if (membership.role === "sports_coordinator" || membership.role === "team_manager") {
+  if (
+    membership.venue?.organisation_type
+    && teamROrganisationTypes.includes(membership.venue.organisation_type)
+    && teamROrganisationRoles.includes(membership.role)
+  ) {
     return "teamr";
   }
 
@@ -173,6 +180,19 @@ export function productLabelForOrganisationRole(role: OrganisationRole | string 
       return "ClubR";
     case "head_coach":
     case "coach":
+      return "CoachR";
+    default:
+      return "MyPlayR";
+  }
+}
+
+export function productLabelForOrganisationMembership(membership: Pick<OrganisationMembershipWithVenue, "role" | "venue">) {
+  switch (productForOrganisationMembership(membership)) {
+    case "teamr":
+      return "TeamR";
+    case "clubr":
+      return "ClubR";
+    case "coachr":
       return "CoachR";
     default:
       return "MyPlayR";
@@ -289,7 +309,7 @@ function sortOrganisationMemberships(memberships: OrganisationMembershipWithVenu
 
 export function pickOrganisationMembershipForProduct(
   memberships: OrganisationMembershipWithVenue[],
-  product: Extract<ProductContext, "coachr" | "clubr">,
+  product: Extract<ProductContext, "coachr" | "clubr" | "teamr">,
   preference: ActiveOrganisationPreference | null = null
 ) {
   const productMemberships = memberships.filter((membership) => productForOrganisationMembership(membership) === product);

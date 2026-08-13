@@ -6,6 +6,7 @@ export function appDestinationsForUser(storedRole: UserRole, memberships: Organi
   const destinations: AppAreaDestination[] = [{ ...appAreaDefinitions.playr }];
   const clubMembership = pickOrganisationMembershipForProduct(memberships, "clubr");
   const coachMembership = pickOrganisationMembershipForProduct(memberships, "coachr");
+  const teamMembership = pickOrganisationMembershipForProduct(memberships, "teamr");
 
   if (clubMembership || (storedRole !== "platform_admin" && canAccessClubR(storedRole))) {
     destinations.push({ ...appAreaDefinitions.clubr, membershipId: clubMembership?.id });
@@ -13,6 +14,10 @@ export function appDestinationsForUser(storedRole: UserRole, memberships: Organi
 
   if (coachMembership || (storedRole !== "platform_admin" && canAccessCoachR(storedRole))) {
     destinations.push({ ...appAreaDefinitions.coachr, membershipId: coachMembership?.id });
+  }
+
+  if (teamMembership) {
+    destinations.push({ ...appAreaDefinitions.teamr, membershipId: teamMembership.id });
   }
 
   if (storedRole === "platform_admin") {

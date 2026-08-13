@@ -119,3 +119,17 @@ test("academy managers do not inherit CoachR without a coaching role", () => {
   assert.equal(pickOrganisationMembershipForProduct([academyManager], "coachr"), null);
   assert.equal(pickOrganisationMembershipForProduct([academyManager], "clubr")?.id, "academy-manager");
 });
+
+test("classifies TeamR only from eligible organisation types and explicit roles", () => {
+  const schoolAdmin = membership({ createdAt: "2026-08-10T10:00:00Z", id: "school-admin", organisationType: "school", role: "organisation_admin", venueId: "school" });
+  const districtManager = membership({ createdAt: "2026-08-10T10:00:00Z", id: "district-manager", organisationType: "district", role: "team_manager", venueId: "district" });
+  const academyManager = membership({ createdAt: "2026-08-10T10:00:00Z", id: "academy-team", organisationType: "academy", role: "team_manager", venueId: "academy" });
+  const clubCoordinator = membership({ createdAt: "2026-08-10T10:00:00Z", id: "club-team", organisationType: "club", role: "sports_coordinator", venueId: "club" });
+
+  assert.equal(productForOrganisationMembership(schoolAdmin), "teamr");
+  assert.equal(productForOrganisationMembership(districtManager), "teamr");
+  assert.equal(productForOrganisationMembership(academyManager), "playr");
+  assert.equal(productForOrganisationMembership(clubCoordinator), "playr");
+  assert.equal(pickOrganisationMembershipForProduct([academyManager, clubCoordinator], "teamr"), null);
+  assert.equal(pickOrganisationMembershipForProduct([schoolAdmin, districtManager], "teamr")?.id, "school-admin");
+});

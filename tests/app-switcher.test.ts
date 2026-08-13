@@ -56,6 +56,20 @@ test("club-admin-only switcher exposes PlayR and ClubR without CoachR", () => {
   assert.equal(appAreaLandingPath("clubr"), "/dashboard/clubr");
 });
 
+test("eligible school and district staff receive TeamR while clubs and academies do not", () => {
+  const school = membership("school", "sports_coordinator", "school");
+  const district = membership("district", "organisation_admin", "district");
+  const academy = membership("academy", "team_manager", "academy");
+  const club = membership("club-team", "team_manager", "club");
+
+  assert.deepEqual(idsAndPaths(appDestinationsForUser("player", [school, district, academy, club])), [
+    ["playr", "/dashboard"],
+    ["teamr", "/dashboard/teamr"]
+  ]);
+  assert.equal(appAreaLandingPath("teamr"), "/dashboard/teamr");
+  assert.equal(authorisedAppAreaForPath("/dashboard/teamr/players", appDestinationsForUser("player", [school])), "teamr");
+});
+
 test("explicit coach plus club-admin memberships expose and route to both products", () => {
   const destinations = appDestinationsForUser("club_admin", [
     membership("club", "club_manager", "club"),

@@ -28,6 +28,10 @@ export async function getPostLoginPathForUser(supabase: ServerSupabaseClient, us
   if (activeMembership) {
     const product = productForOrganisationMembership(activeMembership);
 
+    if (product === "teamr") {
+      return "/dashboard/teamr";
+    }
+
     if ((product === "clubr" && role === "club_admin") || product === "coachr") {
       const setup = await loadOrganisationSetup(supabase, activeMembership.venue_id, product);
 

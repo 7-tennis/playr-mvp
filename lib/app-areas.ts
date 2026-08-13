@@ -1,4 +1,4 @@
-export type AppAreaId = "playr" | "clubr" | "coachr" | "superuser";
+export type AppAreaId = "playr" | "clubr" | "coachr" | "teamr" | "superuser";
 
 export type AppAreaDestination = {
   href: string;
@@ -12,6 +12,7 @@ export const appAreaDefinitions: Record<AppAreaId, Omit<AppAreaDestination, "mem
   playr: { href: "/dashboard", id: "playr", label: "PlayR", shortLabel: "PlayR" },
   clubr: { href: "/dashboard/clubr", id: "clubr", label: "ClubR Admin", shortLabel: "ClubR" },
   coachr: { href: "/dashboard/coachr", id: "coachr", label: "CoachR", shortLabel: "CoachR" },
+  teamr: { href: "/dashboard/teamr", id: "teamr", label: "TeamR", shortLabel: "TeamR" },
   superuser: { href: "/admin/organisations", id: "superuser", label: "SupeR UseR", shortLabel: "SupeR" }
 };
 
@@ -25,6 +26,7 @@ export function appAreaForPath(pathname: string): AppAreaId {
   if (pathname.startsWith("/dashboard/setup/coachr")) return "coachr";
   if (pathname.startsWith("/dashboard/clubr")) return "clubr";
   if (pathname.startsWith("/dashboard/coachr")) return "coachr";
+  if (pathname.startsWith("/dashboard/teamr")) return "teamr";
   return "playr";
 }
 

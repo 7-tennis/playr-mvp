@@ -6,6 +6,7 @@ import { canAccessCoachR, canAccessClubR } from "../lib/authorization-policy.ts"
 
 test("preserves a safe requested destination through login", () => {
   assert.equal(loginPathFor("/dashboard/coachr/coaches?view=pending"), "/login?next=%2Fdashboard%2Fcoachr%2Fcoaches%3Fview%3Dpending");
+  assert.equal(loginPathFor("/dashboard/teamr/players?stage=red_ball"), "/login?next=%2Fdashboard%2Fteamr%2Fplayers%3Fstage%3Dred_ball");
   assert.equal(
     loginPathFor("/dashboard/clubr/settings", "Session expired"),
     "/login?error=Session+expired&next=%2Fdashboard%2Fclubr%2Fsettings"

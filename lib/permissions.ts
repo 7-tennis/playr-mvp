@@ -283,7 +283,7 @@ export async function loadActiveRoleRow(supabase: Awaited<ReturnType<typeof crea
   return roleRow;
 }
 
-export async function getPermissionContext(product?: "coachr" | "clubr"): Promise<PermissionContext> {
+export async function getPermissionContext(product?: "coachr" | "clubr" | "teamr"): Promise<PermissionContext> {
   if (!hasSupabaseConfig()) {
     return { kind: "no-config" };
   }

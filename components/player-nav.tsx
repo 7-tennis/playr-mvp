@@ -31,6 +31,7 @@ function NavigationCount({ count }: { count: number }) {
 function isOutsidePlayR(pathname: string) {
   return pathname.startsWith("/dashboard/coachr")
     || pathname.startsWith("/dashboard/clubr")
+    || pathname.startsWith("/dashboard/teamr")
     || pathname.startsWith("/dashboard/setup/coachr")
     || pathname.startsWith("/dashboard/setup/clubr")
     || pathname.startsWith("/admin");
