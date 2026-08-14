@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { EntriesIcon, EventIcon, MatchIcon, ParticipationIcon, StageIcon } from "@/components/playr-icons";
-import { loadTeamRPlayers } from "@/lib/teamr";
+import { EntriesIcon, MatchIcon, ParticipationIcon, StageIcon } from "@/components/playr-icons";
+import { loadTeamRPlayerRequests, loadTeamRPlayers, loadTeamRTeams } from "@/lib/teamr";
 import { TeamRPageFrame, TeamRStatCard, getProtectedTeamRPage } from "./teamr-shared";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function TeamRPage() {
   if (content) return content;
   if (!context) return null;
 
-  const playersResult = await loadTeamRPlayers(context);
+  const [playersResult, requestsResult, teamsResult] = await Promise.all([loadTeamRPlayers(context), loadTeamRPlayerRequests(context), loadTeamRTeams(context)]);
   const players = playersResult.data;
   const stageCounts = {
     red_ball: players.filter((player) => player.juniorStage === "red_ball").length,
@@ -29,8 +29,8 @@ export default async function TeamRPage() {
 
       <section className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <TeamRStatCard helper="active links" icon={<EntriesIcon size={19} />} label="Players" value={playersResult.error ? "--" : players.length} />
-        <TeamRStatCard helper="not configured yet" icon={<MatchIcon size={19} />} label="Teams" value="—" />
-        <TeamRStatCard helper="foundation ready" icon={<EventIcon size={19} />} label="Competitions" value="—" />
+        <TeamRStatCard helper="active teams" icon={<MatchIcon size={19} />} label="Teams" value={teamsResult.error ? "--" : teamsResult.data.length} />
+        <TeamRStatCard helper="awaiting review" icon={<EntriesIcon size={19} />} label="Requests" value={requestsResult.error ? "--" : requestsResult.data.length} />
         <TeamRStatCard helper="canonical points" icon={<ParticipationIcon size={19} />} label="Participation" value={playersResult.error ? "--" : participation} />
       </section>
 
@@ -55,11 +55,11 @@ export default async function TeamRPage() {
         </article>
 
         <article className="surface-card p-4 sm:p-5">
-          <p className="section-kicker">Foundation</p>
-          <h2 className="section-title mt-1">Ready for the next phase</h2>
+          <p className="section-kicker">School operations</p>
+          <h2 className="section-title mt-1">Quick actions</h2>
           <div className="mt-4 grid gap-2 text-sm leading-6 text-slate-600">
-            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3">Team and roster workflows will build on this organisation context.</p>
-            <p className="rounded-lg border border-slate-200 bg-slate-50 p-3">Competition operations will be added without creating a second player or ratings source.</p>
+            <Link className="rounded-lg border border-slate-200 bg-slate-50 p-3 font-black text-court-navy" href="/dashboard/teamr/players?view=pending">Review {requestsResult.data.length} pending player request{requestsResult.data.length === 1 ? "" : "s"}</Link>
+            <Link className="rounded-lg border border-slate-200 bg-slate-50 p-3 font-black text-court-navy" href="/dashboard/teamr/teams">Create and manage team rosters</Link>
           </div>
         </article>
       </section>

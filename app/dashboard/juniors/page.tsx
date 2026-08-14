@@ -205,6 +205,7 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
                   <SubmitButton className="rounded bg-court-blue px-4 py-3 font-bold text-white md:col-span-2" pendingText="Saving junior...">
                     Save junior
                   </SubmitButton>
+                  <Link className="btn-secondary justify-center md:col-span-2" href={`/dashboard/juniors/${junior.id}/schools`}>School Connections</Link>
                 </form>
               ))}
             </div>
