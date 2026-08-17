@@ -3,6 +3,7 @@ import { ArrowRightIcon, ChevronDownIcon, ClubIcon, DistrictIcon, SchoolIcon, St
 import { EmptyState, IconContainer, PlayRBadge, PlayRCard, PlayRLinkButton, type PlayRBadgeVariant } from "@/components/playr-ui";
 import { formatDate, formatLabel } from "@/lib/courtside-format";
 import { organisationVisuals } from "@/lib/design-tokens";
+import { organisationCapabilities } from "@/lib/organisation-capabilities";
 import {
   organisationSummaryLabel,
   organisationTypeLabel,
@@ -72,7 +73,7 @@ export function OrganisationCard({
   const styles = organisationVisuals[type];
   const location = [venue.suburb, venue.town, venue.city].filter(Boolean).join(", ") || venue.address;
   const membership = meta?.membership;
-  const canOpenClub = type === "club" || type === "club_academy";
+  const canOpenClub = organisationCapabilities(type).clubDiscovery;
 
   return (
     <PlayRCard aria-label={`${organisationTypeLabel(type)}: ${venue.name}`} as="article" className="flex min-w-0 flex-col overflow-hidden" variant="default">

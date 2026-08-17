@@ -34,6 +34,26 @@ export type PlayerOrganisationResult<T> = {
   error: boolean;
 };
 
+export type PlayerSchoolContext = {
+  districtId: string | null;
+  districtName: string | null;
+  schoolId: string;
+  schoolLinkId: string;
+  schoolLinkStatus: OrganisationLinkStatus;
+  schoolName: string;
+  schoolOrganisationType: OrganisationType;
+};
+
+type SchoolContextRow = {
+  district_id: string | null;
+  district_name: string | null;
+  school_id: string;
+  school_link_id: string;
+  school_link_status: OrganisationLinkStatus;
+  school_name: string;
+  school_organisation_type: OrganisationType;
+};
+
 type LinkRow = {
   connection_context: Record<string, unknown> | null;
   id: string;
@@ -176,6 +196,30 @@ export async function loadPlayerClubMemberships(
         status: row.subscription.status
       } : null,
       venueId: row.venue_id
+    })),
+    error: false
+  };
+}
+
+export async function loadPlayerSchoolContexts(
+  supabase: ServerSupabaseClient,
+  profileId: string
+): Promise<PlayerOrganisationResult<PlayerSchoolContext[]>> {
+  const { data, error } = await supabase.rpc("teamr_school_context", { p_player_profile_id: profileId });
+  if (error) {
+    console.error("[player-organisations] school_context_load_failed", { code: error.code, profileId });
+    return { data: [], error: true };
+  }
+
+  return {
+    data: ((data ?? []) as SchoolContextRow[]).map((row) => ({
+      districtId: row.district_id,
+      districtName: row.district_name,
+      schoolId: row.school_id,
+      schoolLinkId: row.school_link_id,
+      schoolLinkStatus: row.school_link_status,
+      schoolName: row.school_name,
+      schoolOrganisationType: row.school_organisation_type
     })),
     error: false
   };

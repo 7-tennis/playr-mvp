@@ -56,7 +56,7 @@ export async function createJuniorProfile(formData: FormData) {
     redirect("/dashboard/juniors?error=missing_name");
   }
 
-  const { error } = await supabase.from("profiles").insert({
+  const { data: junior, error } = await supabase.from("profiles").insert({
     user_id: null,
     first_name: firstName,
     last_name: lastName,
@@ -70,7 +70,7 @@ export async function createJuniorProfile(formData: FormData) {
     player_level: allowed<PlayerLevel>(text(formData, "player_level"), playerLevels, "unknown"),
     primary_sport: allowed<Sport>(text(formData, "primary_sport"), sports, "tennis"),
     notes: nullableText(formData, "notes")
-  });
+  }).select("id").single();
 
   if (error) {
     redirect("/dashboard/juniors?error=save_failed");
@@ -78,7 +78,7 @@ export async function createJuniorProfile(formData: FormData) {
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/juniors");
-  redirect("/dashboard/juniors?saved=created");
+  redirect(`/dashboard/juniors/${junior.id}/schools?onboarding=1`);
 }
 
 export async function updateJuniorProfile(formData: FormData) {

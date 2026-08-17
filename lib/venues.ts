@@ -297,7 +297,7 @@ export function selectManagedVenueProfile(profiles: ManagedVenueProfile[], reque
 }
 
 export async function loadMyVenues(supabase: ServerSupabase, profileId: string): Promise<VenueDataResult<VenueCardData[]>> {
-  const { data, error } = await supabase.rpc("playr_profile_venues", { p_profile_id: profileId });
+  const { data, error } = await supabase.rpc("playr_profile_club_venues", { p_profile_id: profileId });
   return error ? failure([], "my_venues_load_failed", error) : success(((data ?? []) as VenueRpcRow[]).map(mapVenueRow));
 }
 

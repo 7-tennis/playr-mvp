@@ -5,6 +5,7 @@ import { PageShell } from "@/components/page-shell";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { loadPlayerSchoolContexts } from "@/lib/player-organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { JuniorStage, PlayerLevel, Profile, Sport } from "@/types/courtside";
@@ -133,6 +134,8 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
     .order("first_name", { ascending: true });
 
   const juniors = (data ?? []) as Profile[];
+  const schoolContextResults = await Promise.all(juniors.map((junior) => loadPlayerSchoolContexts(supabase, junior.id)));
+  const schoolContextByJunior = new Map(juniors.map((junior, index) => [junior.id, schoolContextResults[index]?.data[0] ?? null]));
 
   return (
     <PageShell eyebrow="Junior Players" subtitle="Manage linked junior players and PlayR progress." title="Junior Players">
@@ -178,6 +181,10 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
                     <p className="text-sm text-slate-600">
                       {formatLabel(junior.member_status)} / {formatLabel(junior.primary_sport)} / {junior.junior_stage ? formatLabel(junior.junior_stage) : "Stage not set"}
                     </p>
+                    {(() => {
+                      const school = schoolContextByJunior.get(junior.id);
+                      return school ? <div className="mt-3 rounded-lg border border-court-teal/25 bg-white p-3"><p className="text-xs font-black uppercase tracking-wide text-court-teal">School connection</p><p className="mt-1 font-black text-court-navy">{school.schoolName}</p><p className="mt-1 text-xs font-semibold text-slate-600">{school.schoolLinkStatus === "active" ? "Approved" : school.schoolLinkStatus === "pending" ? "Approval pending" : formatLabel(school.schoolLinkStatus)}{school.districtName ? ` · ${school.districtName}` : ""}</p></div> : <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-white p-3 text-sm font-semibold text-slate-600">No school connected yet.</div>;
+                    })()}
                     <div className="mt-3 grid gap-2 rounded bg-court-mist p-3 sm:grid-cols-3">
                       <div>
                         <p className="text-xl font-black text-court-navy">{formatJuniorRating(junior.junior_stage, junior.junior_rating)}</p>

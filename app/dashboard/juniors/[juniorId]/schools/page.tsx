@@ -19,6 +19,8 @@ type SchoolRow = {
   suburb: string | null;
   town: string | null;
   city: string | null;
+  district_id: string | null;
+  district_name: string | null;
 };
 
 type LinkRow = { id: string; status: OrganisationLinkStatus; venue_id: string };
@@ -42,7 +44,7 @@ export default async function JuniorSchoolsPage({
   searchParams
 }: {
   params: { juniorId: string };
-  searchParams?: { error?: string; message?: string; q?: string };
+  searchParams?: { error?: string; message?: string; onboarding?: string; q?: string };
 }) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -72,7 +74,7 @@ export default async function JuniorSchoolsPage({
       <StatusAlert className="mb-4" message={messageText(searchParams?.message)} tone="success" />
       <StatusAlert className="mb-4" message={errorText(searchParams?.error)} tone="error" />
       <section className="mb-5 rounded-lg border border-court-teal/30 bg-court-mist p-4 text-sm leading-6 text-court-navy">
-        <p className="font-black">One player, one PlayR profile</p>
+        <p className="font-black">{searchParams?.onboarding ? `${junior.first_name} is ready — add a school now or skip for later` : "One player, one PlayR profile"}</p>
         <p className="mt-1">Joining creates a pending relationship to the selected school. It does not create another player, rating, or participation record.</p>
       </section>
 
@@ -91,6 +93,7 @@ export default async function JuniorSchoolsPage({
             <article className="surface-card flex flex-col p-4" key={school.id}>
               <div className="flex items-start gap-3"><span className="grid h-10 w-10 place-items-center rounded bg-court-mist text-court-teal"><SchoolIcon size={20} /></span><div><p className="font-black text-court-navy">{school.name}</p><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{school.organisation_type === "school_district" ? "School & District" : "School"}</p></div></div>
               {location ? <p className="mt-3 text-sm text-slate-600">{location}</p> : null}
+              {school.district_name ? <p className="mt-2 text-sm font-bold text-slate-700">District: {school.district_name}</p> : null}
               <div className="mt-auto pt-4">
                 {link ? <span className={`ui-chip ${link.status === "active" ? "ui-chip-success" : "ui-chip-muted"}`}>{link.status === "active" ? "Connected" : link.status === "pending" ? "Approval pending" : formatLabel(link.status)}</span> : (
                   <form action={requestJuniorSchoolConnection}>
@@ -104,7 +107,7 @@ export default async function JuniorSchoolsPage({
           );
         })}
       </section>
-      <Link className="btn-secondary mt-5" href="/dashboard/juniors">Back to Juniors</Link>
+      <Link className="btn-secondary mt-5" href="/dashboard/juniors">{searchParams?.onboarding ? "Not now — finish Junior setup" : "Back to Juniors"}</Link>
     </PageShell>
   );
 }

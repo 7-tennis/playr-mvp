@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAdminContext } from "@/lib/admin-auth";
+import { defaultDiscoveryVisibility, organisationCapabilities } from "@/lib/organisation-capabilities";
 import type { AdminRole, OrganisationRole, Venue } from "@/types/courtside";
 
 const assignableRoles: AdminRole[] = ["platform_admin", "club_admin", "head_coach", "coach"];
@@ -105,6 +106,14 @@ export async function delegateOrganisation(formData: FormData) {
     redirect(`/admin/organisations?error=${rpcErrorCode(error, "assign_failed")}`);
   }
 
+  if (!venueId && organisationCapabilities(organisationType).schoolDiscovery) {
+    const { error: visibilityError } = await supabase
+      .from("venues")
+      .update({ discovery_visibility: defaultDiscoveryVisibility(organisationType) })
+      .eq("id", delegatedVenueId);
+    if (visibilityError) console.error("School discovery default failed", { code: visibilityError.code, venueId: delegatedVenueId });
+  }
+
   revalidateAccessSurfaces();
   revalidatePath("/dashboard/setup/clubr");
   revalidatePath("/dashboard/setup/coachr");
@@ -128,6 +137,7 @@ export async function createOrganisation(formData: FormData) {
     description: text(formData, "description") || null,
     name,
     organisation_type: organisationType,
+    discovery_visibility: defaultDiscoveryVisibility(organisationType),
     slug,
     status: "active"
   });
@@ -326,4 +336,53 @@ export async function updateOrganisationType(formData: FormData) {
 
   revalidatePath("/admin/organisations");
   redirect("/admin/organisations?message=organisation_updated");
+}
+
+export async function updateSchoolDiscovery(formData: FormData) {
+  const { supabase } = await requirePlatformAdmin();
+  const venueId = text(formData, "venueId");
+  const visibility = allowedValue<"public" | "hidden">(text(formData, "visibility"), ["public", "hidden"], "hidden");
+  if (!venueId) redirect("/admin/organisations?error=invalid_venue");
+
+  const { data: venue } = await supabase.from("venues").select("organisation_type").eq("id", venueId).maybeSingle();
+  if (!venue || !organisationCapabilities(venue.organisation_type as Venue["organisation_type"]).schoolDiscovery) {
+    redirect("/admin/organisations?error=invalid_venue");
+  }
+
+  const { error } = await supabase.from("venues").update({ discovery_visibility: visibility }).eq("id", venueId);
+  if (error) redirect("/admin/organisations?error=organisation_update_failed");
+  revalidatePath("/admin/organisations");
+  redirect(`/admin/organisations?message=school_${visibility}`);
+}
+
+export async function updateSchoolDistrict(formData: FormData) {
+  const { supabase } = await requirePlatformAdmin();
+  const schoolId = text(formData, "schoolId");
+  const districtId = text(formData, "districtId");
+  if (!schoolId) redirect("/admin/organisations?error=invalid_venue");
+
+  const ids = districtId ? [schoolId, districtId] : [schoolId];
+  const { data: venues } = await supabase.from("venues").select("id,organisation_type").in("id", ids);
+  const school = venues?.find((venue) => venue.id === schoolId);
+  const district = venues?.find((venue) => venue.id === districtId);
+  if (!school || !organisationCapabilities(school.organisation_type as Venue["organisation_type"]).schoolDiscovery
+    || (districtId && (!district || !organisationCapabilities(district.organisation_type as Venue["organisation_type"]).districtContext))) {
+    redirect("/admin/organisations?error=invalid_relationship");
+  }
+
+  const { error } = districtId
+    ? await supabase.from("organisation_relationships").upsert({
+        child_venue_id: schoolId,
+        parent_venue_id: districtId,
+        relationship_type: "belongs_to",
+        status: "active"
+      }, { onConflict: "child_venue_id,relationship_type" })
+    : await supabase.from("organisation_relationships")
+        .update({ status: "inactive" })
+        .eq("child_venue_id", schoolId)
+        .eq("relationship_type", "belongs_to");
+  if (error) redirect("/admin/organisations?error=relationship_update_failed");
+  revalidatePath("/admin/organisations");
+  revalidatePath("/dashboard/juniors");
+  redirect("/admin/organisations?message=district_updated");
 }

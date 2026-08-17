@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { delegateOrganisation } from "@/app/admin/organisations/actions";
+import { delegateOrganisation, updateSchoolDiscovery, updateSchoolDistrict } from "@/app/admin/organisations/actions";
 import { AdminNav } from "@/components/admin-nav";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { PageShell } from "@/components/page-shell";
@@ -8,6 +8,7 @@ import { StatusAlert } from "@/components/status-alert";
 import { getAdminContext } from "@/lib/admin-auth";
 import { formatLabel } from "@/lib/courtside-format";
 import { organisationRoleLabel } from "@/lib/organisations";
+import { organisationCapabilities } from "@/lib/organisation-capabilities";
 import { productSetupLabel } from "@/lib/organisation-setup";
 import type { OrganisationMembership, OrganisationProductSetup, Profile, Venue } from "@/types/courtside";
 
@@ -27,9 +28,11 @@ function name(profile: AdultProfile | LeaderMembership["profile"] | null | undef
 }
 
 function messageText(message?: string) {
-  return message === "onboarding_assigned"
-    ? "Access assigned. The organisation leader can now complete setup without SupeR UseR involvement."
-    : null;
+  if (message === "onboarding_assigned") return "Access assigned. The organisation leader can now complete setup without SupeR UseR involvement.";
+  if (message === "school_public") return "School discovery is public. Parents can now find it without seeing private operational data.";
+  if (message === "school_hidden") return "School discovery is hidden.";
+  if (message === "district_updated") return "School district context updated.";
+  return null;
 }
 
 function errorText(error?: string) {
@@ -40,6 +43,8 @@ function errorText(error?: string) {
     case "invalid_venue": return "Choose a valid organisation.";
     case "missing_fields": return "Choose a profile and either select or name an organisation.";
     case "assign_failed": return "The organisation handoff could not be completed.";
+    case "invalid_relationship": return "Choose a school and an eligible district organisation.";
+    case "relationship_update_failed": return "The school district relationship could not be saved.";
     default: return error ? "That change could not be saved." : null;
   }
 }
@@ -60,12 +65,13 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
     );
   }
 
-  const [venuesResult, profilesResult, membershipsResult, setupsResult, invitationsResult] = await Promise.all([
+  const [venuesResult, profilesResult, membershipsResult, setupsResult, invitationsResult, relationshipsResult] = await Promise.all([
     supabase.from("venues").select("*").order("name"),
     supabase.from("profiles").select("id,first_name,last_name,email,is_junior,user_id").eq("is_junior", false).not("user_id", "is", null).order("first_name").limit(300),
     supabase.from("organisation_memberships").select("id,venue_id,role,status,profile:profile_id(id,first_name,last_name,email)").eq("status", "active").in("role", ["organisation_admin", "club_manager", "head_coach", "sports_coordinator"]).order("created_at"),
     supabase.from("organisation_product_setups").select("*").order("updated_at", { ascending: false }),
-    supabase.from("organisation_invitations").select("id", { count: "exact", head: true }).eq("status", "pending")
+    supabase.from("organisation_invitations").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase.from("organisation_relationships").select("child_venue_id,parent_venue_id,status,relationship_type").eq("relationship_type", "belongs_to")
   ]);
   const venues = (venuesResult.data ?? []) as Venue[];
   const allProfiles = (profilesResult.data ?? []) as AdultProfile[];
@@ -76,6 +82,8 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
   const memberships = (membershipsResult.data ?? []) as unknown as LeaderMembership[];
   const setups = (setupsResult.data ?? []) as OrganisationProductSetup[];
   const completedCount = setups.filter((setup) => setup.status === "complete").length;
+  const districts = venues.filter((venue) => organisationCapabilities(venue.organisation_type).districtContext);
+  const relationships = (relationshipsResult.data ?? []) as Array<{ child_venue_id: string; parent_venue_id: string; status: string; relationship_type: string }>;
 
   return (
     <PageShell eyebrow="SupeR UseR" subtitle="Create or select an organisation, assign its first leader, then let that leader configure how it operates." title="Organisation Handoffs">
@@ -113,6 +121,8 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
         {venues.map((venue) => {
           const leaders = memberships.filter((membership) => membership.venue_id === venue.id);
           const setup = setups.find((item) => item.venue_id === venue.id);
+          const capabilities = organisationCapabilities(venue.organisation_type);
+          const districtRelationship = relationships.find((relationship) => relationship.child_venue_id === venue.id && relationship.status === "active");
           return (
             <article className="surface-card p-4" key={venue.id}>
               <div className="flex items-start justify-between gap-3"><div><p className="section-kicker">{formatLabel(venue.organisation_type)}</p><h2 className="mt-1 text-lg font-black text-court-navy">{venue.name}</h2></div><span className={`ui-chip ${setupTone(setup?.status ?? "not_assigned")}`}>{setup ? setup.status.replaceAll("_", " ") : "Awaiting handoff"}</span></div>
@@ -120,6 +130,10 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
                 {leaders.length > 0 ? leaders.map((leader) => <p key={leader.id}><span className="font-black text-court-navy">{name(leader.profile)}</span> · {organisationRoleLabel(leader.role)}</p>) : <p>No operational leader assigned yet.</p>}
               </div>
               {setup ? <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold text-slate-500">{productSetupLabel(setup.product_context)}</span><span className="text-xs font-semibold text-slate-500">Leader owns the next step: {formatLabel(setup.current_step)}</span></div> : null}
+              {capabilities.schoolDiscovery ? <div className="mt-4 border-t border-slate-200 pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-black text-court-navy">Parent discovery</p><p className="mt-1 text-xs font-semibold text-slate-500">{venue.discovery_visibility === "public" ? "Public school identity and location only" : "Hidden from school search"}</p></div><form action={updateSchoolDiscovery}><input name="venueId" type="hidden" value={venue.id} /><input name="visibility" type="hidden" value={venue.discovery_visibility === "public" ? "hidden" : "public"} /><button className="btn-secondary px-3 py-2" type="submit">{venue.discovery_visibility === "public" ? "Hide School" : "Make Discoverable"}</button></form></div>
+                <form action={updateSchoolDistrict} className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"><input name="schoolId" type="hidden" value={venue.id} /><label className="text-xs font-black uppercase tracking-wide text-slate-500">District context<select className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm normal-case tracking-normal focus-ring" defaultValue={districtRelationship?.parent_venue_id ?? ""} name="districtId"><option value="">No district linked</option>{districts.filter((district) => district.id !== venue.id).map((district) => <option key={district.id} value={district.id}>{district.name}</option>)}</select></label><button className="btn-secondary self-end px-3 py-2" type="submit">Save District</button></form>
+              </div> : null}
             </article>
           );
         })}

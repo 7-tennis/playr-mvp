@@ -25,7 +25,7 @@ import {
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
 import { juniorParticipationLeads, playerStageVisual } from "@/lib/player-stage-visuals";
-import { loadPlayerClubMemberships, loadPlayerOrganisations } from "@/lib/player-organisations";
+import { loadPlayerClubMemberships, loadPlayerOrganisations, loadPlayerSchoolContexts } from "@/lib/player-organisations";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type {
@@ -279,6 +279,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     { data: juniorHistoryData, error: juniorHistoryError },
     organisationResult,
     membershipResult,
+    schoolContextResult,
     { data: academyAssignmentData },
     { data: academyLessonData },
     { data: privateAcademySessionData, error: privateAcademySessionError },
@@ -315,6 +316,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
       : Promise.resolve({ data: [], error: null }),
     loadPlayerOrganisations(supabase, [player.id]),
     loadPlayerClubMemberships(supabase, player.id),
+    player.is_junior ? loadPlayerSchoolContexts(supabase, player.id) : Promise.resolve({ data: [], error: false }),
     supabase
       .from("coach_player_assignments")
       .select("organisation_player_link_id,coach:coach_profile_id(id,first_name,last_name)")
@@ -381,6 +383,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     ? []
     : ((juniorHistoryData ?? []) as Pick<JuniorRatingHistory, "id" | "previous_rating" | "new_rating" | "change_amount" | "reason" | "created_at">[]);
   const organisations = organisationResult.data;
+  const schoolContext = schoolContextResult.data[0] ?? null;
   const membershipByVenueId = new Map<string, (typeof membershipResult.data)[number]>();
   membershipResult.data.forEach((membership) => {
     if (!membershipByVenueId.has(membership.venueId)) membershipByVenueId.set(membership.venueId, membership);
@@ -410,7 +413,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     organisations.some((organisation) => organisation.venue?.organisation_type === "club" || organisation.venue?.organisation_type === "club_academy")
       ? { icon: <ClubIcon size={14} />, label: "Club Rank" }
       : null,
-    organisations.some((organisation) => organisation.venue?.organisation_type === "district" || organisation.venue?.organisation_type === "school_district")
+    schoolContext?.districtId || organisations.some((organisation) => organisation.venue?.organisation_type === "district" || organisation.venue?.organisation_type === "school_district")
       ? { icon: <DistrictIcon size={14} />, label: "District Rank" }
       : null
   ].filter(Boolean) as { icon: ReactNode; label: string }[];
@@ -447,6 +450,16 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
           </div>
         </div>
       </PlayRCard>
+
+      {player.is_junior ? <PlayRCard as="section" className="mt-5 overflow-hidden" id="school-context">
+        <div className="playr-gradient-school h-1.5" />
+        <div className="p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-court-mist text-court-teal"><SchoolIcon size={22} /></span><div><p className="section-kicker">School connection</p>{schoolContext ? <><h2 className="mt-1 text-xl font-black text-court-navy">{schoolContext.schoolName}</h2><p className="mt-1 text-sm font-semibold text-slate-600">{schoolContext.schoolLinkStatus === "active" ? "Approved school" : schoolContext.schoolLinkStatus === "pending" ? "School approval pending" : formatLabel(schoolContext.schoolLinkStatus)}{schoolContext.districtName ? ` · ${schoolContext.districtName}` : ""}</p></> : <><h2 className="mt-1 text-xl font-black text-court-navy">No school connected yet</h2><p className="mt-1 text-sm text-slate-600">Find an eligible school without creating another player profile.</p></>}</div></div>
+            <div className="flex flex-wrap gap-2">{schoolContext?.schoolLinkStatus === "active" ? <Link className="btn-secondary" href={`/dashboard/rankings?organisation=${schoolContext.schoolId}`}>School Rankings</Link> : null}{schoolContext?.districtId ? <Link className="btn-secondary" href={`/dashboard/rankings?organisation=${schoolContext.districtId}`}>District Rankings</Link> : null}<Link className="btn-primary" href={`/dashboard/juniors/${player.id}/schools`}>{schoolContext ? "Manage School" : "Find a School"}</Link></div>
+          </div>
+        </div>
+      </PlayRCard> : null}
 
       <PlayRCard as="section" className="mt-6 p-4 sm:p-6" id="participation">
         <SectionHeader description="Participation points and rankings for this player's connected tennis communities." icon={<ParticipationIcon className="text-court-teal" size={22} />} title="Participation & Rankings" />
