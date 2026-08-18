@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getAdminContext } from "@/lib/admin-auth";
+import { applicationAllowsInitialRole, applicationSupportsOrganisationType, safeOrganisationAccessApplication } from "@/lib/organisation-access-options";
 import { defaultDiscoveryVisibility, organisationCapabilities } from "@/lib/organisation-capabilities";
 import type { AdminRole, OrganisationRole, Venue } from "@/types/courtside";
 
@@ -82,15 +83,22 @@ export async function delegateOrganisation(formData: FormData) {
   const venueId = text(formData, "venueId") || null;
   const organisationName = text(formData, "organisationName");
   const organisationType = allowedValue<Venue["organisation_type"]>(text(formData, "organisationType"), organisationTypes, "club");
+  const application = safeOrganisationAccessApplication(text(formData, "application"));
   const profileId = text(formData, "profileId");
+  const requestedLeaderRole = text(formData, "leaderRole");
   const leaderRole = allowedValue<OrganisationRole>(
-    text(formData, "leaderRole"),
+    requestedLeaderRole,
     ["organisation_admin", "club_manager", "head_coach", "sports_coordinator"],
     "organisation_admin"
   );
 
   if ((!venueId && !organisationName) || !profileId) {
     redirect("/admin/organisations?error=missing_fields");
+  }
+  if (requestedLeaderRole !== leaderRole
+    || !applicationAllowsInitialRole(application, leaderRole)
+    || !applicationSupportsOrganisationType(application, organisationType)) {
+    redirect("/admin/organisations?error=invalid_role");
   }
 
   const { data: delegatedVenueId, error } = await supabase.rpc("platform_delegate_organisation", {

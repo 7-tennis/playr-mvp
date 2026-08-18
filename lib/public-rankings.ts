@@ -37,27 +37,33 @@ export type PublicRankingQuery = {
   search?: string;
 };
 
-export async function loadPublicRankings(supabase: ServerSupabaseClient, query: PublicRankingQuery) {
-  const [rankingResult, organisationResult, regionResult] = await Promise.all([
-    supabase.rpc("get_public_playr_rankings", {
-      p_category: query.category,
-      p_classification: query.classification ?? null,
-      p_limit: query.limit ?? 25,
-      p_metric: query.metric,
-      p_offset: query.offset ?? 0,
-      p_organisation_id: query.organisationId ?? null,
-      p_region: query.region ?? null,
-      p_search: query.search ?? null
-    }),
-    supabase.rpc("get_public_playr_ranking_organisations", { p_category: query.category }),
-    supabase.rpc("get_public_playr_ranking_regions", { p_category: query.category })
+export async function loadPublicRankingFilters(supabase: ServerSupabaseClient, category: PlayRRankingCategory) {
+  const [organisationResult, regionResult] = await Promise.all([
+    supabase.rpc("get_public_playr_ranking_organisations", { p_category: category }),
+    supabase.rpc("get_public_playr_ranking_regions", { p_category: category })
   ]);
 
   return {
-    error: Boolean(rankingResult.error),
-    filtersError: Boolean(organisationResult.error || regionResult.error),
+    error: Boolean(organisationResult.error || regionResult.error),
     organisations: (organisationResult.data ?? []) as PublicRankingOrganisation[],
-    regions: ((regionResult.data ?? []) as Array<{ region: string }>).map((item) => item.region),
-    rows: (rankingResult.data ?? []) as PublicRankingRow[]
+    regions: ((regionResult.data ?? []) as Array<{ region: string }>).map((item) => item.region)
+  };
+}
+
+export async function loadPublicRankings(supabase: ServerSupabaseClient, query: PublicRankingQuery) {
+  const { data, error } = await supabase.rpc("get_public_playr_rankings", {
+    p_category: query.category,
+    p_classification: query.classification ?? null,
+    p_limit: query.limit ?? 25,
+    p_metric: query.metric,
+    p_offset: query.offset ?? 0,
+    p_organisation_id: query.organisationId ?? null,
+    p_region: query.region ?? null,
+    p_search: query.search ?? null
+  });
+
+  return {
+    error: Boolean(error),
+    rows: (data ?? []) as PublicRankingRow[]
   };
 }

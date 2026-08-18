@@ -2,6 +2,7 @@ import Link from "next/link";
 import { delegateOrganisation, updateSchoolDiscovery, updateSchoolDistrict } from "@/app/admin/organisations/actions";
 import { AdminNav } from "@/components/admin-nav";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { OrganisationAccessFields } from "@/components/organisation-access-fields";
 import { PageShell } from "@/components/page-shell";
 import { ClubIcon, EntriesIcon, PrivateIcon, StatusIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
@@ -107,7 +108,7 @@ export default async function OrganisationsPage({ searchParams }: OrganisationsP
           <label className="text-sm font-bold text-slate-700">Existing organisation, optional<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" name="venueId"><option value="">Create a new organisation</option>{venues.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}</select></label>
           <label className="text-sm font-bold text-slate-700">New organisation name<input className="mt-2 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" name="organisationName" placeholder="Club Anonymous" /></label>
           <label className="text-sm font-bold text-slate-700">Organisation type<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" name="organisationType"><option value="club">Club</option><option value="academy">Academy</option><option value="school">School</option><option value="club_academy">Club and academy</option><option value="school_district">School / district</option><option value="district">District</option></select></label>
-          <label className="text-sm font-bold text-slate-700">Initial access<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" name="leaderRole"><option value="organisation_admin">Organisation Admin</option><option value="club_manager">ClubR Admin</option><option value="head_coach">Head Coach</option><option value="sports_coordinator">Sports Coordinator</option></select></label>
+          <OrganisationAccessFields />
           <label className="text-sm font-bold text-slate-700 sm:col-span-2">PlayR profile<select className="mt-2 w-full rounded border border-slate-300 px-3 py-2.5 focus-ring" name="profileId" required><option value="">Choose an adult profile</option>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{name(profile)} · {profile.email ?? "No email"}</option>)}</select></label>
           <button className="btn-primary sm:col-span-2" type="submit">Assign Access and Handoff</button>
         </form>

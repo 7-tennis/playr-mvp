@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
+import { RankingScopeFilter } from "@/components/ranking-scope-filter";
 import { ClubIcon, DistrictIcon, LeaderboardIcon, ParticipationIcon, RatingIcon, StageIcon } from "@/components/playr-icons";
 import { EmptyState, SectionError } from "@/components/playr-ui";
-import { formatDateTime, formatLabel } from "@/lib/courtside-format";
-import { loadPublicRankings } from "@/lib/public-rankings";
+import { formatDateTime } from "@/lib/courtside-format";
+import { loadPublicRankingFilters, loadPublicRankings } from "@/lib/public-rankings";
 import { playrRankingCategories, rankingCategoryDescription, rankingCategoryLabel, rankingMetricForCategory, type PlayRRankingCategory } from "@/lib/ranking-categories";
+import { rankingScopeLabel, resolveRankingContext } from "@/lib/ranking-scope";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
@@ -21,6 +23,7 @@ type RankingsSearchParams = {
   page?: string;
   q?: string;
   region?: string;
+  scope?: string;
 };
 
 function safeCategory(value?: string): PlayRRankingCategory {
@@ -49,20 +52,23 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
   const metric = rankingMetricForCategory(category, searchParams?.metric);
   const classification = category === "open" && ["junior", "adult"].includes(searchParams?.classification ?? "") ? searchParams?.classification as "junior" | "adult" : undefined;
   const page = Math.max(Number.parseInt(searchParams?.page ?? "1", 10) || 1, 1);
+  const filterData = await loadPublicRankingFilters(supabase, category);
+  const rankingContext = resolveRankingContext(filterData.organisations, searchParams?.scope, searchParams?.organisation);
   const rankingData = await loadPublicRankings(supabase, {
     category,
     classification,
     limit: PAGE_SIZE,
     metric,
     offset: (page - 1) * PAGE_SIZE,
-    organisationId: searchParams?.organisation,
+    organisationId: rankingContext.organisation?.organisation_id,
     region: searchParams?.region,
     search: searchParams?.q?.trim()
   });
   const total = rankingData.rows[0]?.total_count ?? 0;
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
   const latestUpdate = rankingData.rows.reduce<string | null>((latest, row) => !latest || row.updated_at > latest ? row.updated_at : latest, null);
-  const selectedOrganisation = rankingData.organisations.find((item) => item.organisation_id === searchParams?.organisation);
+  const scopeLabel = rankingScopeLabel(rankingContext.scope);
+  const selectedOrganisation = rankingContext.organisation;
 
   return (
     <PageShell eyebrow="PlayR leaderboards" subtitle="Explore PlayR ratings and participation leaderboards." title="Rankings">
@@ -73,7 +79,13 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
             <Link
               aria-current={active ? "page" : undefined}
               className={`min-h-11 rounded-playr-md px-1 py-3 text-center text-xs font-black transition focus-ring sm:text-sm ${active ? "bg-court-navy text-white shadow-playr-card" : "text-slate-600 hover:bg-slate-50 hover:text-court-navy"}`}
-              href={queryHref({ category: item.id, metric: rankingMetricForCategory(item.id) })}
+              href={queryHref({
+                category: item.id,
+                classification: item.id === "open" ? classification : undefined,
+                metric: rankingMetricForCategory(item.id),
+                organisation: selectedOrganisation?.organisation_id,
+                scope: rankingContext.scope
+              })}
               key={item.id}
             >
               {item.label}
@@ -83,7 +95,7 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
       </nav>
 
       <div className="mt-4 flex flex-col gap-3 rounded-playr-lg border border-court-teal/25 bg-court-mist p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="font-black text-court-navy">{rankingCategoryLabel(category)} rankings</p><p className="mt-1 text-sm leading-6 text-slate-700">{rankingCategoryDescription(category)}</p></div>
+        <div><p className="font-black text-court-navy">{selectedOrganisation ? `${scopeLabel} Rankings` : `${rankingCategoryLabel(category)} rankings`}</p>{selectedOrganisation ? <p className="mt-1 text-lg font-black text-court-navy">{selectedOrganisation.organisation_name}</p> : null}<p className="mt-1 text-sm leading-6 text-slate-700">{rankingCategoryLabel(category)} · {rankingCategoryDescription(category)}</p></div>
         {latestUpdate ? <p className="shrink-0 text-xs font-bold text-slate-600">Updated {formatDateTime(latestUpdate)}</p> : null}
       </div>
 
@@ -103,23 +115,18 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
             </select>
           </label>
         ) : null}
-        <label className="text-sm font-black text-court-navy">Organisation
-          <select className="mt-1.5 min-h-11 w-full rounded-playr-md border border-slate-300 px-3 focus-ring" defaultValue={selectedOrganisation?.organisation_id ?? ""} name="organisation">
-            <option value="">All organisations</option>
-            {rankingData.organisations.map((item) => <option key={item.organisation_id} value={item.organisation_id}>{item.organisation_name} · {formatLabel(item.organisation_type)}</option>)}
-          </select>
-        </label>
+        <RankingScopeFilter organisations={filterData.organisations} selectedOrganisationId={selectedOrganisation?.organisation_id ?? null} selectedScope={rankingContext.scope} />
         <label className="text-sm font-black text-court-navy">Region
           <select className="mt-1.5 min-h-11 w-full rounded-playr-md border border-slate-300 px-3 focus-ring" defaultValue={searchParams?.region ?? ""} name="region">
-            <option value="">All regions</option>{rankingData.regions.map((region) => <option key={region} value={region}>{region}</option>)}
+            <option value="">All regions</option>{filterData.regions.map((region) => <option key={region} value={region}>{region}</option>)}
           </select>
         </label>
         <label className="text-sm font-black text-court-navy sm:col-span-2 lg:col-span-3">Search public rankings
-          <input className="mt-1.5 min-h-11 w-full rounded-playr-md border border-slate-300 px-3 focus-ring" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Public player or verified organisation" type="search" />
+          <input className="mt-1.5 min-h-11 w-full rounded-playr-md border border-slate-300 px-3 focus-ring" defaultValue={searchParams?.q ?? ""} name="q" placeholder="Public player or verified school, club or academy" type="search" />
         </label>
         <button className="btn-primary self-end" type="submit">Apply filters</button>
       </form>
-      {rankingData.filtersError ? <p className="mt-2 text-sm font-semibold text-amber-800">Some organisation or region filters are temporarily unavailable.</p> : null}
+      {filterData.error ? <p className="mt-2 text-sm font-semibold text-amber-800">Some ranking-scope or region filters are temporarily unavailable.</p> : null}
 
       <section aria-labelledby="ranking-list" className="mt-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">

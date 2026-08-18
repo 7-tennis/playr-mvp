@@ -6,6 +6,7 @@ import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
 import { formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { loadPlayerSchoolContexts } from "@/lib/player-organisations";
+import { schoolConnectionsHref } from "@/lib/school-connections-navigation";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { JuniorStage, PlayerLevel, Profile, Sport } from "@/types/courtside";
@@ -212,7 +213,7 @@ export default async function JuniorsPage({ searchParams }: { searchParams?: { e
                   <SubmitButton className="rounded bg-court-blue px-4 py-3 font-bold text-white md:col-span-2" pendingText="Saving junior...">
                     Save junior
                   </SubmitButton>
-                  <Link className="btn-secondary justify-center md:col-span-2" href={`/dashboard/juniors/${junior.id}/schools`}>School Connections</Link>
+                  <Link className="btn-secondary justify-center md:col-span-2" href={schoolConnectionsHref(junior.id, { returnTo: "/dashboard/juniors" })}>School Connections</Link>
                 </form>
               ))}
             </div>

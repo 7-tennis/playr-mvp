@@ -26,6 +26,9 @@ import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/l
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
 import { juniorParticipationLeads, playerStageVisual } from "@/lib/player-stage-visuals";
 import { loadPlayerClubMemberships, loadPlayerOrganisations, loadPlayerSchoolContexts } from "@/lib/player-organisations";
+import { rankingCategoryForStage } from "@/lib/ranking-categories";
+import { rankingContextHref } from "@/lib/ranking-scope";
+import { schoolConnectionsHref } from "@/lib/school-connections-navigation";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type {
@@ -456,7 +459,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
         <div className="p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-court-mist text-court-teal"><SchoolIcon size={22} /></span><div><p className="section-kicker">School connection</p>{schoolContext ? <><h2 className="mt-1 text-xl font-black text-court-navy">{schoolContext.schoolName}</h2><p className="mt-1 text-sm font-semibold text-slate-600">{schoolContext.schoolLinkStatus === "active" ? "Approved school" : schoolContext.schoolLinkStatus === "pending" ? "School approval pending" : formatLabel(schoolContext.schoolLinkStatus)}{schoolContext.districtName ? ` · ${schoolContext.districtName}` : ""}</p></> : <><h2 className="mt-1 text-xl font-black text-court-navy">No school connected yet</h2><p className="mt-1 text-sm text-slate-600">Find an eligible school without creating another player profile.</p></>}</div></div>
-            <div className="flex flex-wrap gap-2">{schoolContext?.schoolLinkStatus === "active" ? <Link className="btn-secondary" href={`/dashboard/rankings?organisation=${schoolContext.schoolId}`}>School Rankings</Link> : null}{schoolContext?.districtId ? <Link className="btn-secondary" href={`/dashboard/rankings?organisation=${schoolContext.districtId}`}>District Rankings</Link> : null}<Link className="btn-primary" href={`/dashboard/juniors/${player.id}/schools`}>{schoolContext ? "Manage School" : "Find a School"}</Link></div>
+            <div className="flex flex-wrap gap-2">{schoolContext?.schoolLinkStatus === "active" ? <Link className="btn-secondary" href={rankingContextHref({ category: rankingCategoryForStage(player.junior_stage), classification: player.junior_stage === "yellow_ball" ? "junior" : undefined, organisationId: schoolContext.schoolId, scope: "school" })}>School Rankings</Link> : null}{schoolContext?.districtId ? <Link className="btn-secondary" href={rankingContextHref({ category: rankingCategoryForStage(player.junior_stage), classification: player.junior_stage === "yellow_ball" ? "junior" : undefined, organisationId: schoolContext.districtId, scope: "district" })}>District Rankings</Link> : null}<Link className="btn-primary" href={schoolConnectionsHref(player.id, { returnTo: `/dashboard/players/${player.id}` })}>{schoolContext ? "Manage School" : "Find a School"}</Link></div>
           </div>
         </div>
       </PlayRCard> : null}

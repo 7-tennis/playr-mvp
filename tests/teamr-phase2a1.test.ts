@@ -106,8 +106,9 @@ test("Junior MyPlayR surfaces school status and supported ranking deep links", (
   const page = repoFile("app/dashboard/players/[id]/page.tsx");
   assert.match(page, /Approved school/);
   assert.match(page, /School approval pending/);
-  assert.match(page, /rankings\?organisation=\$\{schoolContext\.schoolId\}/);
-  assert.match(page, /rankings\?organisation=\$\{schoolContext\.districtId\}/);
+  assert.match(page, /rankingContextHref/);
+  assert.match(page, /organisationId: schoolContext\.schoolId, scope: "school"/);
+  assert.match(page, /organisationId: schoolContext\.districtId, scope: "district"/);
 });
 
 test("Phase 2A approvals, teams and rosters remain intact", () => {
