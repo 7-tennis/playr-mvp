@@ -70,6 +70,16 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
   const latestUpdate = rankingData.rows.reduce<string | null>((latest, row) => !latest || row.updated_at > latest ? row.updated_at : latest, null);
   const scopeLabel = rankingScopeLabel(rankingContext.scope);
   const selectedOrganisation = rankingContext.organisation;
+  const emptyStateTitle = selectedOrganisation
+    ? `No published ${rankingCategoryLabel(category)} rankings yet`
+    : metric === "participation"
+      ? `No ${rankingCategoryLabel(category)} participation rankings yet`
+      : `No ${rankingCategoryLabel(category)} rating results found`;
+  const emptyStateDescription = selectedOrganisation
+    ? `No eligible published players are currently ranked for ${selectedOrganisation.organisation_name}.`
+    : metric === "participation"
+      ? `Players will appear after verified ${rankingCategoryLabel(category)} participation activity is published.`
+      : "Try changing the organisation, region or player-group filters.";
 
   return (
     <PageShell eyebrow="PlayR leaderboards" subtitle="Explore PlayR ratings and participation leaderboards." title="Rankings">
@@ -154,7 +164,7 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
             ))}
           </ol>
         ) : (
-          <EmptyState description={metric === "participation" ? `Players will appear after verified ${rankingCategoryLabel(category)} participation activity is published.` : "Try changing the organisation, region or player-group filters."} icon={<LeaderboardIcon className="text-court-teal" size={28} />} title={metric === "participation" ? `No ${rankingCategoryLabel(category)} participation rankings yet` : `No ${rankingCategoryLabel(category)} rating results found`} />
+          <EmptyState description={emptyStateDescription} icon={<LeaderboardIcon className="text-court-teal" size={28} />} title={emptyStateTitle} />
         )}
       </section>
 
