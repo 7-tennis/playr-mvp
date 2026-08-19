@@ -31,7 +31,10 @@ export function rankingScopeSelectorLabel(scope: Exclude<RankingScope, "overall"
 }
 
 export function organisationMatchesRankingScope(organisation: PublicRankingOrganisation, scope: RankingScope) {
-  return scope === "overall" || organisationTypesByScope[scope].includes(organisation.organisation_type);
+  if (scope === "overall") return true;
+  return organisation.ranking_scope
+    ? organisation.ranking_scope === scope
+    : organisationTypesByScope[scope].includes(organisation.organisation_type);
 }
 
 export function rankingOrganisationsForScope(organisations: PublicRankingOrganisation[], scope: RankingScope) {
@@ -39,6 +42,8 @@ export function rankingOrganisationsForScope(organisations: PublicRankingOrganis
 }
 
 function scopeForOrganisation(organisation: PublicRankingOrganisation): Exclude<RankingScope, "overall"> | null {
+  const explicitScope = safeRankingScope(organisation.ranking_scope);
+  if (explicitScope && explicitScope !== "overall") return explicitScope;
   if (["school", "school_district"].includes(organisation.organisation_type)) return "school";
   if (["club", "club_academy"].includes(organisation.organisation_type)) return "club";
   if (organisation.organisation_type === "academy") return "academy";
@@ -54,14 +59,12 @@ export function resolveRankingContext(
   const scope = safeRankingScope(requestedScope);
   if (scope === "overall") return { organisation: null, scope };
 
-  const organisation = organisations.find((item) => item.organisation_id === requestedOrganisationId) ?? null;
+  const organisation = organisations.find((item) =>
+    item.organisation_id === requestedOrganisationId && (!scope || organisationMatchesRankingScope(item, scope))
+  ) ?? null;
   if (!organisation) return { organisation: null, scope: "overall" as const };
 
-  if (scope) {
-    return organisationMatchesRankingScope(organisation, scope)
-      ? { organisation, scope }
-      : { organisation: null, scope: "overall" as const };
-  }
+  if (scope) return { organisation, scope };
 
   const inferredScope = scopeForOrganisation(organisation);
   return inferredScope ? { organisation, scope: inferredScope } : { organisation: null, scope: "overall" as const };

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/page-shell";
 import { RankingScopeFilter } from "@/components/ranking-scope-filter";
-import { ClubIcon, DistrictIcon, LeaderboardIcon, ParticipationIcon, RatingIcon, StageIcon } from "@/components/playr-icons";
+import { ClubIcon, DistrictIcon, LeaderboardIcon, ParticipationIcon, RatingIcon, SchoolIcon, StageIcon } from "@/components/playr-icons";
 import { EmptyState, SectionError } from "@/components/playr-ui";
 import { formatDateTime } from "@/lib/courtside-format";
 import { loadPublicRankingFilters, loadPublicRankings } from "@/lib/public-rankings";
@@ -62,6 +62,7 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
     offset: (page - 1) * PAGE_SIZE,
     organisationId: rankingContext.organisation?.organisation_id,
     region: searchParams?.region,
+    scope: rankingContext.scope,
     search: searchParams?.q?.trim()
   });
   const total = rankingData.rows[0]?.total_count ?? 0;
@@ -95,7 +96,7 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
       </nav>
 
       <div className="mt-4 flex flex-col gap-3 rounded-playr-lg border border-court-teal/25 bg-court-mist p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><p className="font-black text-court-navy">{selectedOrganisation ? `${scopeLabel} Rankings` : `${rankingCategoryLabel(category)} rankings`}</p>{selectedOrganisation ? <p className="mt-1 text-lg font-black text-court-navy">{selectedOrganisation.organisation_name}</p> : null}<p className="mt-1 text-sm leading-6 text-slate-700">{rankingCategoryLabel(category)} · {rankingCategoryDescription(category)}</p></div>
+        <div><p className="font-black text-court-navy">{selectedOrganisation ? `${selectedOrganisation.organisation_name} Rankings` : `${rankingCategoryLabel(category)} rankings`}</p><p className="mt-1 text-sm leading-6 text-slate-700">{selectedOrganisation ? `${rankingCategoryLabel(category)} · ${scopeLabel}` : `${rankingCategoryLabel(category)} · ${rankingCategoryDescription(category)}`}</p></div>
         {latestUpdate ? <p className="shrink-0 text-xs font-bold text-slate-600">Updated {formatDateTime(latestUpdate)}</p> : null}
       </div>
 
@@ -141,7 +142,7 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2"><h3 className="break-words font-black text-court-navy">{row.public_display_name}</h3>{row.is_managed ? <span className="ui-chip ui-chip-brand">Your player</span> : null}</div>
                   <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-bold text-slate-500"><StageIcon size={14} /> {row.development_stage === "yellow" ? "Yellow Junior · Open" : row.player_classification === "adult" ? "Adult · Open" : `${rankingCategoryLabel(category)} · Junior`}</p>
-                  {row.organisation_summary ? <p className="mt-1 flex items-start gap-1.5 break-words text-xs font-semibold text-slate-600"><ClubIcon className="mt-0.5 shrink-0" size={13} /> {row.organisation_summary}</p> : null}
+                  {rankingContext.scope === "district" && row.school_affiliation ? <p className="mt-1 flex items-start gap-1.5 break-words text-xs font-semibold text-slate-600"><SchoolIcon className="mt-0.5 shrink-0" size={13} /> {row.school_affiliation}</p> : row.organisation_summary ? <p className="mt-1 flex items-start gap-1.5 break-words text-xs font-semibold text-slate-600"><ClubIcon className="mt-0.5 shrink-0" size={13} /> {row.organisation_summary}</p> : null}
                   {row.public_region ? <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><DistrictIcon size={13} /> {row.public_region}</p> : null}
                 </div>
                 <div className="text-right">

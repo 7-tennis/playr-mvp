@@ -1,5 +1,6 @@
 import type { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { PlayRRankingCategory, PlayRRankingMetric } from "@/lib/ranking-categories";
+import type { RankingScope } from "@/lib/ranking-scope";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
 
@@ -10,6 +11,7 @@ export type PublicRankingRow = {
   development_stage: "red" | "orange" | "green" | "yellow" | null;
   player_classification: "junior" | "adult";
   organisation_summary: string | null;
+  school_affiliation: string | null;
   public_region: string | null;
   metric_value: number;
   events_played: number;
@@ -24,6 +26,7 @@ export type PublicRankingOrganisation = {
   organisation_id: string;
   organisation_name: string;
   organisation_type: string;
+  ranking_scope?: Exclude<RankingScope, "overall">;
 };
 
 export type PublicRankingQuery = {
@@ -35,6 +38,7 @@ export type PublicRankingQuery = {
   organisationId?: string;
   region?: string;
   search?: string;
+  scope?: RankingScope;
 };
 
 export async function loadPublicRankingFilters(supabase: ServerSupabaseClient, category: PlayRRankingCategory) {
@@ -59,6 +63,7 @@ export async function loadPublicRankings(supabase: ServerSupabaseClient, query: 
     p_offset: query.offset ?? 0,
     p_organisation_id: query.organisationId ?? null,
     p_region: query.region ?? null,
+    p_scope: query.scope ?? "overall",
     p_search: query.search ?? null
   });
 
