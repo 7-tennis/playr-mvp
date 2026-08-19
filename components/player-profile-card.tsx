@@ -6,6 +6,7 @@ import { PlayerOrganisationSummary } from "@/components/player-organisations";
 import type { PlayerStageVisual } from "@/lib/player-stage-visuals";
 import type { PlayerActivitySummary } from "@/lib/player-activity-summary";
 import type { PlayerOrganisation } from "@/lib/player-organisations";
+import type { ConnectedRankingSummary } from "@/lib/connected-rankings";
 
 type PlayerMetric = {
   icon: ReactNode;
@@ -19,6 +20,7 @@ export function PlayerProfileCard({
   initials,
   name,
   organisations,
+  rankings = [],
   primaryMetric,
   secondaryMetric,
   stage
@@ -28,6 +30,7 @@ export function PlayerProfileCard({
   initials: string;
   name: string;
   organisations: PlayerOrganisation[];
+  rankings?: ConnectedRankingSummary[];
   primaryMetric: PlayerMetric;
   secondaryMetric?: PlayerMetric | null;
   stage: PlayerStageVisual;
@@ -59,6 +62,16 @@ export function PlayerProfileCard({
               );
             })}
           </div>
+
+          {rankings.length > 0 ? (
+            <div aria-label="Connected rankings" className="mt-3 flex min-w-0 flex-wrap gap-2">
+              {rankings.map((ranking) => (
+                <span className="max-w-full rounded-full border border-court-teal/25 bg-court-mist px-2.5 py-1 text-xs font-black text-court-navy" key={`${ranking.rankingScope}-${ranking.organisationId}`}>
+                  {ranking.rankingScope === "school" ? "School" : "District"} #{ranking.rankingPosition}
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           {activity ? (
             <div className="mt-3 flex min-h-11 items-center gap-2 rounded-playr-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">

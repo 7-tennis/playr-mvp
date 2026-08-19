@@ -6,6 +6,7 @@ import { PlayerProfileCard } from "@/components/player-profile-card";
 import { PlayRLinkButton, SectionError, SectionHeader } from "@/components/playr-ui";
 import { StatusAlert } from "@/components/status-alert";
 import { formatJuniorRating } from "@/lib/courtside-format";
+import { connectedRankingForScope, loadConnectedRankingSummaries, type ConnectedRankingSummary } from "@/lib/connected-rankings";
 import { loadPlayerSessionRequests } from "@/lib/coach-session-requests";
 import { buildPlayerActivitySummaries, type PlayerActivitySummary } from "@/lib/player-activity-summary";
 import { juniorParticipationLeads, playerStageVisual } from "@/lib/player-stage-visuals";
@@ -100,7 +101,7 @@ function MemberCard({
   );
 }
 
-function JuniorCard({ activity, junior, organisations }: { activity?: PlayerActivitySummary | null; junior: JuniorCardProfile; organisations: PlayerOrganisation[] }) {
+function JuniorCard({ activity, junior, organisations, rankings }: { activity?: PlayerActivitySummary | null; junior: JuniorCardProfile; organisations: PlayerOrganisation[]; rankings: ConnectedRankingSummary[] }) {
   const name = playerName(junior);
   const stage = playerStageVisual(true, junior.junior_stage);
   const participationFirst = juniorParticipationLeads(junior.junior_stage);
@@ -114,6 +115,7 @@ function JuniorCard({ activity, junior, organisations }: { activity?: PlayerActi
       initials={playerInitials(junior)}
       name={name}
       organisations={organisations}
+      rankings={rankings}
       primaryMetric={participationFirst ? participationMetric : ratingMetric}
       secondaryMetric={participationFirst ? { icon: <StageIcon size={15} />, label: "Stage readiness", value: `${junior.stage_readiness_score}%` } : participationMetric}
       stage={stage}
@@ -169,7 +171,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   }
 
   const now = new Date().toISOString();
-  const [{ data: inviteData, error: inviteError }, { data: ratingData, error: ratingError }, { data: entryData, error: entryError }, { data: bookingData, error: bookingError }, organisationResult, sessionRequests] =
+  const [{ data: inviteData, error: inviteError }, { data: ratingData, error: ratingError }, { data: entryData, error: entryError }, { data: bookingData, error: bookingError }, organisationResult, connectedRankingResult, sessionRequests] =
     profileIds.length > 0
       ? await Promise.all([
           supabase.rpc("match_invites_for_user"),
@@ -187,6 +189,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             .gte("start_time", now)
             .order("start_time", { ascending: true }),
           loadPlayerOrganisations(supabase, profileIds),
+          loadConnectedRankingSummaries(supabase, juniorRows.map((junior) => junior.id)),
           loadPlayerSessionRequests(supabase, profileIds)
         ])
       : [
@@ -194,6 +197,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           { data: [], error: null },
           { data: [], error: null },
           { data: [], error: null },
+          { data: [], error: false },
           { data: [], error: false },
           []
         ];
@@ -216,6 +220,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   organisationResult.data.forEach((organisation) => {
     const current = organisationsByProfileId.get(organisation.playerProfileId) ?? [];
     organisationsByProfileId.set(organisation.playerProfileId, [...current, organisation]);
+  });
+  const rankingsByProfileId = new Map<string, ConnectedRankingSummary[]>();
+  juniorRows.forEach((junior) => {
+    const schoolRanking = connectedRankingForScope(connectedRankingResult.data, junior.id, "school");
+    const districtRanking = connectedRankingForScope(connectedRankingResult.data, junior.id, "district");
+    rankingsByProfileId.set(junior.id, [schoolRanking, districtRanking].filter(Boolean) as ConnectedRankingSummary[]);
   });
 
   const invites = inviteError ? [] : ((inviteData ?? []) as DashboardMatchInvite[]);
@@ -259,7 +269,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           <MemberCard activity={profile ? activitySummaries.get(profile.id) ?? null : null} organisations={profile ? organisationsByProfileId.get(profile.id) ?? [] : []} profile={profile} rating={adultRating} />
 
           {juniorRows.map((junior) => (
-            <JuniorCard activity={activitySummaries.get(junior.id) ?? null} junior={junior} key={junior.id} organisations={organisationsByProfileId.get(junior.id) ?? []} />
+            <JuniorCard activity={activitySummaries.get(junior.id) ?? null} junior={junior} key={junior.id} organisations={organisationsByProfileId.get(junior.id) ?? []} rankings={rankingsByProfileId.get(junior.id) ?? []} />
           ))}
 
           {profile && juniorRows.length === 0 ? (

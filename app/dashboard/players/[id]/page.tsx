@@ -24,6 +24,7 @@ import {
 } from "@/components/playr-icons";
 import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
+import { connectedRankingForScope, loadConnectedRankingSummaries, type ConnectedRankingSummary } from "@/lib/connected-rankings";
 import { juniorParticipationLeads, playerStageVisual } from "@/lib/player-stage-visuals";
 import { loadPlayerClubMemberships, loadPlayerOrganisations, loadPlayerSchoolContexts } from "@/lib/player-organisations";
 import { rankingCategoryForStage } from "@/lib/ranking-categories";
@@ -183,16 +184,26 @@ function ActivityItem({ icon, title, meta }: { icon: ReactNode; title: string; m
   );
 }
 
-function rankText(icon: ReactNode, label: string) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-3">
+function rankText(icon: ReactNode, label: string, ranking?: ConnectedRankingSummary | null) {
+  const content = (
+    <>
       <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
         {icon}
         <span>{label}</span>
       </p>
-      <p className="mt-1 font-black text-court-navy">Not ranked yet</p>
-    </div>
+      <p className="mt-1 text-lg font-black text-court-navy">{ranking ? `#${ranking.rankingPosition}` : "Not ranked yet"}</p>
+      {ranking ? <p className="mt-0.5 break-words text-xs font-semibold text-slate-500">{ranking.organisationName}</p> : null}
+    </>
   );
+
+  return ranking ? (
+    <Link className="block rounded-lg bg-slate-50 p-3 transition hover:bg-court-mist focus-ring" href={rankingContextHref({
+      category: ranking.rankingCategory,
+      classification: ranking.rankingCategory === "open" ? "junior" : undefined,
+      organisationId: ranking.organisationId,
+      scope: ranking.rankingScope
+    })}>{content}</Link>
+  ) : <div className="rounded-lg bg-slate-50 p-3">{content}</div>;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -283,6 +294,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     organisationResult,
     membershipResult,
     schoolContextResult,
+    connectedRankingResult,
     { data: academyAssignmentData },
     { data: academyLessonData },
     { data: privateAcademySessionData, error: privateAcademySessionError },
@@ -320,6 +332,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     loadPlayerOrganisations(supabase, [player.id]),
     loadPlayerClubMemberships(supabase, player.id),
     player.is_junior ? loadPlayerSchoolContexts(supabase, player.id) : Promise.resolve({ data: [], error: false }),
+    player.is_junior ? loadConnectedRankingSummaries(supabase, [player.id]) : Promise.resolve({ data: [], error: false }),
     supabase
       .from("coach_player_assignments")
       .select("organisation_player_link_id,coach:coach_profile_id(id,first_name,last_name)")
@@ -387,6 +400,8 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     : ((juniorHistoryData ?? []) as Pick<JuniorRatingHistory, "id" | "previous_rating" | "new_rating" | "change_amount" | "reason" | "created_at">[]);
   const organisations = organisationResult.data;
   const schoolContext = schoolContextResult.data[0] ?? null;
+  const schoolRanking = connectedRankingForScope(connectedRankingResult.data, player.id, "school", schoolContext?.schoolId);
+  const districtRanking = connectedRankingForScope(connectedRankingResult.data, player.id, "district", schoolContext?.districtId);
   const membershipByVenueId = new Map<string, (typeof membershipResult.data)[number]>();
   membershipResult.data.forEach((membership) => {
     if (!membershipByVenueId.has(membership.venueId)) membershipByVenueId.set(membership.venueId, membership);
@@ -411,15 +426,15 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
   const participationFirst = player.is_junior && juniorParticipationLeads(player.junior_stage);
   const rankingScopes = [
     organisations.some((organisation) => organisation.venue?.organisation_type === "school" || organisation.venue?.organisation_type === "school_district")
-      ? { icon: <SchoolIcon size={14} />, label: "School Rank" }
+      ? { icon: <SchoolIcon size={14} />, label: "School Rank", ranking: schoolRanking }
       : null,
     organisations.some((organisation) => organisation.venue?.organisation_type === "club" || organisation.venue?.organisation_type === "club_academy")
-      ? { icon: <ClubIcon size={14} />, label: "Club Rank" }
+      ? { icon: <ClubIcon size={14} />, label: "Club Rank", ranking: null }
       : null,
     schoolContext?.districtId || organisations.some((organisation) => organisation.venue?.organisation_type === "district" || organisation.venue?.organisation_type === "school_district")
-      ? { icon: <DistrictIcon size={14} />, label: "District Rank" }
+      ? { icon: <DistrictIcon size={14} />, label: "District Rank", ranking: districtRanking }
       : null
-  ].filter(Boolean) as { icon: ReactNode; label: string }[];
+  ].filter(Boolean) as { icon: ReactNode; label: string; ranking: ConnectedRankingSummary | null }[];
   const hasRecentActivity = juniorHistory.length > 0 || ratingChanges.length > 0 || verifiedMatches.length > 0 || achievements.length > 0;
 
   return (
@@ -468,8 +483,8 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
         <SectionHeader description="Participation points and rankings for this player's connected tennis communities." icon={<ParticipationIcon className="text-court-teal" size={22} />} title="Participation & Rankings" />
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatChip icon={<ParticipationIcon size={18} />} label="Participation" value={participationText} />
-          {(rankingScopes.length ? rankingScopes : [{ icon: <RatingIcon rating={null} size={14} stage="member" />, label: "PlayR Rank" }]).map((scope) => (
-            <div key={scope.label}>{rankText(scope.icon, scope.label)}</div>
+          {(rankingScopes.length ? rankingScopes : [{ icon: <RatingIcon rating={null} size={14} stage="member" />, label: "PlayR Rank", ranking: null }]).map((scope) => (
+            <div key={scope.label}>{rankText(scope.icon, scope.label, scope.ranking)}</div>
           ))}
         </div>
       </PlayRCard>
