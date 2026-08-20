@@ -15,6 +15,7 @@ async function getPublishedEvents(): Promise<{ events: EventWithEntryCount[]; er
     const { data, error } = await supabase
       .from("events")
       .select("*")
+      .is("venue_id", null)
       .eq("status", "published")
       .gte("start_datetime", now)
       .order("start_datetime", { ascending: true });

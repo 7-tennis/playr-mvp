@@ -470,6 +470,7 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
   const { data: upcomingEventData, error: eventsError } = await supabase
     .from("events")
     .select("*")
+    .is("venue_id", null)
     .eq("status", "published")
     .gte("start_datetime", now)
     .order("start_datetime", { ascending: true });
@@ -484,6 +485,7 @@ export default async function DashboardEventsPage({ searchParams }: DashboardEve
   const { data: closedEventData } = await supabase
     .from("events")
     .select("id,title,start_datetime,status")
+    .is("venue_id", null)
     .or(`start_datetime.lt.${now},status.neq.published`)
     .order("start_datetime", { ascending: false })
     .limit(6);

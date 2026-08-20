@@ -56,7 +56,7 @@ export default async function CompetePage({ searchParams }: CompetePageProps) {
   const selectedCategory = rankingCategoryForProfile(selectedPlayer);
   const supabase = await createServerSupabaseClient();
   const [{ data: eventData, error: eventError }, { data: entryData }] = await Promise.all([
-    supabase.from("events").select("*").eq("status", "published").gte("start_datetime", new Date().toISOString()).order("start_datetime", { ascending: true }),
+    supabase.from("events").select("*").is("venue_id", null).eq("status", "published").gte("start_datetime", new Date().toISOString()).order("start_datetime", { ascending: true }),
     supabase.from("event_entries").select("event_id,entry_status,payment_status").eq("profile_id", selectedPlayer.id).neq("entry_status", "cancelled")
   ]);
   const eligibleEvents = ((eventData ?? []) as CourtSideEvent[]).filter((event) => eventMatchesProfile(event, selectedPlayer));

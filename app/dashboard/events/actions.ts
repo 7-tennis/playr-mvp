@@ -46,6 +46,7 @@ export async function enterDashboardEvent(formData: FormData) {
   const { data: eventData, error: eventError } = await supabase
     .from("events")
     .select("id,title,slug,member_price,non_member_price,max_entries,status,start_datetime")
+    .is("venue_id", null)
     .eq("id", eventId)
     .eq("status", "published")
     .single();

@@ -40,6 +40,7 @@ export async function createEventEntry(_previousState: EntryActionState, formDat
   const { data: eventData, error: eventError } = await supabase
     .from("events")
     .select("id,title,slug,member_price,non_member_price,max_entries,status")
+    .is("venue_id", null)
     .eq("id", eventId)
     .eq("status", "published")
     .single();

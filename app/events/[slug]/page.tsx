@@ -35,6 +35,7 @@ async function getEventDetail(slug: string): Promise<EventDetailData> {
     const { data: eventData, error: eventError } = await supabase
       .from("events")
       .select("*")
+      .is("venue_id", null)
       .eq("slug", slug)
       .in("status", ["published", "completed"])
       .single();

@@ -9,7 +9,7 @@ const teamRLinks = [
   { href: "/dashboard/teamr/players", label: "Players", icon: EntriesIcon },
   { href: "/dashboard/teamr/teams", label: "Teams", icon: MatchIcon },
   { href: "/dashboard/teamr", label: "MyTeamR", icon: SchoolIcon, isHub: true },
-  { href: "/dashboard/teamr/competitions", label: "Competitions", icon: EventIcon },
+  { href: "/dashboard/teamr/competitions", label: "Events & Competitions", icon: EventIcon },
   { href: "/dashboard/teamr/more", label: "More", icon: ChevronDownIcon }
 ];
 

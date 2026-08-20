@@ -7,6 +7,7 @@ export type JuniorAchievementCategory = "participation" | "match" | "rating" | "
 export type JuniorAchievementType = "automatic" | "coach_approved" | "admin_approved";
 export type Sport = "tennis" | "pickleball" | "futsal" | "multi_sport";
 export type EventStatus = "draft" | "published" | "cancelled" | "completed";
+export type EventVisibility = "closed" | "open";
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "refunded" | "cancelled";
 export type EntryStatus = "active" | "cancelled" | "checked_in" | "no_show";
 export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "committee" | "reception" | "platform_admin";
@@ -163,6 +164,7 @@ export interface Profile {
 
 export interface CourtSideEvent {
   id: string;
+  venue_id: string | null;
   title: string;
   slug: string;
   description: string | null;
@@ -181,6 +183,10 @@ export interface CourtSideEvent {
   non_member_price: number;
   max_entries: number | null;
   status: EventStatus;
+  visibility: EventVisibility;
+  junior_stage: Exclude<JuniorStage, "not_sure"> | null;
+  archived_at: string | null;
+  archived_by_user_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

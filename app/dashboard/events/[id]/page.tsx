@@ -179,7 +179,7 @@ export default async function DashboardEventDetailPage({ params, searchParams }:
     redirect("/login");
   }
 
-  const { data: eventData, error: eventError } = await supabase.from("events").select("*").eq("id", params.id).maybeSingle();
+  const { data: eventData, error: eventError } = await supabase.from("events").select("*").is("venue_id", null).eq("id", params.id).maybeSingle();
 
   if (eventError || !eventData) {
     notFound();

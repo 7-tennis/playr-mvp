@@ -4,6 +4,7 @@ export { formatDate, formatDateTime, formatLabel, formatPrice } from "@/lib/cour
 export const featuredEvents: CourtSideEvent[] = [
   {
     id: "event_sunday_tennis",
+    venue_id: null,
     title: "Sunday Showdown Tennis Open",
     slug: "sunday-showdown-tennis-open",
     description: "A weekly competitive tennis event for players ready for match play.",
@@ -22,12 +23,17 @@ export const featuredEvents: CourtSideEvent[] = [
     non_member_price: 120,
     max_entries: 32,
     status: "published",
+    visibility: "open",
+    junior_stage: null,
+    archived_at: null,
+    archived_by_user_id: null,
     created_by: null,
     created_at: "2026-05-19T00:00:00+02:00",
     updated_at: "2026-05-19T00:00:00+02:00"
   },
   {
     id: "event_pickleball_open",
+    venue_id: null,
     title: "Sunday Showdown Pickleball Open Mixed",
     slug: "sunday-showdown-pickleball-open-mixed",
     description: "Open mixed pickleball play with simple pools and friendly finals.",
@@ -46,12 +52,17 @@ export const featuredEvents: CourtSideEvent[] = [
     non_member_price: 110,
     max_entries: 24,
     status: "published",
+    visibility: "open",
+    junior_stage: null,
+    archived_at: null,
+    archived_by_user_id: null,
     created_by: null,
     created_at: "2026-05-19T00:00:00+02:00",
     updated_at: "2026-05-19T00:00:00+02:00"
   },
   {
     id: "event_green_ball",
+    venue_id: null,
     title: "Green Ball Primary School Event",
     slug: "green-ball-primary-school-event",
     description: "A junior-friendly green ball event for primary school players.",
@@ -70,6 +81,10 @@ export const featuredEvents: CourtSideEvent[] = [
     non_member_price: 90,
     max_entries: 20,
     status: "published",
+    visibility: "open",
+    junior_stage: "green_ball",
+    archived_at: null,
+    archived_by_user_id: null,
     created_by: null,
     created_at: "2026-05-19T00:00:00+02:00",
     updated_at: "2026-05-19T00:00:00+02:00"

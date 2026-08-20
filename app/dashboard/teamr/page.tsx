@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { EntriesIcon, MatchIcon, ParticipationIcon, StageIcon } from "@/components/playr-icons";
+import { EntriesIcon, EventIcon, MatchIcon, StageIcon } from "@/components/playr-icons";
+import { formatDate, formatTime } from "@/lib/courtside-format";
+import { loadOrganisationEvents } from "@/lib/organisation-events";
 import { loadTeamRPlayerRequests, loadTeamRPlayers, loadTeamRTeams } from "@/lib/teamr";
 import { TeamRPageFrame, TeamRStatCard, getProtectedTeamRPage } from "./teamr-shared";
 
@@ -10,7 +12,7 @@ export default async function TeamRPage() {
   if (content) return content;
   if (!context) return null;
 
-  const [playersResult, requestsResult, teamsResult] = await Promise.all([loadTeamRPlayers(context), loadTeamRPlayerRequests(context), loadTeamRTeams(context)]);
+  const [playersResult, requestsResult, teamsResult, eventsResult] = await Promise.all([loadTeamRPlayers(context), loadTeamRPlayerRequests(context), loadTeamRTeams(context), loadOrganisationEvents(context)]);
   const players = playersResult.data;
   const stageCounts = {
     red_ball: players.filter((player) => player.juniorStage === "red_ball").length,
@@ -18,7 +20,10 @@ export default async function TeamRPage() {
     green_ball: players.filter((player) => player.juniorStage === "green_ball").length,
     yellow_ball: players.filter((player) => player.juniorStage === "yellow_ball").length
   };
-  const participation = players.reduce((total, player) => total + player.participationScore, 0);
+  const now = Date.now();
+  const upcomingEvents = eventsResult.data.filter((event) => event.status === "published" && !event.archived_at && new Date(event.starts_at ?? event.start_datetime).getTime() >= now);
+  const nextEvent = upcomingEvents[0] ?? null;
+  const draftEventCount = eventsResult.data.filter((event) => event.status === "draft" && !event.archived_at).length;
 
   return (
     <TeamRPageFrame context={context} subtitle="A clear, read-only view of your organisation’s tennis programme." title="MyTeamR" venue={venue}>
@@ -31,7 +36,7 @@ export default async function TeamRPage() {
         <TeamRStatCard helper="active links" icon={<EntriesIcon size={19} />} label="Players" value={playersResult.error ? "--" : players.length} />
         <TeamRStatCard helper="active teams" icon={<MatchIcon size={19} />} label="Teams" value={teamsResult.error ? "--" : teamsResult.data.length} />
         <TeamRStatCard helper="awaiting review" icon={<EntriesIcon size={19} />} label="Requests" value={requestsResult.error ? "--" : requestsResult.data.length} />
-        <TeamRStatCard helper="canonical points" icon={<ParticipationIcon size={19} />} label="Participation" value={playersResult.error ? "--" : participation} />
+        <TeamRStatCard helper="published ahead" icon={<EventIcon size={19} />} label="Upcoming Events" value={eventsResult.error ? "--" : upcomingEvents.length} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
@@ -60,6 +65,7 @@ export default async function TeamRPage() {
           <div className="mt-4 grid gap-2 text-sm leading-6 text-slate-600">
             <Link className="rounded-lg border border-slate-200 bg-slate-50 p-3 font-black text-court-navy" href="/dashboard/teamr/players?view=pending">Review {requestsResult.data.length} pending player request{requestsResult.data.length === 1 ? "" : "s"}</Link>
             <Link className="rounded-lg border border-slate-200 bg-slate-50 p-3 font-black text-court-navy" href="/dashboard/teamr/teams">Create and manage team rosters</Link>
+            <Link className="rounded-lg border border-slate-200 bg-slate-50 p-3 font-black text-court-navy" href="/dashboard/teamr/competitions">{nextEvent ? `Next: ${nextEvent.title} · ${formatDate(nextEvent.starts_at ?? nextEvent.start_datetime)} ${formatTime(nextEvent.starts_at ?? nextEvent.start_datetime)}` : "Create and manage organisation events"}<span className="block text-xs font-semibold text-slate-500">{draftEventCount} draft event{draftEventCount === 1 ? "" : "s"}</span></Link>
           </div>
         </article>
       </section>
