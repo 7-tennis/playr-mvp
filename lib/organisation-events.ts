@@ -7,10 +7,12 @@ export {
   eventLocalParts,
   eventVisibilityDescription,
   organisationCanHostEvents,
+  organisationEventErrorMessage,
   organisationEventStages,
-  organisationEventState
+  organisationEventState,
+  validateOrganisationEventInput
 } from "@/lib/organisation-event-policy";
-export type { OrganisationEventStage, OrganisationEventState } from "@/lib/organisation-event-policy";
+export type { OrganisationEventFormInput, OrganisationEventStage, OrganisationEventState, OrganisationEventValidationError, ValidatedOrganisationEventInput } from "@/lib/organisation-event-policy";
 
 export type OrganisationEvent = CourtSideEvent & {
   host: Pick<Venue, "id" | "name" | "organisation_type"> | null;
