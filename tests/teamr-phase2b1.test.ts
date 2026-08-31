@@ -123,7 +123,7 @@ test("TeamR provides listing, create, detail, edit and lifecycle surfaces", () =
   assert.match(listing, /Upcoming[\s\S]*Draft[\s\S]*Completed[\s\S]*Cancelled/);
   assert.match(listing, /Create Event/);
   assert.match(detail, /Publish[\s\S]*Unpublish[\s\S]*Cancel[\s\S]*Archive/);
-  assert.match(detail, /Players and staff will be assigned in the next phase/);
+  assert.match(detail, /Players[\s\S]*Event Staff/);
 });
 test("MyTeamR exposes a minimal connected event summary", () => {
   const source = repoFile("app/dashboard/teamr/page.tsx");

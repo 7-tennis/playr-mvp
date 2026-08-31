@@ -8,6 +8,8 @@ export type JuniorAchievementType = "automatic" | "coach_approved" | "admin_appr
 export type Sport = "tennis" | "pickleball" | "futsal" | "multi_sport";
 export type EventStatus = "draft" | "published" | "cancelled" | "completed";
 export type EventVisibility = "closed" | "open";
+export type EventAssignmentStatus = "active" | "removed";
+export type EventStaffRole = "event_manager" | "coordinator" | "coach" | "official";
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "refunded" | "cancelled";
 export type EntryStatus = "active" | "cancelled" | "checked_in" | "no_show";
 export type UserRole = "player" | "parent" | "coach" | "head_coach" | "club_admin" | "committee" | "reception" | "platform_admin";
@@ -205,6 +207,35 @@ export interface EventEntry {
   entry_status: EntryStatus;
   status: EntryStatus | null;
   notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventPlayerAssignment {
+  id: string;
+  event_id: string;
+  player_profile_id: string;
+  status: EventAssignmentStatus;
+  assigned_by_user_id: string;
+  assigned_at: string;
+  removed_by_user_id: string | null;
+  removed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventStaffAssignment {
+  id: string;
+  event_id: string;
+  staff_profile_id: string;
+  staff_user_id: string;
+  event_role: EventStaffRole;
+  source_organisation_membership_id: string;
+  status: EventAssignmentStatus;
+  assigned_by_user_id: string;
+  assigned_at: string;
+  removed_by_user_id: string | null;
+  removed_at: string | null;
   created_at: string;
   updated_at: string;
 }

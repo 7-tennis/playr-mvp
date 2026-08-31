@@ -15,6 +15,7 @@ import {
 } from "@/app/dashboard/play/play-shared";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import { eventAudienceLabel, eventMatchesProfile, eventVisual, isRatingRelevantEvent } from "@/lib/event-visuals";
+import { eventStaffRoleLabel, loadMyEventStaffAssignments, loadProfileEventRelevance, partitionProfileEvents, type ProfileEventRelevance } from "@/lib/event-relevance";
 import { rankingCategoryForProfile, rankingCategoryLabel } from "@/lib/ranking-categories";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { CourtSideEvent } from "@/types/courtside";
@@ -33,6 +34,10 @@ type EventEntrySummary = {
 
 function competeHref(playerId: string) {
   return `/dashboard/compete?player=${encodeURIComponent(playerId)}`;
+}
+
+function RelevantEventCard({ event, playerId }: { event: ProfileEventRelevance; playerId: string }) {
+  return <article className="surface-card p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="section-kicker">{formatLabel(event.host_type)} · {formatLabel(event.visibility)}{event.junior_stage ? ` · ${formatLabel(event.junior_stage)}` : ""}</p><h3 className="mt-1 font-black text-court-navy">{event.title}</h3><p className="mt-1 text-sm font-semibold text-slate-600">{event.host_name} · {formatDateTime(event.starts_at)}</p><p className="mt-2 text-sm text-slate-600">{event.location ?? "Location to be confirmed"}</p></div><span className={`ui-chip ${event.is_assigned ? "ui-chip-success" : event.visibility === "open" ? "ui-chip-brand" : "ui-chip-muted"}`}>{event.is_assigned ? "Selected" : event.visibility === "open" ? "Open" : "Eligible"}</span></div><p className="mt-3 text-sm font-bold text-court-teal">{event.relevance_reason}</p><Link className="btn-secondary mt-4" href={`/dashboard/compete/events/${event.event_id}?player=${encodeURIComponent(playerId)}`}>View event</Link></article>;
 }
 
 export default async function CompetePage({ searchParams }: CompetePageProps) {
@@ -55,9 +60,11 @@ export default async function CompetePage({ searchParams }: CompetePageProps) {
   const selectedPlayerIds = [selectedPlayer.id];
   const selectedCategory = rankingCategoryForProfile(selectedPlayer);
   const supabase = await createServerSupabaseClient();
-  const [{ data: eventData, error: eventError }, { data: entryData }] = await Promise.all([
+  const [{ data: eventData, error: eventError }, { data: entryData }, relevanceResult, staffEventsResult] = await Promise.all([
     supabase.from("events").select("*").is("venue_id", null).eq("status", "published").gte("start_datetime", new Date().toISOString()).order("start_datetime", { ascending: true }),
-    supabase.from("event_entries").select("event_id,entry_status,payment_status").eq("profile_id", selectedPlayer.id).neq("entry_status", "cancelled")
+    supabase.from("event_entries").select("event_id,entry_status,payment_status").eq("profile_id", selectedPlayer.id).neq("entry_status", "cancelled"),
+    loadProfileEventRelevance(supabase, selectedPlayer.id),
+    loadMyEventStaffAssignments(supabase)
   ]);
   const eligibleEvents = ((eventData ?? []) as CourtSideEvent[]).filter((event) => eventMatchesProfile(event, selectedPlayer));
   const entriesByEvent = new Map(((entryData ?? []) as EventEntrySummary[]).map((entry) => [entry.event_id, entry]));
@@ -69,6 +76,7 @@ export default async function CompetePage({ searchParams }: CompetePageProps) {
   const recentResults = selectedMatches.filter((match) => ["verified", "disputed", "rejected"].includes(match.verification_status)).slice(0, 3);
   const challengeCount = data.closeSuggestions.length + data.strongerSuggestions.length;
   const actionCount = actionInvites.length + actionMatches.length;
+  const relevant = partitionProfileEvents(relevanceResult.data);
 
   return (
     <PageShell eyebrow="Competitive play" subtitle={`${selectedPlayer.first_name}'s events, challenges and match activity.`} title="Compete">
@@ -93,6 +101,26 @@ export default async function CompetePage({ searchParams }: CompetePageProps) {
           <ActionCard action="Find opponents" description="Choose a balanced match or a stronger test for this player." href={`/dashboard/play/challenges?player=${selectedPlayer.id}`} icon={<ChallengeIcon size={22} />} meta={countLabel(challengeCount, "suggestion")} title="Challenge Players" tone="green" />
         </div>
       </section>
+
+      <section className="mb-8" aria-labelledby="selected-events">
+        <SectionHeader className="mb-4" description="Specific organiser selections for this player. Selected does not yet mean entered or confirmed." title="Selected" />
+        <h2 className="sr-only" id="selected-events">Selected</h2>
+        {relevanceResult.error ? <SectionError description={relevanceResult.error} /> : relevant.selected.length > 0 ? <div className="grid gap-3 lg:grid-cols-2">{relevant.selected.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</div> : <EmptyState compact description="Events selected by a School, District or Club organiser will appear here." icon={<EventIcon className="text-court-teal" size={24} />} title="No event selections" />}
+      </section>
+
+      <section className="mb-8" aria-labelledby="for-you-events">
+        <SectionHeader className="mb-4" description={`Closed School, inherited District and Club events automatically relevant to ${selectedPlayer.first_name}.`} title="For You" />
+        <h2 className="sr-only" id="for-you-events">For You</h2>
+        {relevant.connected.length > 0 ? <div className="grid gap-3 lg:grid-cols-2">{relevant.connected.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</div> : <EmptyState compact description="No connected organisation events currently match this player's stage." icon={<EventIcon className="text-court-teal" size={24} />} title="No connected events" />}
+      </section>
+
+      <section className="mb-8" aria-labelledby="open-events">
+        <SectionHeader className="mb-4" description="Published Open events from any supported host that match this player's stage." title="Open Events" />
+        <h2 className="sr-only" id="open-events">Open Events</h2>
+        {relevant.open.length > 0 ? <div className="grid gap-3 lg:grid-cols-2">{relevant.open.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</div> : <EmptyState compact description="No Open organisation events currently match this player." icon={<EventIcon className="text-court-teal" size={24} />} title="No Open events" />}
+      </section>
+
+      {staffEventsResult.data.length > 0 ? <section className="mb-8" aria-labelledby="staff-events"><SectionHeader className="mb-4" description="Event-scoped operational assignments for your signed-in account." title="Staff Assignments" /><h2 className="sr-only" id="staff-events">Staff Assignments</h2><div className="grid gap-3 lg:grid-cols-2">{staffEventsResult.data.map((event) => <article className="surface-card p-4" key={event.assignment_id}><div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-court-navy">{event.title}</h3><p className="mt-1 text-sm font-semibold text-slate-600">{event.host_name} · {formatDateTime(event.starts_at)}</p></div><span className="ui-chip ui-chip-brand">{eventStaffRoleLabel(event.event_role)}</span></div><p className="mt-2 text-sm text-slate-600">{event.location ?? "Location to be confirmed"}</p><Link className="btn-secondary mt-4" href={`/dashboard/compete/events/${event.event_id}?player=${encodeURIComponent(selectedPlayer.id)}`}>View assignment</Link></article>)}</div></section> : null}
 
       {actionCount > 0 ? (
         <section className="mb-8" aria-labelledby="compete-actions">

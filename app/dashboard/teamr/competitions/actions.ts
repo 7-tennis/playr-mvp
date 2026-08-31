@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { canManageOrganisationEvents, loadOrganisationEvent, validateOrganisationEventInput } from "@/lib/organisation-events";
 import { getTeamRAccess, loadTeamRVenue } from "@/lib/teamr";
 import type { EventStatus } from "@/types/courtside";
+import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 const eventsPath = "/dashboard/teamr/competitions";
 
@@ -169,4 +170,91 @@ export async function transitionOrganisationEvent(formData: FormData) {
   revalidatePath(eventPath(eventId));
   revalidatePath("/dashboard/teamr");
   redirect(action === "archive" ? `${eventsPath}?message=archived` : `${eventPath(eventId)}?message=${action}ed`);
+}
+
+async function eventAssignmentClient() {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  return supabase;
+}
+
+function assignmentErrorPath(eventId: string, error: { code?: string; message?: string } | null) {
+  console.error("[organisation-events] assignment_operation_failed", {
+    code: error?.code,
+    eventId,
+    message: error?.message
+  });
+  const message = error?.message ?? "";
+  const code = message.includes("not_eligible") || message.includes("role_not_eligible")
+    ? "not_eligible"
+    : error?.code === "23505" || message.includes("duplicate_assignment")
+      ? "duplicate"
+      : message.includes("access")
+        ? "access"
+        : "assignment_failed";
+  return `${eventPath(eventId)}?error=${code}`;
+}
+
+function revalidateEventAssignments(eventId: string) {
+  revalidatePath(eventPath(eventId));
+  revalidatePath(eventsPath);
+  revalidatePath("/dashboard/compete");
+}
+
+export async function assignEventPlayer(formData: FormData) {
+  const eventId = text(formData, "eventId");
+  const playerProfileId = text(formData, "playerProfileId");
+  if (!eventId || !playerProfileId) redirect(`${eventsPath}?error=invalid_assignment`);
+  const supabase = await eventAssignmentClient();
+  const { error } = await supabase.rpc("assign_event_player", { p_event_id: eventId, p_player_profile_id: playerProfileId });
+  if (error) redirect(assignmentErrorPath(eventId, error));
+  revalidateEventAssignments(eventId);
+  redirect(`${eventPath(eventId)}?message=player_assigned`);
+}
+
+export async function removeEventPlayerAssignment(formData: FormData) {
+  const eventId = text(formData, "eventId");
+  const assignmentId = text(formData, "assignmentId");
+  if (!eventId || !assignmentId) redirect(`${eventsPath}?error=invalid_assignment`);
+  const supabase = await eventAssignmentClient();
+  const { error } = await supabase.rpc("remove_event_player_assignment", { p_assignment_id: assignmentId });
+  if (error) redirect(assignmentErrorPath(eventId, error));
+  revalidateEventAssignments(eventId);
+  redirect(`${eventPath(eventId)}?message=player_removed`);
+}
+
+export async function assignEventStaff(formData: FormData) {
+  const eventId = text(formData, "eventId");
+  const membershipId = text(formData, "membershipId");
+  const eventRole = text(formData, "eventRole");
+  if (!eventId || !membershipId || !eventRole) redirect(`${eventsPath}?error=invalid_assignment`);
+  const supabase = await eventAssignmentClient();
+  const { error } = await supabase.rpc("assign_event_staff", { p_event_id: eventId, p_membership_id: membershipId, p_event_role: eventRole });
+  if (error) redirect(assignmentErrorPath(eventId, error));
+  revalidateEventAssignments(eventId);
+  redirect(`${eventPath(eventId)}?message=staff_assigned`);
+}
+
+export async function updateEventStaffRole(formData: FormData) {
+  const eventId = text(formData, "eventId");
+  const assignmentId = text(formData, "assignmentId");
+  const eventRole = text(formData, "eventRole");
+  if (!eventId || !assignmentId || !eventRole) redirect(`${eventsPath}?error=invalid_assignment`);
+  const supabase = await eventAssignmentClient();
+  const { error } = await supabase.rpc("update_event_staff_role", { p_assignment_id: assignmentId, p_event_role: eventRole });
+  if (error) redirect(assignmentErrorPath(eventId, error));
+  revalidateEventAssignments(eventId);
+  redirect(`${eventPath(eventId)}?message=staff_updated`);
+}
+
+export async function removeEventStaffAssignment(formData: FormData) {
+  const eventId = text(formData, "eventId");
+  const assignmentId = text(formData, "assignmentId");
+  if (!eventId || !assignmentId) redirect(`${eventsPath}?error=invalid_assignment`);
+  const supabase = await eventAssignmentClient();
+  const { error } = await supabase.rpc("remove_event_staff_assignment", { p_assignment_id: assignmentId });
+  if (error) redirect(assignmentErrorPath(eventId, error));
+  revalidateEventAssignments(eventId);
+  redirect(`${eventPath(eventId)}?message=staff_removed`);
 }
