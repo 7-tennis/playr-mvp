@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { PageShell } from "@/components/page-shell";
 import { ChallengeIcon, EventIcon, MatchIcon, ParticipationIcon, RatingIcon, StatusIcon, TimeIcon } from "@/components/playr-icons";
 import { EmptyState, SectionError, SectionHeader } from "@/components/playr-ui";
@@ -13,7 +14,7 @@ import {
   resultMessage,
   UpcomingMatchCard
 } from "@/app/dashboard/play/play-shared";
-import { formatDateTime, formatLabel } from "@/lib/courtside-format";
+import { formatDate, formatDateTime, formatLabel, formatTime } from "@/lib/courtside-format";
 import { eventAudienceLabel, eventMatchesProfile, eventVisual, isRatingRelevantEvent } from "@/lib/event-visuals";
 import { eventStaffRoleLabel, loadMyEventStaffAssignments, loadProfileEventRelevance, partitionProfileEvents, type ProfileEventRelevance } from "@/lib/event-relevance";
 import { rankingCategoryForProfile, rankingCategoryLabel } from "@/lib/ranking-categories";
@@ -36,8 +37,21 @@ function competeHref(playerId: string) {
   return `/dashboard/compete?player=${encodeURIComponent(playerId)}`;
 }
 
+function eventContextLabel(type: string) {
+  if (["school", "school_district"].includes(type)) return "School";
+  if (type === "district") return "District";
+  if (["club", "club_academy"].includes(type)) return "Club";
+  return "Organisation";
+}
+
 function RelevantEventCard({ event, playerId }: { event: ProfileEventRelevance; playerId: string }) {
-  return <article className="surface-card p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="section-kicker">{formatLabel(event.host_type)} · {formatLabel(event.visibility)}{event.junior_stage ? ` · ${formatLabel(event.junior_stage)}` : ""}</p><h3 className="mt-1 font-black text-court-navy">{event.title}</h3><p className="mt-1 text-sm font-semibold text-slate-600">{event.host_name} · {formatDateTime(event.starts_at)}</p><p className="mt-2 text-sm text-slate-600">{event.location ?? "Location to be confirmed"}</p></div><span className={`ui-chip ${event.is_assigned ? "ui-chip-success" : event.visibility === "open" ? "ui-chip-brand" : "ui-chip-muted"}`}>{event.is_assigned ? "Selected" : event.visibility === "open" ? "Open" : "Eligible"}</span></div><p className="mt-3 text-sm font-bold text-court-teal">{event.relevance_reason}</p><Link className="btn-secondary mt-4" href={`/dashboard/compete/events/${event.event_id}?player=${encodeURIComponent(playerId)}`}>View event</Link></article>;
+  const state = event.is_assigned ? "Selected" : "Eligible";
+  return <Link aria-label={`View ${event.title}`} className={`group flex min-h-44 snap-start flex-col rounded-playr-lg border bg-white p-4 shadow-playr-subtle transition hover:-translate-y-0.5 hover:border-court-teal hover:shadow-playr-card ${event.is_assigned ? "border-court-teal ring-1 ring-court-teal/20" : "border-playr-border-subtle"}`} href={`/dashboard/compete/events/${event.event_id}?player=${encodeURIComponent(playerId)}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-wide text-court-teal">{eventContextLabel(event.host_type)} · {event.host_name}</p><h3 className="mt-1 line-clamp-2 text-base font-black leading-tight text-court-navy group-hover:text-court-blue">{event.title}</h3></div><span className={`ui-chip shrink-0 ${event.is_assigned ? "ui-chip-success" : "ui-chip-muted"}`}>{state}</span></div><p className="mt-3 text-sm font-bold text-court-navy">{formatDate(event.starts_at)} · {formatTime(event.starts_at)}</p><div className="mt-auto flex flex-wrap gap-1.5 pt-4"><span className="ui-chip ui-chip-muted">{event.junior_stage ? formatLabel(event.junior_stage) : "Mixed / General"}</span><span className={`ui-chip ${event.visibility === "open" ? "ui-chip-brand" : "ui-chip-muted"}`}>{formatLabel(event.visibility)}</span></div></Link>;
+}
+
+function EventSection({ children, count, empty, id, title }: { children: ReactNode; count: number; empty?: string; id: string; title: string }) {
+  if (count === 0 && !empty) return null;
+  return <section aria-labelledby={id} className="mb-6"><div className="mb-3 flex items-center gap-2"><h2 className="text-xl font-black text-court-navy" id={id}>{title}</h2>{count > 0 ? <span className="ui-chip ui-chip-muted">{count}</span> : null}</div>{count > 0 ? <div className="grid auto-cols-[minmax(17rem,82vw)] grid-flow-col gap-3 overflow-x-auto pb-2 [scrollbar-width:thin] md:grid-flow-row md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-3">{children}</div> : <p className="rounded-playr-md border border-dashed border-playr-border-strong bg-playr-surface-muted px-4 py-3 text-sm font-semibold text-playr-text-secondary">{empty}</p>}</section>;
 }
 
 export default async function CompetePage({ searchParams }: CompetePageProps) {
@@ -84,40 +98,27 @@ export default async function CompetePage({ searchParams }: CompetePageProps) {
       <StatusAlert className="mb-5" message={resultMessage(searchParams?.result)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
 
-      <section className="surface-card mb-5 p-4 sm:p-5" aria-label="Selected player">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div><p className="section-kicker">Player scope</p><h2 className="section-title mt-1">{selectedPlayer.first_name} {selectedPlayer.last_name}</h2><p className="mt-1 text-sm font-semibold text-slate-600">{rankingCategoryLabel(selectedCategory)} category · every count and card below is scoped to this player.</p></div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {data.ownProfiles.map((profile) => <Link className={`shrink-0 rounded px-3 py-2 text-sm font-black ${profile.id === selectedPlayer.id ? "bg-court-navy text-white" : "bg-slate-100 text-court-navy"}`} href={competeHref(profile.id)} key={profile.id}>{profile.first_name}</Link>)}
-          </div>
+      <section className="mb-5 rounded-playr-lg border border-playr-border-subtle bg-white p-3 shadow-playr-subtle sm:p-4" aria-label="Playing as">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><p className="section-kicker">Playing as</p><h2 className="mt-0.5 text-lg font-black text-court-navy">{selectedPlayer.first_name} {selectedPlayer.last_name} <span className="font-bold text-slate-500">· {rankingCategoryLabel(selectedCategory)}{selectedPlayer.is_junior ? " Ball" : ""}</span></h2></div>
+          <nav aria-label="Choose player" className="flex max-w-full gap-2 overflow-x-auto pb-0.5">
+            {data.ownProfiles.map((profile) => <Link aria-current={profile.id === selectedPlayer.id ? "page" : undefined} className={`min-h-10 shrink-0 rounded-playr-md px-3 py-2 text-sm font-black ${profile.id === selectedPlayer.id ? "bg-court-navy text-white" : "bg-slate-100 text-court-navy hover:bg-court-mist"}`} href={competeHref(profile.id)} key={profile.id}>{profile.first_name}</Link>)}
+          </nav>
         </div>
       </section>
 
-      <section aria-labelledby="compete-next" className="mb-8">
-        <SectionHeader className="mb-4" description="Events lead the competitive journey; direct challenges remain one step away." title="Choose your next move" />
-        <h2 className="sr-only" id="compete-next">Choose your next move</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          <ActionCard action="Browse events" description="Find published competitions and events that match this player's stage or classification." href={`/dashboard/events?profileId=${selectedPlayer.id}`} icon={<EventIcon size={22} />} meta={countLabel(eligibleEvents.length, "eligible event")} title="Events & Competitions" tone="navy" />
-          <ActionCard action="Find opponents" description="Choose a balanced match or a stronger test for this player." href={`/dashboard/play/challenges?player=${selectedPlayer.id}`} icon={<ChallengeIcon size={22} />} meta={countLabel(challengeCount, "suggestion")} title="Challenge Players" tone="green" />
+      {relevanceResult.error ? <SectionError className="mb-5" description={relevanceResult.error} /> : <>
+        <EventSection count={relevant.selected.length} id="selected-events" title="Selected">{relevant.selected.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
+        <EventSection count={relevant.connected.length} empty="No upcoming events from your connected organisations." id="for-you-events" title="For You">{relevant.connected.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
+        <EventSection count={relevant.open.length} empty="No eligible open events right now." id="open-events" title="Open Events">{relevant.open.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
+      </>}
+
+      <section aria-label="Matches & Challenges" className="mb-8 border-t border-playr-border-subtle pt-6">
+        <SectionHeader className="mb-3" title="Matches & Challenges" />
+        <div className="grid gap-3 md:grid-cols-2">
+          <ActionCard action="Find opponents" description="Choose a balanced match or a stronger test." href={`/dashboard/play/challenges?player=${selectedPlayer.id}`} icon={<ChallengeIcon size={22} />} meta={countLabel(challengeCount, "suggestion")} title="Challenge Players" tone="green" />
+          <ActionCard action="Browse events" description="Explore the existing public event catalogue." href={`/dashboard/events?profileId=${selectedPlayer.id}`} icon={<EventIcon size={22} />} meta={countLabel(eligibleEvents.length, "event")} title="More Events" tone="navy" />
         </div>
-      </section>
-
-      <section className="mb-8" aria-labelledby="selected-events">
-        <SectionHeader className="mb-4" description="Specific organiser selections for this player. Selected does not yet mean entered or confirmed." title="Selected" />
-        <h2 className="sr-only" id="selected-events">Selected</h2>
-        {relevanceResult.error ? <SectionError description={relevanceResult.error} /> : relevant.selected.length > 0 ? <div className="grid gap-3 lg:grid-cols-2">{relevant.selected.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</div> : <EmptyState compact description="Events selected by a School, District or Club organiser will appear here." icon={<EventIcon className="text-court-teal" size={24} />} title="No event selections" />}
-      </section>
-
-      <section className="mb-8" aria-labelledby="for-you-events">
-        <SectionHeader className="mb-4" description={`Closed School, inherited District and Club events automatically relevant to ${selectedPlayer.first_name}.`} title="For You" />
-        <h2 className="sr-only" id="for-you-events">For You</h2>
-        {relevant.connected.length > 0 ? <div className="grid gap-3 lg:grid-cols-2">{relevant.connected.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</div> : <EmptyState compact description="No connected organisation events currently match this player's stage." icon={<EventIcon className="text-court-teal" size={24} />} title="No connected events" />}
-      </section>
-
-      <section className="mb-8" aria-labelledby="open-events">
-        <SectionHeader className="mb-4" description="Published Open events from any supported host that match this player's stage." title="Open Events" />
-        <h2 className="sr-only" id="open-events">Open Events</h2>
-        {relevant.open.length > 0 ? <div className="grid gap-3 lg:grid-cols-2">{relevant.open.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</div> : <EmptyState compact description="No Open organisation events currently match this player." icon={<EventIcon className="text-court-teal" size={24} />} title="No Open events" />}
       </section>
 
       {staffEventsResult.data.length > 0 ? <section className="mb-8" aria-labelledby="staff-events"><SectionHeader className="mb-4" description="Event-scoped operational assignments for your signed-in account." title="Staff Assignments" /><h2 className="sr-only" id="staff-events">Staff Assignments</h2><div className="grid gap-3 lg:grid-cols-2">{staffEventsResult.data.map((event) => <article className="surface-card p-4" key={event.assignment_id}><div className="flex items-start justify-between gap-3"><div><h3 className="font-black text-court-navy">{event.title}</h3><p className="mt-1 text-sm font-semibold text-slate-600">{event.host_name} · {formatDateTime(event.starts_at)}</p></div><span className="ui-chip ui-chip-brand">{eventStaffRoleLabel(event.event_role)}</span></div><p className="mt-2 text-sm text-slate-600">{event.location ?? "Location to be confirmed"}</p><Link className="btn-secondary mt-4" href={`/dashboard/compete/events/${event.event_id}?player=${encodeURIComponent(selectedPlayer.id)}`}>View assignment</Link></article>)}</div></section> : null}
