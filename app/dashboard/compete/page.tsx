@@ -24,7 +24,7 @@ import type { CourtSideEvent } from "@/types/courtside";
 export const dynamic = "force-dynamic";
 
 type CompetePageProps = {
-  searchParams?: { error?: string; invite?: string; player?: string; result?: string };
+  searchParams?: { error?: string; invite?: string; participation?: string; player?: string; result?: string };
 };
 
 type EventEntrySummary = {
@@ -45,8 +45,15 @@ function eventContextLabel(type: string) {
 }
 
 function RelevantEventCard({ event, playerId }: { event: ProfileEventRelevance; playerId: string }) {
-  const state = event.is_assigned ? "Selected" : "Eligible";
-  return <Link aria-label={`View ${event.title}`} className={`group flex min-h-44 snap-start flex-col rounded-playr-lg border bg-white p-4 shadow-playr-subtle transition hover:-translate-y-0.5 hover:border-court-teal hover:shadow-playr-card ${event.is_assigned ? "border-court-teal ring-1 ring-court-teal/20" : "border-playr-border-subtle"}`} href={`/dashboard/compete/events/${event.event_id}?player=${encodeURIComponent(playerId)}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-wide text-court-teal">{eventContextLabel(event.host_type)} · {event.host_name}</p><h3 className="mt-1 line-clamp-2 text-base font-black leading-tight text-court-navy group-hover:text-court-blue">{event.title}</h3></div><span className={`ui-chip shrink-0 ${event.is_assigned ? "ui-chip-success" : "ui-chip-muted"}`}>{state}</span></div><p className="mt-3 text-sm font-bold text-court-navy">{formatDate(event.starts_at)} · {formatTime(event.starts_at)}</p><div className="mt-auto flex flex-wrap gap-1.5 pt-4"><span className="ui-chip ui-chip-muted">{event.junior_stage ? formatLabel(event.junior_stage) : "Mixed / General"}</span><span className={`ui-chip ${event.visibility === "open" ? "ui-chip-brand" : "ui-chip-muted"}`}>{formatLabel(event.visibility)}</span></div></Link>;
+  const state = event.participation_status === "invited" ? "Response required"
+    : event.participation_status === "entry_requested" ? "Entry requested"
+      : event.participation_status === "confirmed" ? "Confirmed"
+        : "Eligible";
+  const stateTone = event.participation_status === "confirmed" ? "ui-chip-success"
+    : event.participation_status === "invited" ? "ui-chip-warning"
+      : event.participation_status === "entry_requested" ? "ui-chip-brand"
+        : "ui-chip-muted";
+  return <Link aria-label={`View ${event.title}`} className={`group flex min-h-44 snap-start flex-col rounded-playr-lg border bg-white p-4 shadow-playr-subtle transition hover:-translate-y-0.5 hover:border-court-teal hover:shadow-playr-card ${event.participation_status ? "border-court-teal ring-1 ring-court-teal/20" : "border-playr-border-subtle"}`} href={`/dashboard/compete/events/${event.event_id}?player=${encodeURIComponent(playerId)}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-black uppercase tracking-wide text-court-teal">{eventContextLabel(event.host_type)} · {event.host_name}</p><h3 className="mt-1 line-clamp-2 text-base font-black leading-tight text-court-navy group-hover:text-court-blue">{event.title}</h3></div><span className={`ui-chip shrink-0 ${stateTone}`}>{state}</span></div><p className="mt-3 text-sm font-bold text-court-navy">{formatDate(event.starts_at)} · {formatTime(event.starts_at)}</p><div className="mt-auto flex flex-wrap gap-1.5 pt-4"><span className="ui-chip ui-chip-muted">{event.junior_stage ? formatLabel(event.junior_stage) : "Mixed / General"}</span><span className={`ui-chip ${event.visibility === "open" ? "ui-chip-brand" : "ui-chip-muted"}`}>{formatLabel(event.visibility)}</span></div></Link>;
 }
 
 function EventSection({ children, count, empty, id, title }: { children: ReactNode; count: number; empty?: string; id: string; title: string }) {
@@ -96,6 +103,7 @@ export default async function CompetePage({ searchParams }: CompetePageProps) {
     <PageShell eyebrow="Competitive play" subtitle={`${selectedPlayer.first_name}'s events, challenges and match activity.`} title="Compete">
       <StatusAlert className="mb-5" message={inviteMessage(searchParams?.invite)} tone="success" />
       <StatusAlert className="mb-5" message={resultMessage(searchParams?.result)} tone="success" />
+      <StatusAlert className="mb-5" message={searchParams?.participation === "declined" ? "Invitation declined." : null} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
 
       <section className="mb-5 rounded-playr-lg border border-playr-border-subtle bg-white p-3 shadow-playr-subtle sm:p-4" aria-label="Playing as">
@@ -108,7 +116,9 @@ export default async function CompetePage({ searchParams }: CompetePageProps) {
       </section>
 
       {relevanceResult.error ? <SectionError className="mb-5" description={relevanceResult.error} /> : <>
-        <EventSection count={relevant.selected.length} id="selected-events" title="Selected">{relevant.selected.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
+        <EventSection count={relevant.actionRequired.length} id="event-invitations" title="Action Required">{relevant.actionRequired.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
+        <EventSection count={relevant.confirmed.length} id="confirmed-events" title="My Competitions">{relevant.confirmed.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
+        <EventSection count={relevant.pending.length} id="pending-events" title="Pending">{relevant.pending.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
         <EventSection count={relevant.connected.length} empty="No upcoming events from your connected organisations." id="for-you-events" title="For You">{relevant.connected.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
         <EventSection count={relevant.open.length} empty="No eligible open events right now." id="open-events" title="Open Events">{relevant.open.map((event) => <RelevantEventCard event={event} key={event.event_id} playerId={selectedPlayer.id} />)}</EventSection>
       </>}
@@ -125,8 +135,8 @@ export default async function CompetePage({ searchParams }: CompetePageProps) {
 
       {actionCount > 0 ? (
         <section className="mb-8" aria-labelledby="compete-actions">
-          <SectionHeader className="mb-4" description={`${actionCount} item${actionCount === 1 ? "" : "s"} need a response.`} title="Action Required" />
-          <h2 className="sr-only" id="compete-actions">Action Required</h2>
+          <SectionHeader className="mb-4" description={`${actionCount} item${actionCount === 1 ? "" : "s"} need a response.`} title="Match Responses" />
+          <h2 className="sr-only" id="compete-actions">Match Responses</h2>
           <div className="grid gap-3 lg:grid-cols-2">{actionInvites.map((invite) => <UpcomingMatchCard invite={invite} key={invite.id} ownProfileIds={selectedPlayerIds} />)}{actionMatches.map((match) => <ResultCard currentUserId={data.userId} key={match.id} match={match} />)}</div>
         </section>
       ) : null}

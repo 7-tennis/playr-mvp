@@ -1,5 +1,5 @@
 import type { createServerSupabaseClient } from "@/utils/supabase/server";
-import type { EventStaffRole, JuniorStage } from "@/types/courtside";
+import type { EventParticipationSource, EventParticipationStatus, EventStaffRole, JuniorStage } from "@/types/courtside";
 
 type ServerSupabase = Awaited<ReturnType<typeof createServerSupabaseClient>>;
 
@@ -16,9 +16,13 @@ export type ProfileEventRelevance = {
   ends_at: string;
   location: string | null;
   capacity: number | null;
-  relevance_kind: "eligible" | "selected";
+  relevance_kind: "eligible" | "selected" | Exclude<EventParticipationStatus, "declined" | "removed">;
   relevance_reason: string;
   is_assigned: boolean;
+  participation_id: string | null;
+  participation_status: Exclude<EventParticipationStatus, "declined" | "removed"> | null;
+  participation_source: EventParticipationSource | null;
+  confirmed_count: number;
 };
 
 export type EventPlayerAssignmentView = {
@@ -27,7 +31,12 @@ export type EventPlayerAssignmentView = {
   player_name: string;
   is_junior: boolean;
   junior_stage: JuniorStage | null;
+  context_name: string;
+  participation_status: Exclude<EventParticipationStatus, "removed">;
+  participation_source: EventParticipationSource;
   assigned_at: string;
+  responded_at: string | null;
+  confirmed_at: string | null;
 };
 
 export type EventPlayerCandidate = {
@@ -80,10 +89,14 @@ export function eventStageMatchesProfile(eventStage: string | null, profile: { i
 }
 
 export function partitionProfileEvents(events: ProfileEventRelevance[]) {
+  const actionRequired = events.filter((event) => event.participation_status === "invited" || (!event.participation_status && event.is_assigned));
   return {
-    selected: events.filter((event) => event.is_assigned),
-    connected: events.filter((event) => !event.is_assigned && event.visibility === "closed"),
-    open: events.filter((event) => !event.is_assigned && event.visibility === "open")
+    actionRequired,
+    selected: actionRequired,
+    pending: events.filter((event) => event.participation_status === "entry_requested"),
+    confirmed: events.filter((event) => event.participation_status === "confirmed"),
+    connected: events.filter((event) => !event.participation_status && !event.is_assigned && event.visibility === "closed"),
+    open: events.filter((event) => !event.participation_status && !event.is_assigned && event.visibility === "open")
   };
 }
 
@@ -131,6 +144,7 @@ export async function loadEventOperations(supabase: ServerSupabase, eventId: str
     staffCandidates: (staffCandidates.data ?? []) as EventStaffCandidate[],
     canManagePlayers: !players.error && !candidates.error,
     canManageStaff: !staff.error && !staffCandidates.error,
-    error: players.error ?? staff.error
+    error: players.error ?? staff.error,
+    confirmedCount: ((players.data ?? []) as EventPlayerAssignmentView[]).filter((player) => player.participation_status === "confirmed").length
   };
 }

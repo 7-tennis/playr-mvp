@@ -36,7 +36,7 @@ export async function loadOrganisationEvents(context: AuthenticatedTeamRContext,
   const events = (data ?? []) as unknown as Array<Omit<OrganisationEvent, "assignedPlayerCount" | "assignedStaffCount">>;
   const eventIds = events.map((event) => event.id);
   const [playerResult, staffResult] = eventIds.length ? await Promise.all([
-    context.supabase.from("event_player_assignments").select("event_id").in("event_id", eventIds).eq("status", "active"),
+    context.supabase.from("event_player_assignments").select("event_id").in("event_id", eventIds).eq("status", "confirmed"),
     context.supabase.from("event_staff_assignments").select("event_id").in("event_id", eventIds).eq("status", "active")
   ]) : [{ data: [] }, { data: [] }];
   const counts = (rows: Array<{ event_id: string }> | null) => rows?.reduce((map, row) => map.set(row.event_id, (map.get(row.event_id) ?? 0) + 1), new Map<string, number>()) ?? new Map<string, number>();

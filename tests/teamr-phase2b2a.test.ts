@@ -24,18 +24,22 @@ const event = (overrides: Partial<ProfileEventRelevance> = {}): ProfileEventRele
   relevance_kind: "eligible",
   relevance_reason: "Eligible through Laerskool Kenmare",
   is_assigned: false,
+  participation_id: null,
+  participation_status: null,
+  participation_source: null,
+  confirmed_count: 0,
   ...overrides
 });
 
 test("compact player selector appears before event discovery", () => {
   const page = compete();
-  assert.ok(page.indexOf("Playing as") < page.indexOf('title="Selected"'));
+  assert.ok(page.indexOf("Playing as") < page.indexOf('title="Action Required"'));
   assert.match(page, /aria-label="Choose player"/);
   assert.match(page, /aria-current=\{profile\.id === selectedPlayer\.id \? "page"/);
 });
 
-test("event hierarchy is Selected, For You, then Open Events", () => {
-  assert.match(compete(), /title="Selected"[\s\S]*title="For You"[\s\S]*title="Open Events"/);
+test("event hierarchy promotes participation before discovery", () => {
+  assert.match(compete(), /title="Action Required"[\s\S]*title="My Competitions"[\s\S]*title="Pending"[\s\S]*title="For You"[\s\S]*title="Open Events"/);
 });
 
 test("Selected events are assigned and never repeated in another group", () => {
@@ -58,9 +62,9 @@ test("unassigned Open events appear in Open Events", () => {
   assert.equal(groups.selected.length + groups.connected.length, 0);
 });
 
-test("Selected group is hidden when empty", () => {
+test("Action Required group is hidden when empty", () => {
   assert.match(compete(), /if \(count === 0 && !empty\) return null/);
-  assert.match(compete(), /<EventSection count=\{relevant\.selected\.length\} id="selected-events" title="Selected">/);
+  assert.match(compete(), /<EventSection count=\{relevant\.actionRequired\.length\} id="event-invitations" title="Action Required">/);
 });
 
 test("For You and Open Events use compact empty messages", () => {
@@ -90,7 +94,7 @@ test("compact event cards retain essential discovery metadata", () => {
   assert.match(card, /formatDate\(event\.starts_at\).*formatTime\(event\.starts_at\)/);
   assert.match(card, /event\.junior_stage/);
   assert.match(card, /event\.visibility/);
-  assert.match(card, /event\.is_assigned/);
+  assert.match(card, /event\.participation_status/);
 });
 
 test("compact cards omit location, descriptions and relevance prose", () => {

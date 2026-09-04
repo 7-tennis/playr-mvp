@@ -12,7 +12,8 @@ const event = (overrides: Partial<ProfileEventRelevance> = {}): ProfileEventRele
   event_id: "event-1", title: "Green Event", description: null, host_id: "host-1", host_name: "Kenmare",
   host_type: "school", visibility: "closed", junior_stage: "green_ball", starts_at: "2026-09-01T08:00:00Z",
   ends_at: "2026-09-01T10:00:00Z", location: "Courts", capacity: 16, relevance_kind: "eligible",
-  relevance_reason: "Eligible through Kenmare", is_assigned: false, ...overrides
+  relevance_reason: "Eligible through Kenmare", is_assigned: false, participation_id: null,
+  participation_status: null, participation_source: null, confirmed_count: 0, ...overrides
 });
 
 test("profile selector is limited to canonical manageable profiles", () => {
@@ -61,7 +62,7 @@ test("staff assignment is unique per event and user", () => assert.match(sql(), 
 test("selected events are promoted separately from eligible events", () => {
   const result = partitionProfileEvents([event(), event({ event_id: "event-2", is_assigned: true, relevance_kind: "selected" })]);
   assert.equal(result.selected.length, 1); assert.equal(result.connected.length, 1);
-  assert.match(compete(), /title="Selected"[\s\S]*title="For You"[\s\S]*title="Open Events"/);
+  assert.match(compete(), /title="Action Required"[\s\S]*title="My Competitions"[\s\S]*title="Pending"[\s\S]*title="For You"[\s\S]*title="Open Events"/);
 });
 test("eligibility never creates assignment or occupies capacity", () => assert.match(repoFile("app/dashboard/teamr/competitions/[eventId]/page.tsx"), /Eligibility alone does not occupy capacity/));
 test("profile-facing event detail contains no organiser controls", () => {
@@ -91,7 +92,7 @@ test("guessed assignment IDs are checked against event authority", () => {
   assert.match(sql(), /user_can_manage_event_staff\(target\.event_id/);
 });
 test("server actions never accept a host organisation ID", () => {
-  assert.match(actions(), /rpc\("assign_event_player"/); assert.doesNotMatch(actions(), /text\(formData, "venueId"\)/);
+  assert.match(actions(), /rpc\("invite_event_player"/); assert.doesNotMatch(actions(), /text\(formData, "venueId"\)/);
 });
 test("Open player discovery requires a search and is capped", () => assert.match(sql(), /event_visibility = 'open' and length\(btrim[\s\S]*< 2[\s\S]*limit 60/));
 test("ranking publication is not an eligibility dependency", () => assert.doesNotMatch(sql(), /ranking|publication/));

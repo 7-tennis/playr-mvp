@@ -186,9 +186,11 @@ function assignmentErrorPath(eventId: string, error: { code?: string; message?: 
     message: error?.message
   });
   const message = error?.message ?? "";
-  const code = message.includes("not_eligible") || message.includes("role_not_eligible")
+  const code = message.includes("event_full")
+    ? "event_full"
+    : message.includes("not_eligible") || message.includes("role_not_eligible")
     ? "not_eligible"
-    : error?.code === "23505" || message.includes("duplicate_assignment")
+    : error?.code === "23505" || message.includes("duplicate_assignment") || message.includes("duplicate_participation")
       ? "duplicate"
       : message.includes("access")
         ? "access"
@@ -207,10 +209,25 @@ export async function assignEventPlayer(formData: FormData) {
   const playerProfileId = text(formData, "playerProfileId");
   if (!eventId || !playerProfileId) redirect(`${eventsPath}?error=invalid_assignment`);
   const supabase = await eventAssignmentClient();
-  const { error } = await supabase.rpc("assign_event_player", { p_event_id: eventId, p_player_profile_id: playerProfileId });
+  const { error } = await supabase.rpc("invite_event_player", { p_event_id: eventId, p_player_profile_id: playerProfileId });
   if (error) redirect(assignmentErrorPath(eventId, error));
   revalidateEventAssignments(eventId);
-  redirect(`${eventPath(eventId)}?message=player_assigned`);
+  redirect(`${eventPath(eventId)}?message=player_invited`);
+}
+
+export async function reviewEventEntryRequest(formData: FormData) {
+  const eventId = text(formData, "eventId");
+  const assignmentId = text(formData, "assignmentId");
+  const decision = text(formData, "decision");
+  if (!eventId || !assignmentId || !["approve", "reject"].includes(decision)) redirect(`${eventsPath}?error=invalid_assignment`);
+  const supabase = await eventAssignmentClient();
+  const { error } = await supabase.rpc("review_event_entry_request", {
+    p_approve: decision === "approve",
+    p_assignment_id: assignmentId
+  });
+  if (error) redirect(assignmentErrorPath(eventId, error));
+  revalidateEventAssignments(eventId);
+  redirect(`${eventPath(eventId)}?message=${decision === "approve" ? "entry_approved" : "entry_rejected"}`);
 }
 
 export async function removeEventPlayerAssignment(formData: FormData) {

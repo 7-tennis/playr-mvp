@@ -8,6 +8,8 @@ export type JuniorAchievementType = "automatic" | "coach_approved" | "admin_appr
 export type Sport = "tennis" | "pickleball" | "futsal" | "multi_sport";
 export type EventStatus = "draft" | "published" | "cancelled" | "completed";
 export type EventVisibility = "closed" | "open";
+export type EventParticipationStatus = "invited" | "entry_requested" | "confirmed" | "declined" | "removed";
+export type EventParticipationSource = "organiser_invite" | "player_request";
 export type EventAssignmentStatus = "active" | "removed";
 export type EventStaffRole = "event_manager" | "coordinator" | "coach" | "official";
 export type PaymentStatus = "unpaid" | "pending" | "paid" | "refunded" | "cancelled";
@@ -215,9 +217,14 @@ export interface EventPlayerAssignment {
   id: string;
   event_id: string;
   player_profile_id: string;
-  status: EventAssignmentStatus;
+  status: EventParticipationStatus;
+  participation_source: EventParticipationSource;
   assigned_by_user_id: string;
   assigned_at: string;
+  responded_at: string | null;
+  responded_by_user_id: string | null;
+  confirmed_at: string | null;
+  confirmed_by_user_id: string | null;
   removed_by_user_id: string | null;
   removed_at: string | null;
   created_at: string;
