@@ -61,5 +61,9 @@ export function formatJuniorStage(value: string | null | undefined) {
 }
 
 export function formatJuniorRating(stage: string | null | undefined, rating: number | null | undefined) {
-  return `${formatJuniorStage(stage)} ${(rating ?? 2.5).toFixed(1)}`;
+  return `${formatJuniorStage(stage)} ${formatRating(rating ?? 2.5)}`;
+}
+
+export function formatRating(rating: number) {
+  return Number(rating).toFixed(2);
 }

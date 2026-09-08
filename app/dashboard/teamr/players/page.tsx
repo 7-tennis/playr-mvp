@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { EntriesIcon, ParticipationIcon, RatingIcon, StageIcon } from "@/components/playr-icons";
-import { formatLabel } from "@/lib/courtside-format";
+import { formatLabel, formatRating } from "@/lib/courtside-format";
 import { StatusAlert } from "@/components/status-alert";
 import { SubmitButton } from "@/components/submit-button";
 import { canReviewTeamRPlayerRequests, loadTeamRPlayerRequests, loadTeamRPlayers } from "@/lib/teamr";
@@ -51,10 +51,10 @@ export default async function TeamRPlayersPage({ searchParams }: { searchParams?
         <section aria-label="TeamR players" className="grid gap-3 lg:grid-cols-2">
           {players.map((player) => (
             <article className="surface-card p-4" key={player.id}>
-              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate font-black text-court-navy">{player.name}</h2><p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">Active organisation player</p></div><span className="ui-chip ui-chip-brand">{player.isJunior ? formatLabel(player.juniorStage ?? "not_sure") : "Adult"}</span></div>
+              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate font-black text-court-navy">{player.name}</h2><p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">Active organisation player</p>{player.schoolAffiliation ? <p className="mt-1 text-xs font-semibold text-court-teal">{player.schoolAffiliation}</p> : null}</div><span className="ui-chip ui-chip-brand">{player.isJunior ? formatLabel(player.juniorStage ?? "not_sure") : "Adult"}</span></div>
               <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
                 <div className="rounded-lg bg-slate-50 p-3"><StageIcon className="text-court-teal" size={16} /><p className="mt-2 text-xs font-bold text-slate-500">Stage</p><p className="font-black text-court-navy">{player.isJunior ? formatLabel(player.juniorStage ?? "not_sure") : "Open"}</p></div>
-                <div className="rounded-lg bg-slate-50 p-3"><RatingIcon className="text-court-teal" rating={player.rating ?? 0} size={16} /><p className="mt-2 text-xs font-bold text-slate-500">Rating</p><p className="font-black text-court-navy">{player.rating == null ? "Not rated" : player.rating.toFixed(2)}</p></div>
+                <div className="rounded-lg bg-slate-50 p-3"><RatingIcon className="text-court-teal" rating={player.rating ?? 0} size={16} /><p className="mt-2 text-xs font-bold text-slate-500">Rating</p><p className="font-black text-court-navy">{player.rating == null ? "Not rated" : formatRating(player.rating)}</p></div>
                 <div className="col-span-2 rounded-lg bg-slate-50 p-3 sm:col-span-1"><ParticipationIcon className="text-court-teal" size={16} /><p className="mt-2 text-xs font-bold text-slate-500">Participation</p><p className="font-black text-court-navy">{player.participationScore} pts</p></div>
               </div>
             </article>

@@ -17,7 +17,7 @@ import {
   TimeIcon
 } from "@/components/playr-icons";
 import { SubmitButton } from "@/components/submit-button";
-import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { formatDate, formatDateTime, formatJuniorRating, formatLabel, formatRating } from "@/lib/courtside-format";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type {
@@ -301,7 +301,7 @@ export function profileRatingLabel(profile: ProfileOption, ratingsByProfileId: M
   }
 
   const rating = ratingsByProfileId.get(profile.id);
-  return rating ? rating.rating_value.toFixed(1) : `${playerLevelRating(profile.player_level).toFixed(1)} est.`;
+  return rating ? formatRating(rating.rating_value) : `${formatRating(playerLevelRating(profile.player_level))} est.`;
 }
 
 export function candidateRatingValue(candidate: MatchCandidate, detailsByProfileId: Map<string, CandidateProfileDetail>, ratingsByProfileId: Map<string, Rating>) {
@@ -319,7 +319,7 @@ export function candidateRatingLabel(candidate: MatchCandidate, detailsByProfile
   }
 
   const rating = ratingsByProfileId.get(candidate.id);
-  return rating ? rating.rating_value.toFixed(1) : `${playerLevelRating(candidate.player_level).toFixed(1)} est.`;
+  return rating ? formatRating(rating.rating_value) : `${formatRating(playerLevelRating(candidate.player_level))} est.`;
 }
 
 export function possibleUnlocks(profile: ProfileOption, stronger = false) {

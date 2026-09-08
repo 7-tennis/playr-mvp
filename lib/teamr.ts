@@ -16,6 +16,7 @@ export type TeamRPlayer = {
   participationScore: number;
   rating: number | null;
   ratingConfidence: RatingConfidence | null;
+  schoolAffiliation: string | null;
 };
 
 export type TeamRPlayerRequest = {
@@ -24,6 +25,16 @@ export type TeamRPlayerRequest = {
   name: string;
   parentName: string | null;
   requestedAt: string;
+};
+
+export type TeamRPerson = {
+  createdAt: string;
+  email: string | null;
+  id: string;
+  kind: "membership" | "invitation";
+  name: string;
+  role: OrganisationRole;
+  status: "active" | "pending" | "suspended";
 };
 
 export type TeamRTeam = {
@@ -54,10 +65,17 @@ type TeamRPlayerLinkRow = {
   } | null;
 };
 
-type RatingRow = {
-  confidence: RatingConfidence;
-  profile_id: string;
-  rating_value: number;
+type TeamRPlayerRpcRow = {
+  approved_at: string | null;
+  is_junior: boolean;
+  junior_stage: JuniorStage | null;
+  participation_score: number;
+  player_name: string;
+  player_profile_id: string;
+  rating_confidence: RatingConfidence | null;
+  rating_value: number | null;
+  school_affiliation: string | null;
+  source_organisation_player_link_id: string;
 };
 
 type TeamRPlayerRequestRow = {
@@ -65,6 +83,16 @@ type TeamRPlayerRequestRow = {
   parent: { first_name: string; last_name: string } | null;
   profile: { first_name: string; junior_stage: JuniorStage | null; last_name: string } | null;
   updated_at: string;
+};
+
+type TeamRPersonRow = {
+  access_status: TeamRPerson["status"];
+  created_at: string;
+  email: string | null;
+  organisation_role: OrganisationRole;
+  person_name: string;
+  record_id: string;
+  record_kind: TeamRPerson["kind"];
 };
 
 type TeamRTeamRow = {
@@ -124,62 +152,81 @@ export async function loadTeamRVenue(context: AuthenticatedTeamRContext) {
   return (data as Pick<Venue, "id" | "name" | "slug" | "status" | "organisation_type"> | null) ?? null;
 }
 
-export async function loadTeamRPlayers(context: AuthenticatedTeamRContext) {
+export async function loadTeamRPlayers(context: AuthenticatedTeamRContext, includeInherited = true) {
   if (!context.venueId) return { data: [] as TeamRPlayer[], error: null };
 
-  const { data, error } = await context.supabase
-    .from("organisation_player_links")
-    .select(`
-      id,
-      player_profile_id,
-      approved_at,
-      profile:player_profile_id(id,first_name,last_name,is_junior,junior_stage,junior_rating,participation_score)
-    `)
-    .eq("venue_id", context.venueId)
-    .eq("status", "active")
-    .order("approved_at", { ascending: false, nullsFirst: false })
-    .limit(1000);
+  const { data, error } = await context.supabase.rpc("get_teamr_players", {
+    p_include_inherited: includeInherited,
+    p_venue_id: context.venueId
+  });
 
   if (error) {
     console.error("[teamr] players_load_failed", { code: error.code, venueId: context.venueId });
     return { data: [] as TeamRPlayer[], error: "TeamR player data could not be loaded." };
   }
 
-  const links = ((data ?? []) as unknown as TeamRPlayerLinkRow[]).filter((link) => link.profile);
-  const profileIds = links.map((link) => link.player_profile_id);
-  const ratingsResult = profileIds.length
-    ? await context.supabase.from("ratings").select("profile_id,rating_value,confidence").in("profile_id", profileIds)
-    : { data: [] as RatingRow[], error: null };
-
-  if (ratingsResult.error) {
-    console.warn("[teamr] ratings_load_failed", { code: ratingsResult.error.code, venueId: context.venueId });
-  }
-
-  const ratings = new Map(((ratingsResult.data ?? []) as RatingRow[]).map((rating) => [rating.profile_id, rating]));
-
   return {
-    data: links.map((link) => {
-      const profile = link.profile!;
-      const adultRating = ratings.get(profile.id) ?? null;
-
-      return {
-        approvedAt: link.approved_at,
-        id: profile.id,
-        isJunior: profile.is_junior,
-        juniorStage: profile.junior_stage,
-        linkId: link.id,
-        name: `${profile.first_name} ${profile.last_name}`,
+    data: ((data ?? []) as TeamRPlayerRpcRow[]).map((row) => ({
+        approvedAt: row.approved_at,
+        id: row.player_profile_id,
+        isJunior: row.is_junior,
+        juniorStage: row.junior_stage,
+        linkId: row.source_organisation_player_link_id,
+        name: row.player_name,
         organisationRole: "player" as const,
-        participationScore: profile.participation_score ?? 0,
-        rating: profile.is_junior ? profile.junior_rating : adultRating?.rating_value ?? null,
-        ratingConfidence: profile.is_junior ? null : adultRating?.confidence ?? null
-      };
-    }),
+        participationScore: row.participation_score ?? 0,
+        rating: row.rating_value,
+        ratingConfidence: row.rating_confidence,
+        schoolAffiliation: row.school_affiliation
+      })),
     error: null
   };
 }
 
 export { canReviewTeamRPlayerRequests };
+
+export const teamRStaffRoles: Array<{ label: string; value: OrganisationRole }> = [
+  { label: "Sports Coordinator", value: "sports_coordinator" },
+  { label: "Team Manager", value: "team_manager" },
+  { label: "Head Coach", value: "head_coach" },
+  { label: "Coach", value: "coach" },
+  { label: "Assistant Coach", value: "assistant_coach" }
+];
+
+export function canManageTeamRPeople(context: AuthenticatedTeamRContext) {
+  return context.role === "platform_admin"
+    || context.activeOrganisationRole === "organisation_admin"
+    || context.activeOrganisationRole === "sports_coordinator";
+}
+
+export function teamRStaffRolesForContext(context: AuthenticatedTeamRContext) {
+  return context.activeOrganisationRole === "sports_coordinator"
+    ? teamRStaffRoles.filter((role) => role.value !== "sports_coordinator")
+    : teamRStaffRoles;
+}
+
+export async function loadTeamRPeople(context: AuthenticatedTeamRContext) {
+  if (!context.venueId) return { data: [] as TeamRPerson[], error: null };
+  const { data, error } = await context.supabase.rpc("get_teamr_people", { p_venue_id: context.venueId });
+
+  if (error) {
+    console.error("[teamr] people_load_failed", { code: error.code, venueId: context.venueId });
+    return { data: [] as TeamRPerson[], error: "People and access could not be loaded." };
+  }
+
+  return {
+    data: ((data ?? []) as TeamRPersonRow[]).map((row) => ({
+      createdAt: row.created_at,
+      email: row.email,
+      id: row.record_id,
+      kind: row.record_kind,
+      name: row.person_name,
+      role: row.organisation_role,
+      status: row.access_status
+    })),
+    error: null
+  };
+}
 
 export async function loadTeamRPlayerRequests(context: AuthenticatedTeamRContext) {
   if (!context.venueId) return { data: [] as TeamRPlayerRequest[], error: null };
@@ -271,7 +318,7 @@ export async function loadTeamRTeam(context: AuthenticatedTeamRContext, teamId: 
       .eq("team_id", teamId)
       .eq("venue_id", context.venueId)
       .order("created_at", { ascending: true }),
-    loadTeamRPlayers(context)
+    loadTeamRPlayers(context, false)
   ]);
 
   if (rosterError) return { data: null, error: "The team roster could not be loaded." };

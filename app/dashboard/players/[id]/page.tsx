@@ -22,7 +22,7 @@ import {
   StageIcon,
   StatusIcon
 } from "@/components/playr-icons";
-import { formatDate, formatDateTime, formatJuniorRating, formatLabel } from "@/lib/courtside-format";
+import { formatDate, formatDateTime, formatJuniorRating, formatLabel, formatRating } from "@/lib/courtside-format";
 import { isPendingSessionRequest, loadPlayerSessionRequests, loadPrivatePlayerSessionActivity } from "@/lib/coach-session-requests";
 import { connectedRankingForScope, loadConnectedRankingSummaries, type ConnectedRankingSummary } from "@/lib/connected-rankings";
 import { juniorParticipationLeads, playerStageVisual } from "@/lib/player-stage-visuals";
@@ -415,7 +415,7 @@ export default async function PlayerDetailPage({ params, searchParams }: PlayerD
     if (!academyLessonByVenue.has(lesson.venue_id)) academyLessonByVenue.set(lesson.venue_id, lesson);
   });
 
-  const ratingText = player.is_junior ? formatJuniorRating(player.junior_stage, player.junior_rating) : rating ? rating.rating_value.toFixed(1) : "No active rating yet";
+  const ratingText = player.is_junior ? formatJuniorRating(player.junior_stage, player.junior_rating) : rating ? formatRating(rating.rating_value) : "No active rating yet";
   const confidenceText = player.is_junior ? formatLabel(player.junior_rating_confidence) : rating ? formatLabel(rating.confidence) : "No rating yet";
   const participationText = player.is_junior ? `${player.participation_score} pts` : `${player.participation_score ?? 0} pts`;
   const requestReturnTo = `/dashboard/players/${player.id}#organisations`;

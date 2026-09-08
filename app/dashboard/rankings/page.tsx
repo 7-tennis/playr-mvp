@@ -4,7 +4,7 @@ import { PageShell } from "@/components/page-shell";
 import { RankingScopeFilter } from "@/components/ranking-scope-filter";
 import { ClubIcon, DistrictIcon, LeaderboardIcon, ParticipationIcon, RatingIcon, SchoolIcon, StageIcon } from "@/components/playr-icons";
 import { EmptyState, SectionError } from "@/components/playr-ui";
-import { formatDateTime } from "@/lib/courtside-format";
+import { formatDateTime, formatRating } from "@/lib/courtside-format";
 import { loadPublicRankingFilters, loadPublicRankings } from "@/lib/public-rankings";
 import { playrRankingCategories, rankingCategoryDescription, rankingCategoryLabel, rankingMetricForCategory, type PlayRRankingCategory } from "@/lib/ranking-categories";
 import { rankingScopeLabel, resolveRankingContext } from "@/lib/ranking-scope";
@@ -156,7 +156,7 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
                   {row.public_region ? <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500"><DistrictIcon size={13} /> {row.public_region}</p> : null}
                 </div>
                 <div className="text-right">
-                  <p className="inline-flex items-center gap-1.5 text-lg font-black text-court-navy">{metric === "rating" ? <RatingIcon rating={row.metric_value} size={18} stage={category === "open" ? "open" : category} /> : <ParticipationIcon size={18} />}{metric === "rating" ? Number(row.metric_value).toFixed(1) : row.metric_value}</p>
+                  <p className="inline-flex items-center gap-1.5 text-lg font-black text-court-navy">{metric === "rating" ? <RatingIcon rating={row.metric_value} size={18} stage={category === "open" ? "open" : category} /> : <ParticipationIcon size={18} />}{metric === "rating" ? formatRating(row.metric_value) : row.metric_value}</p>
                   <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{metric === "rating" ? "Rating" : "Points"}</p>
                   <p className="mt-1 text-[10px] font-semibold text-slate-500">{metric === "rating" ? `${row.matches_played} matches` : `${row.events_played} events`}</p>
                 </div>

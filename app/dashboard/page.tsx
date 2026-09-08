@@ -5,7 +5,7 @@ import { ParticipationIcon, RatingIcon, StageIcon } from "@/components/playr-ico
 import { PlayerProfileCard } from "@/components/player-profile-card";
 import { PlayRLinkButton, SectionError, SectionHeader } from "@/components/playr-ui";
 import { StatusAlert } from "@/components/status-alert";
-import { formatJuniorRating } from "@/lib/courtside-format";
+import { formatJuniorRating, formatRating } from "@/lib/courtside-format";
 import { connectedRankingForScope, loadConnectedRankingSummaries, type ConnectedRankingSummary } from "@/lib/connected-rankings";
 import { loadPlayerSessionRequests } from "@/lib/coach-session-requests";
 import { buildPlayerActivitySummaries, type PlayerActivitySummary } from "@/lib/player-activity-summary";
@@ -84,7 +84,7 @@ function MemberCard({
   organisations: PlayerOrganisation[];
 }) {
   const name = profile ? playerName(profile) : "Set up your profile";
-  const ratingText = rating ? rating.rating_value.toFixed(1) : "No active rating yet";
+  const ratingText = rating ? formatRating(rating.rating_value) : "No active rating yet";
   const href = profile ? `/dashboard/players/${profile.id}` : "/dashboard/profile";
 
   return (
