@@ -206,6 +206,32 @@ test("new definer RPCs pin search_path and expose authenticated execution only",
   assert.doesNotMatch(migration(), /grant execute[^\n]*to anon/);
 });
 
+test("TeamR Players and People clients match the deployed migration RPC contracts", () => {
+  const teamr = repoFile("lib/teamr.ts");
+  assert.match(teamr, /rpc\("get_teamr_players", \{[\s\S]*?p_include_inherited: includeInherited,[\s\S]*?p_venue_id: context\.venueId[\s\S]*?\}\)/);
+  assert.match(teamr, /rpc\("get_teamr_people", \{ p_venue_id: context\.venueId \}\)/);
+  assert.match(migration(), /create function public\.get_teamr_players\(\s*p_venue_id uuid,\s*p_include_inherited boolean default true\s*\)/);
+  assert.match(migration(), /create function public\.get_teamr_people\(p_venue_id uuid\)/);
+});
+
+test("TeamR read failures stay explicit instead of being presented as authoritative empty data", () => {
+  const teamr = repoFile("lib/teamr.ts");
+  const playersPage = repoFile("app/dashboard/teamr/players/page.tsx");
+  const peoplePage = repoFile("app/dashboard/teamr/people/page.tsx");
+  assert.match(teamr, /error: "TeamR player data could not be loaded\."/);
+  assert.match(teamr, /error: "People and access could not be loaded\."/);
+  assert.match(playersPage, /No player records were assumed/);
+  assert.match(peoplePage, /result\.error \?/);
+});
+
+test("MyPlayR and public participation rankings use the same canonical profile score", () => {
+  const dashboard = repoFile("app/dashboard/page.tsx");
+  const rankingCore = functionBody("get_public_playr_rankings_core");
+  assert.match(dashboard, /participation_score/);
+  assert.match(rankingCore, /when p_metric = 'participation' then profile\.participation_score::numeric/);
+  assert.doesNotMatch(rankingCore, /event_results|event_player_assignments/);
+});
+
 test("Phase 2B.4 and tournament operations remain deferred", () => {
   assert.doesNotMatch(migration(), /create table[^;]*(notification|draw|fixture|attendance|check_in|standing)/i);
   assert.doesNotMatch(repoFile("app/dashboard/teamr/people/page.tsx"), /send email|push notification|message centre/i);
