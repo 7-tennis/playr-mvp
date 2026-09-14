@@ -41,6 +41,20 @@ export type PublicRankingQuery = {
   scope?: RankingScope;
 };
 
+export function publicRankingRpcArguments(query: PublicRankingQuery) {
+  return {
+    p_category: query.category,
+    p_classification: query.classification ?? null,
+    p_limit: query.limit ?? 25,
+    p_metric: query.metric,
+    p_offset: query.offset ?? 0,
+    p_organisation_id: query.organisationId ?? null,
+    p_region: query.region?.trim() || null,
+    p_scope: query.scope ?? "overall",
+    p_search: query.search?.trim() || null
+  };
+}
+
 export async function loadPublicRankingFilters(supabase: ServerSupabaseClient, category: PlayRRankingCategory) {
   const [organisationResult, regionResult] = await Promise.all([
     supabase.rpc("get_public_playr_ranking_organisations", { p_category: category }),
@@ -55,20 +69,22 @@ export async function loadPublicRankingFilters(supabase: ServerSupabaseClient, c
 }
 
 export async function loadPublicRankings(supabase: ServerSupabaseClient, query: PublicRankingQuery) {
-  const { data, error } = await supabase.rpc("get_public_playr_rankings", {
-    p_category: query.category,
-    p_classification: query.classification ?? null,
-    p_limit: query.limit ?? 25,
-    p_metric: query.metric,
-    p_offset: query.offset ?? 0,
-    p_organisation_id: query.organisationId ?? null,
-    p_region: query.region ?? null,
-    p_scope: query.scope ?? "overall",
-    p_search: query.search ?? null
-  });
+  const rpcArguments = publicRankingRpcArguments(query);
+  const { data, error } = await supabase.rpc("get_public_playr_rankings", rpcArguments);
+
+  if (error) {
+    console.error("[public-rankings] ranking_load_failed", {
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      message: error.message,
+      query: rpcArguments
+    });
+    return { error: true, rows: [] as PublicRankingRow[] };
+  }
 
   return {
-    error: Boolean(error),
+    error: false,
     rows: (data ?? []) as PublicRankingRow[]
   };
 }

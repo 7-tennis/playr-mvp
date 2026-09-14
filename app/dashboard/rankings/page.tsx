@@ -142,9 +142,9 @@ export default async function RankingsPage({ searchParams }: { searchParams?: Ra
       <section aria-labelledby="ranking-list" className="mt-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div><p className="section-kicker">{rankingCategoryLabel(category)}</p><h2 className="section-title mt-1" id="ranking-list">{metric === "rating" ? "Rating" : "Participation"} leaderboard</h2></div>
-          <span className="ui-chip ui-chip-brand">{total} published</span>
+          {!rankingData.error ? <span className="ui-chip ui-chip-brand">{total} published</span> : null}
         </div>
-        {rankingData.error ? <SectionError description="Rankings could not be loaded right now." /> : rankingData.rows.length > 0 ? (
+        {rankingData.error ? <SectionError description="Rankings could not be loaded. Please try again." /> : rankingData.rows.length > 0 ? (
           <ol className="grid gap-3">
             {rankingData.rows.map((row) => (
               <li className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-playr-lg border bg-white p-4 shadow-playr-card ${row.is_managed ? "border-court-teal ring-2 ring-court-teal/15" : "border-playr-border-subtle"}`} key={row.ranking_profile_id}>
