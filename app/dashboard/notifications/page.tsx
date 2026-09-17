@@ -1,20 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { markAllNotificationsRead, markNotificationRead } from "@/app/dashboard/notifications/actions";
+import { markAllNotificationsRead, markNotificationRead, openNotification } from "@/app/dashboard/notifications/actions";
 import { PageShell } from "@/components/page-shell";
 import { BadgeIcon, BookingIcon, EventIcon, InviteIcon, LeaderboardIcon, MembershipIcon, NotificationIcon, RatingIcon, ShopIcon, TimeIcon } from "@/components/playr-icons";
 import { StatusAlert } from "@/components/status-alert";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import { hubKindForNotification, hubKindForOrganisation, messageHubVisuals, type MessageHubKind } from "@/lib/message-visuals";
+import { normalizeNotificationFilter, notificationFilters, notificationMatchesFilter, organisationContextLabel } from "@/lib/notification-centre";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import type { Notification, NotificationType } from "@/types/courtside";
+import type { Notification, NotificationType, OrganisationType } from "@/types/courtside";
 
 export const dynamic = "force-dynamic";
 
 type MessagesPageProps = {
   searchParams?: {
     error?: string;
+    filter?: string;
     hub?: string;
     marked?: string;
   };
@@ -37,6 +39,19 @@ const notificationVisuals: Record<NotificationType, { className: string }> = {
   upcoming_booking_reminder: { className: "bg-amber-50 text-amber-800" },
   event_entry_confirmed: { className: "bg-court-mist text-court-teal" },
   event_reminder: { className: "bg-amber-50 text-amber-800" },
+  event_invitation: { className: "bg-amber-50 text-amber-800" },
+  event_invitation_accepted: { className: "bg-emerald-50 text-emerald-700" },
+  event_invitation_declined: { className: "bg-slate-100 text-slate-700" },
+  event_entry_requested: { className: "bg-amber-50 text-amber-800" },
+  event_entry_approved: { className: "bg-emerald-50 text-emerald-700" },
+  event_entry_rejected: { className: "bg-slate-100 text-slate-700" },
+  event_participant_removed: { className: "bg-slate-100 text-slate-700" },
+  event_changed: { className: "bg-sky-50 text-sky-700" },
+  event_cancelled: { className: "bg-amber-50 text-amber-800" },
+  event_staff_assigned: { className: "bg-court-mist text-court-teal" },
+  event_staff_role_changed: { className: "bg-sky-50 text-sky-700" },
+  event_staff_removed: { className: "bg-slate-100 text-slate-700" },
+  event_announcement: { className: "bg-court-navy text-white" },
   rating_updated: { className: "bg-court-blue text-white" },
   badge_unlocked: { className: "bg-emerald-50 text-emerald-700" },
   leaderboard_changed: { className: "bg-court-navy text-white" },
@@ -83,6 +98,19 @@ function notificationIcon(type: NotificationType) {
       return <TimeIcon size={20} />;
     case "event_entry_confirmed":
     case "event_reminder":
+    case "event_invitation":
+    case "event_invitation_accepted":
+    case "event_invitation_declined":
+    case "event_entry_requested":
+    case "event_entry_approved":
+    case "event_entry_rejected":
+    case "event_participant_removed":
+    case "event_changed":
+    case "event_cancelled":
+    case "event_staff_assigned":
+    case "event_staff_role_changed":
+    case "event_staff_removed":
+    case "event_announcement":
       return <EventIcon size={20} />;
     case "rating_updated":
       return <RatingIcon size={20} />;
@@ -200,9 +228,10 @@ function NotificationCard({ context, notification }: { context: MessageContext; 
 
         <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
           {notification.href ? (
-            <Link className="btn-secondary px-3 py-2" href={notification.href}>
-              {actionRequired ? "Review" : "Open"}
-            </Link>
+            <form action={openNotification}>
+              <input name="notificationId" type="hidden" value={notification.id} />
+              <button className="btn-secondary px-3 py-2" type="submit">{actionRequired ? "Review" : "Open"}</button>
+            </form>
           ) : null}
           {unread ? (
             <form action={markNotificationRead}>
@@ -221,8 +250,8 @@ function NotificationCard({ context, notification }: { context: MessageContext; 
 export default async function MessagesPage({ searchParams }: MessagesPageProps) {
   if (!hasSupabaseConfig()) {
     return (
-      <PageShell eyebrow="Communication" subtitle="Updates from PlayR and your linked organisations." title="Messages">
-        <div className="ui-empty-card">Add Supabase environment variables to use messages.</div>
+      <PageShell eyebrow="Communication" subtitle="Targeted updates from PlayR and your linked organisations." title="Updates">
+        <div className="ui-empty-card">Add Supabase environment variables to use updates.</div>
       </PageShell>
     );
   }
@@ -246,35 +275,42 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
     .select("*")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
-    .limit(80);
+    .limit(50);
 
   const notifications = sortNotifications((data ?? []) as Notification[]);
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
   const actionRequiredCount = notifications.filter((notification) => notification.action_required || notification.status === "action_required").length;
   const profileIds = [...new Set(notifications.flatMap((notification) => [notification.profile_id, notification.junior_profile_id]).filter((value): value is string => Boolean(value)))];
-  const venueIds = [...new Set(notifications.map((notification) => metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"])).filter((value): value is string => Boolean(value)))];
+  const venueIds = [...new Set(notifications.map((notification) => notification.organisation_id ?? metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"])).filter((value): value is string => Boolean(value)))];
   const [{ data: profileData }, { data: venueData }] = await Promise.all([
     profileIds.length > 0 ? supabase.from("profiles").select("id,first_name,last_name,is_junior").in("id", profileIds) : { data: [] },
     venueIds.length > 0 ? supabase.from("venues").select("id,name,organisation_type").in("id", venueIds) : { data: [] }
   ]);
   const profileNames = new Map((profileData ?? []).map((profile) => [profile.id as string, `${profile.first_name} ${profile.last_name}${profile.is_junior ? " · Junior" : " · Adult Profile"}`]));
   const venues = new Map((venueData ?? []).map((venue) => [venue.id as string, venue]));
+  const organisationTypeFor = (notification: Notification) => {
+    const venueId = notification.organisation_id ?? metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"]);
+    return venueId ? venues.get(venueId)?.organisation_type as OrganisationType | undefined : undefined;
+  };
   const contextFor = (notification: Notification): MessageContext => {
     const playerId = notification.junior_profile_id ?? notification.profile_id;
-    const venueId = metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"]);
+    const venueId = notification.organisation_id ?? metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"]);
     const venue = venueId ? venues.get(venueId) : null;
     const hubKind = venue ? hubKindForOrganisation(venue.organisation_type) : hubKindForNotification(notification.type);
     return {
       hubId: venue ? `organisation-${venue.id}` : hubKind,
       hubKind,
       playerName: playerId ? profileNames.get(playerId) ?? "Linked player" : "PlayR account",
-      sourceName: venue?.name ?? (hubKind === "competition" ? "PlayR Competition" : "PlayR"),
+      sourceName: venue ? organisationContextLabel(venue.organisation_type as OrganisationType, venue.name) : hubKind === "competition" ? "Event · PlayR" : "PlayR",
       sourceType: messageSource(notification.type)
     };
   };
-  const actionItems = notifications.filter((notification) => notification.action_required || notification.status === "action_required");
-  const recentItems = notifications.filter((notification) => !actionItems.some((item) => item.id === notification.id));
-  const hubs = Array.from(notifications.reduce((map, notification) => {
+  const activeFilter = normalizeNotificationFilter(searchParams?.filter);
+  const availableFilters = notificationFilters.filter((filter) => filter.value === "all" || notifications.some((notification) => notificationMatchesFilter(notification, filter.value, organisationTypeFor(notification))));
+  const visibleNotifications = notifications.filter((notification) => notificationMatchesFilter(notification, activeFilter, organisationTypeFor(notification)));
+  const actionItems = visibleNotifications.filter((notification) => notification.action_required || notification.status === "action_required");
+  const recentItems = visibleNotifications.filter((notification) => !actionItems.some((item) => item.id === notification.id));
+  const hubs = Array.from(visibleNotifications.reduce((map, notification) => {
     const context = contextFor(notification);
     const current = map.get(context.hubId) ?? { context, items: [] as Notification[] };
     current.items.push(notification);
@@ -286,12 +322,12 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
   return (
     <PageShell
       eyebrow="Communication"
-      subtitle="Updates from PlayR and your linked organisations."
-      title="Messages"
+      subtitle="Targeted updates from events and organisations relevant to your account."
+      title="Updates"
     >
       <StatusAlert className="mb-5" message={statusMessage(searchParams?.marked)} tone="success" />
       <StatusAlert className="mb-5" message={errorMessage(searchParams?.error)} tone="error" />
-      {error ? <StatusAlert className="mb-5" message="Messages could not be loaded right now." tone="error" /> : null}
+      {error ? <StatusAlert className="mb-5" message="Updates could not be loaded right now." tone="error" /> : null}
 
       <div className="grid gap-5">
         <section className="surface-card p-4 sm:p-5">
@@ -311,7 +347,13 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           </div>
         </section>
 
-        {notifications.length > 0 ? (
+        {availableFilters.length > 1 ? (
+          <nav aria-label="Update filters" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {availableFilters.map((filter) => <Link className={`ui-chip shrink-0 ${activeFilter === filter.value ? "ui-chip-brand" : "ui-chip-muted"}`} href={filter.value === "all" ? "/dashboard/messages" : `/dashboard/messages?filter=${filter.value}`} key={filter.value}>{filter.label}</Link>)}
+          </nav>
+        ) : null}
+
+        {visibleNotifications.length > 0 ? (
           <>
             {actionItems.length > 0 ? (
               <section aria-labelledby="action-required" className="grid gap-3">
@@ -349,9 +391,9 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           </>
         ) : (
           <section className="empty-state">
-            <h2 className="section-title">No new messages</h2>
+            <h2 className="section-title">You&apos;re all caught up.</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-              Updates from your clubs, academies and competitions will appear here.
+              {activeFilter === "all" ? "Targeted updates will appear here when something relevant happens." : `No ${notificationFilters.find((filter) => filter.value === activeFilter)?.label ?? "matching"} updates yet.`}
             </p>
             <Link className="btn-primary mt-5" href="/dashboard">
               View your players

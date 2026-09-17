@@ -20,7 +20,7 @@ function NavigationCount({ count }: { count: number }) {
 
   return (
     <span
-      aria-label={`${count} unread ${count === 1 ? "message" : "messages"}`}
+      aria-label={`${count} unread ${count === 1 ? "update" : "updates"}`}
       className="absolute right-1 top-1 min-w-[1.15rem] rounded-full bg-court-lime px-1 py-0.5 text-center text-[9px] font-black leading-none text-court-navy ring-2 ring-court-navy"
     >
       {count > 9 ? "9+" : count}

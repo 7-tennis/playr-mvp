@@ -27,39 +27,16 @@ export async function createNotification(supabase: SupabaseServerClient, input: 
     return null;
   }
 
-  if (input.dedupeKey) {
-    const { data: existing, error: existingError } = await supabase
-      .from("notifications")
-      .select("id")
-      .eq("user_id", input.userId)
-      .eq("dedupe_key", input.dedupeKey)
-      .maybeSingle();
-
-    if (existing?.id) {
-      return existing.id as string;
-    }
-
-    if (existingError) {
-      console.error("PlayR notification dedupe check failed", { userId: input.userId, type: input.type, error: existingError });
-    }
-  }
-
-  const { data, error } = await supabase
-    .from("notifications")
-    .insert({
-      user_id: input.userId,
-      actor_user_id: input.actorUserId ?? null,
-      profile_id: input.profileId ?? null,
-      junior_profile_id: input.juniorProfileId ?? null,
-      type: input.type,
-      title: input.title,
-      message: input.message,
-      href: input.href ?? null,
-      metadata: cleanMetadata(input.metadata),
-      dedupe_key: input.dedupeKey ?? null
-    })
-    .select("id")
-    .single();
+  const { data, error } = await supabase.rpc("create_my_notification", {
+    p_dedupe_key: input.dedupeKey ?? null,
+    p_href: input.href ?? null,
+    p_junior_profile_id: input.juniorProfileId ?? null,
+    p_message: input.message,
+    p_metadata: cleanMetadata(input.metadata),
+    p_profile_id: input.profileId ?? null,
+    p_title: input.title,
+    p_type: input.type
+  });
 
   if (error) {
     if (error.code !== "23505") {
@@ -70,5 +47,5 @@ export async function createNotification(supabase: SupabaseServerClient, input: 
 
   revalidatePath("/dashboard/notifications");
   revalidatePath("/dashboard/messages");
-  return data.id as string;
+  return data as string | null;
 }

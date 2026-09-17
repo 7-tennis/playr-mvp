@@ -57,6 +57,19 @@ export type NotificationType =
   | "upcoming_booking_reminder"
   | "event_entry_confirmed"
   | "event_reminder"
+  | "event_invitation"
+  | "event_invitation_accepted"
+  | "event_invitation_declined"
+  | "event_entry_requested"
+  | "event_entry_approved"
+  | "event_entry_rejected"
+  | "event_participant_removed"
+  | "event_changed"
+  | "event_cancelled"
+  | "event_staff_assigned"
+  | "event_staff_role_changed"
+  | "event_staff_removed"
+  | "event_announcement"
   | "rating_updated"
   | "badge_unlocked"
   | "leaderboard_changed"
@@ -1234,6 +1247,9 @@ export interface Notification {
   status: NotificationStatus;
   action_required: boolean;
   invitation_id: string | null;
+  organisation_id: string | null;
+  event_id: string | null;
+  category: "action_required" | "events" | "organisations" | "system";
   read_at: string | null;
   resolved_at: string | null;
   created_at: string;

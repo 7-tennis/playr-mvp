@@ -5,7 +5,7 @@ import { formatDate, formatLabel, formatTime } from "@/lib/courtside-format";
 import { allowedEventRolesForOrganisationRole, eventStaffRoleLabel, eventStaffRoles, loadEventOperations } from "@/lib/event-relevance";
 import { canManageOrganisationEvents, eventVisibilityDescription, loadOrganisationEvent, organisationEventState } from "@/lib/organisation-events";
 import { TeamRPageFrame, getProtectedTeamRPage } from "../../teamr-shared";
-import { assignEventPlayer, assignEventStaff, removeEventPlayerAssignment, removeEventStaffAssignment, reviewEventEntryRequest, transitionOrganisationEvent, updateEventStaffRole } from "../actions";
+import { assignEventPlayer, assignEventStaff, removeEventPlayerAssignment, removeEventStaffAssignment, reviewEventEntryRequest, sendEventAnnouncement, transitionOrganisationEvent, updateEventStaffRole } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,8 @@ function messageFor(value?: string) {
     created: "Event created.", updated: "Event updated.", published: "Event published.", unpublished: "Event unpublished.",
     completed: "Event marked completed.", player_invited: "Player invited to this event.", player_removed: "Participation removed.",
     entry_approved: "Entry request approved.", entry_rejected: "Entry request rejected.",
-    staff_assigned: "Event staff assigned.", staff_updated: "Event staff role updated.", staff_removed: "Event staff assignment removed."
+    staff_assigned: "Event staff assigned.", staff_updated: "Event staff role updated.", staff_removed: "Event staff assignment removed.",
+    announcement_sent: "Event announcement sent to confirmed participants and assigned staff."
   };
   return value ? messages[value] ?? null : null;
 }
@@ -30,6 +31,8 @@ function errorFor(value?: string) {
   if (value === "event_full") return "This event is currently full.";
   if (value === "duplicate") return "That person is already assigned to this event.";
   if (value === "access") return "Your event role does not allow that action.";
+  if (value === "invalid_announcement") return "Add an announcement between 1 and 1,000 characters.";
+  if (value === "announcement_failed") return "The event announcement could not be sent.";
   return value ? "That event action could not be completed." : null;
 }
 
@@ -63,6 +66,8 @@ export default async function TeamREventDetailPage({ params, searchParams }: { p
       {operations.canManageStaff && operations.staffCandidates.length > 0 ? <form action={assignEventStaff} className="mt-5 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"><input name="eventId" type="hidden" value={event.id} /><label className="text-sm font-bold text-court-navy">Staff member<select className={fieldClass} name="membershipId" required><option value="">Choose staff</option>{operations.staffCandidates.map((staff) => <option key={staff.membership_id} value={staff.membership_id}>{staff.staff_name} · {formatLabel(staff.organisation_role)}</option>)}</select></label><label className="text-sm font-bold text-court-navy">Event role<select className={fieldClass} name="eventRole" required>{eventStaffRoles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select></label><SubmitButton pendingText="Assigning…">Assign Staff</SubmitButton></form> : null}
       <p className="mt-3 text-xs font-semibold text-slate-500">Event Manager manages players and staff. Coordinator manages players. Coach and Official are read-only; scoring remains deferred.</p>
     </section>
+
+    {operations.canManagePlayers && event.status === "published" ? <section className="surface-card mt-4 p-4 sm:p-5"><p className="section-kicker">Targeted update</p><h2 className="section-title mt-1">Event announcement</h2><p className="mt-2 text-sm leading-6 text-slate-600">Send one short update to confirmed participants or their managing parents and active event staff. This is one-way; there are no replies or group chat.</p><form action={sendEventAnnouncement} className="mt-4 grid gap-3"><input name="eventId" type="hidden" value={event.id} /><label className="text-sm font-bold text-court-navy">Announcement<textarea className={`${fieldClass} min-h-24 resize-y`} maxLength={1000} name="announcement" placeholder="Please arrive 20 minutes before your first match." required /></label><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-500">Maximum 1,000 characters.</p><SubmitButton pendingText="Sending…">Send Announcement</SubmitButton></div></form></section> : null}
 
     {canManage && state !== "archived" ? <section className="mt-4 flex flex-wrap gap-2">{["draft", "published"].includes(event.status) ? <Link className="btn-primary" href={`/dashboard/teamr/competitions/${event.id}/edit`}>Edit</Link> : null}{event.status === "draft" ? <Action eventId={event.id} label="Publish" value="publish" /> : null}{event.status === "published" ? <><Action eventId={event.id} label="Unpublish" value="unpublish" /><Action eventId={event.id} label="Mark Completed" value="complete" /></> : null}{["draft", "published"].includes(event.status) ? <Action eventId={event.id} label="Cancel" value="cancel" /> : null}<Action eventId={event.id} label="Archive" value="archive" /></section> : null}
   </TeamRPageFrame>;

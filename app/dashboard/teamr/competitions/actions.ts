@@ -142,6 +142,7 @@ export async function updateOrganisationEvent(formData: FormData) {
   revalidatePath(eventsPath);
   revalidatePath(eventPath(eventId));
   revalidatePath("/dashboard/teamr");
+  revalidatePath("/dashboard/messages");
   redirect(`${eventPath(eventId)}?message=updated`);
 }
 
@@ -169,6 +170,7 @@ export async function transitionOrganisationEvent(formData: FormData) {
   revalidatePath(eventsPath);
   revalidatePath(eventPath(eventId));
   revalidatePath("/dashboard/teamr");
+  revalidatePath("/dashboard/messages");
   redirect(action === "archive" ? `${eventsPath}?message=archived` : `${eventPath(eventId)}?message=${action}ed`);
 }
 
@@ -202,6 +204,7 @@ function revalidateEventAssignments(eventId: string) {
   revalidatePath(eventPath(eventId));
   revalidatePath(eventsPath);
   revalidatePath("/dashboard/compete");
+  revalidatePath("/dashboard/messages");
 }
 
 export async function assignEventPlayer(formData: FormData) {
@@ -274,4 +277,22 @@ export async function removeEventStaffAssignment(formData: FormData) {
   if (error) redirect(assignmentErrorPath(eventId, error));
   revalidateEventAssignments(eventId);
   redirect(`${eventPath(eventId)}?message=staff_removed`);
+}
+
+export async function sendEventAnnouncement(formData: FormData) {
+  const eventId = text(formData, "eventId");
+  const message = text(formData, "announcement");
+  if (!eventId || !message || message.length > 1000) redirect(`${eventPath(eventId)}?error=invalid_announcement`);
+  const supabase = await eventAssignmentClient();
+  const { error } = await supabase.rpc("send_event_announcement", {
+    p_event_id: eventId,
+    p_message: message
+  });
+  if (error) {
+    console.error("[event-announcements] send_failed", { code: error.code, eventId, message: error.message });
+    const code = error.message.includes("access") ? "access" : error.message.includes("length") ? "invalid_announcement" : "announcement_failed";
+    redirect(`${eventPath(eventId)}?error=${code}`);
+  }
+  revalidateEventAssignments(eventId);
+  redirect(`${eventPath(eventId)}?message=announcement_sent`);
 }

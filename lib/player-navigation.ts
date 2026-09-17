@@ -31,7 +31,7 @@ export const playerNavigationDestinations: PlayerNavigationDestination[] = [
   {
     href: "/dashboard/messages",
     key: "messages",
-    label: "Messages",
+    label: "Updates",
     matches: ["/dashboard/messages", "/dashboard/notifications"]
   },
   {
