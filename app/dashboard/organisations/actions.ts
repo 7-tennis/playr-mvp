@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getPermissionContext } from "@/lib/permissions";
 import { productForOrganisationMembership } from "@/lib/organisations";
-import { loadOrganisationSetup, productSetupPath } from "@/lib/organisation-setup";
+import { loadOrganisationSetup, productSetupPath, userHasCompletedCoachRIdentity } from "@/lib/organisation-setup";
 import type { ProductContext } from "@/types/courtside";
 import { appAreaLandingPath, type AppAreaId } from "@/lib/app-areas";
 
@@ -76,6 +76,9 @@ export async function switchActiveOrganisation(formData: FormData) {
     const setup = await loadOrganisationSetup(context.supabase, membership.venue_id, productContext);
 
     if (setup.migrationReady && setup.setup.status !== "complete") {
+      if (productContext === "coachr" && await userHasCompletedCoachRIdentity(context.supabase, context.user.id)) {
+        redirect(productLanding(productContext));
+      }
       redirect(productSetupPath(productContext, setup.setup.current_step));
     }
   }

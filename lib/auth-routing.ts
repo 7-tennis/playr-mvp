@@ -6,7 +6,7 @@ import {
   pickActiveOrganisationMembership,
   productForOrganisationMembership
 } from "@/lib/organisations";
-import { loadOrganisationSetup, productSetupPath } from "@/lib/organisation-setup";
+import { loadOrganisationSetup, productSetupPath, userHasCompletedCoachRIdentity } from "@/lib/organisation-setup";
 import type { createServerSupabaseClient } from "@/utils/supabase/server";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
@@ -36,6 +36,9 @@ export async function getPostLoginPathForUser(supabase: ServerSupabaseClient, us
       const setup = await loadOrganisationSetup(supabase, activeMembership.venue_id, product);
 
       if (setup.migrationReady && setup.setup.status !== "complete") {
+        if (product === "coachr" && await userHasCompletedCoachRIdentity(supabase, userId)) {
+          return "/dashboard/coachr";
+        }
         return productSetupPath(product, setup.setup.current_step);
       }
     }

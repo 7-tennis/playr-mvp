@@ -6,7 +6,16 @@ import { BadgeIcon, BookingIcon, EventIcon, InviteIcon, LeaderboardIcon, Members
 import { StatusAlert } from "@/components/status-alert";
 import { formatDateTime, formatLabel } from "@/lib/courtside-format";
 import { hubKindForNotification, hubKindForOrganisation, messageHubVisuals, type MessageHubKind } from "@/lib/message-visuals";
-import { normalizeNotificationFilter, notificationFilters, notificationMatchesFilter, organisationContextLabel } from "@/lib/notification-centre";
+import {
+  normalizeNotificationFilter,
+  normalizeNotificationProfile,
+  notificationFilters,
+  notificationMatchesFilter,
+  notificationMatchesProfile,
+  notificationProfileId,
+  organisationContextLabel,
+  updatesFilterHref
+} from "@/lib/notification-centre";
 import { hasSupabaseConfig } from "@/utils/supabase/config";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import type { Notification, NotificationType, OrganisationType } from "@/types/courtside";
@@ -19,6 +28,7 @@ type MessagesPageProps = {
     filter?: string;
     hub?: string;
     marked?: string;
+    profile?: string;
   };
 };
 
@@ -280,7 +290,28 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
   const notifications = sortNotifications((data ?? []) as Notification[]);
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
   const actionRequiredCount = notifications.filter((notification) => notification.action_required || notification.status === "action_required").length;
-  const profileIds = [...new Set(notifications.flatMap((notification) => [notification.profile_id, notification.junior_profile_id]).filter((value): value is string => Boolean(value)))];
+  const { data: adultProfile } = await supabase
+    .from("profiles")
+    .select("id,first_name,last_name,is_junior")
+    .eq("user_id", user.id)
+    .eq("is_junior", false)
+    .limit(1)
+    .maybeSingle();
+  const { data: juniorProfiles } = adultProfile
+    ? await supabase
+        .from("profiles")
+        .select("id,first_name,last_name,is_junior")
+        .eq("parent_profile_id", adultProfile.id)
+        .eq("is_junior", true)
+        .order("first_name")
+    : { data: [] };
+  const manageableProfiles = [...(adultProfile ? [adultProfile] : []), ...(juniorProfiles ?? [])];
+  const manageableProfileIds = manageableProfiles.map((profile) => profile.id as string);
+  const activeProfileId = normalizeNotificationProfile(searchParams?.profile, manageableProfileIds);
+  const profileIds = [...new Set([
+    ...manageableProfileIds,
+    ...notifications.map(notificationProfileId).filter((value): value is string => Boolean(value))
+  ])];
   const venueIds = [...new Set(notifications.map((notification) => notification.organisation_id ?? metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"])).filter((value): value is string => Boolean(value)))];
   const [{ data: profileData }, { data: venueData }] = await Promise.all([
     profileIds.length > 0 ? supabase.from("profiles").select("id,first_name,last_name,is_junior").in("id", profileIds) : { data: [] },
@@ -293,7 +324,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
     return venueId ? venues.get(venueId)?.organisation_type as OrganisationType | undefined : undefined;
   };
   const contextFor = (notification: Notification): MessageContext => {
-    const playerId = notification.junior_profile_id ?? notification.profile_id;
+    const playerId = notificationProfileId(notification);
     const venueId = notification.organisation_id ?? metadataId(notification, ["organisationId", "organisation_id", "venueId", "venue_id"]);
     const venue = venueId ? venues.get(venueId) : null;
     const hubKind = venue ? hubKindForOrganisation(venue.organisation_type) : hubKindForNotification(notification.type);
@@ -306,8 +337,9 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
     };
   };
   const activeFilter = normalizeNotificationFilter(searchParams?.filter);
-  const availableFilters = notificationFilters.filter((filter) => filter.value === "all" || notifications.some((notification) => notificationMatchesFilter(notification, filter.value, organisationTypeFor(notification))));
-  const visibleNotifications = notifications.filter((notification) => notificationMatchesFilter(notification, activeFilter, organisationTypeFor(notification)));
+  const profileVisibleNotifications = notifications.filter((notification) => notificationMatchesProfile(notification, activeProfileId));
+  const availableFilters = notificationFilters.filter((filter) => filter.value === "all" || filter.value === activeFilter || profileVisibleNotifications.some((notification) => notificationMatchesFilter(notification, filter.value, organisationTypeFor(notification))));
+  const visibleNotifications = profileVisibleNotifications.filter((notification) => notificationMatchesFilter(notification, activeFilter, organisationTypeFor(notification)));
   const actionItems = visibleNotifications.filter((notification) => notification.action_required || notification.status === "action_required");
   const recentItems = visibleNotifications.filter((notification) => !actionItems.some((item) => item.id === notification.id));
   const hubs = Array.from(visibleNotifications.reduce((map, notification) => {
@@ -347,9 +379,24 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           </div>
         </section>
 
+        {manageableProfiles.length > 1 ? (
+          <nav aria-label="Profile filters" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            <Link className={`ui-chip shrink-0 ${activeProfileId === null ? "ui-chip-brand" : "ui-chip-muted"}`} href={updatesFilterHref({ filter: activeFilter })}>All</Link>
+            {manageableProfiles.map((profile) => (
+              <Link
+                className={`ui-chip shrink-0 ${activeProfileId === profile.id ? "ui-chip-brand" : "ui-chip-muted"}`}
+                href={updatesFilterHref({ filter: activeFilter, profileId: profile.id })}
+                key={profile.id}
+              >
+                {profile.first_name}{profile.is_junior ? "" : " (me)"}
+              </Link>
+            ))}
+          </nav>
+        ) : null}
+
         {availableFilters.length > 1 ? (
           <nav aria-label="Update filters" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-            {availableFilters.map((filter) => <Link className={`ui-chip shrink-0 ${activeFilter === filter.value ? "ui-chip-brand" : "ui-chip-muted"}`} href={filter.value === "all" ? "/dashboard/messages" : `/dashboard/messages?filter=${filter.value}`} key={filter.value}>{filter.label}</Link>)}
+            {availableFilters.map((filter) => <Link className={`ui-chip shrink-0 ${activeFilter === filter.value ? "ui-chip-brand" : "ui-chip-muted"}`} href={updatesFilterHref({ filter: filter.value, profileId: activeProfileId })} key={filter.value}>{filter.label}</Link>)}
           </nav>
         ) : null}
 
@@ -369,7 +416,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
                   const hubUnread = hub.items.filter((item) => !item.read_at).length;
                   const hubActions = hub.items.filter((item) => item.action_required || item.status === "action_required").length;
                   return (
-                    <Link className="group overflow-hidden rounded-playr-lg border border-playr-border-subtle bg-white shadow-playr-subtle transition hover:-translate-y-0.5 hover:shadow-playr-card focus-ring" href={`/dashboard/messages?hub=${encodeURIComponent(hub.context.hubId)}`} key={hub.context.hubId}>
+                    <Link className="group overflow-hidden rounded-playr-lg border border-playr-border-subtle bg-white shadow-playr-subtle transition hover:-translate-y-0.5 hover:shadow-playr-card focus-ring" href={updatesFilterHref({ filter: activeFilter, hub: hub.context.hubId, profileId: activeProfileId })} key={hub.context.hubId}>
                       <div className={`bg-gradient-to-r ${visual.accent} px-4 py-3 text-white`}><p className="text-xs font-black uppercase tracking-[0.16em]">{visual.label} hub</p></div>
                       <div className="p-4"><div className="flex items-start gap-3"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded ${visual.icon}`}>{notificationIcon(hub.items[0].type)}</span><div className="min-w-0"><h3 className="truncate text-lg font-black text-court-navy">{hub.context.sourceName}</h3><p className="mt-1 text-xs font-bold text-slate-600">Latest for {hub.context.playerName}</p></div></div><div className="mt-4 flex flex-wrap gap-2"><span className="ui-chip ui-chip-muted">{hub.items.length} update{hub.items.length === 1 ? "" : "s"}</span>{hubUnread > 0 ? <span className="ui-chip ui-chip-brand">{hubUnread} unread</span> : null}{hubActions > 0 ? <span className="ui-chip ui-chip-warning">{hubActions} action</span> : null}</div></div>
                     </Link>
@@ -379,7 +426,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
             </section>
             {activeHub ? (
               <section aria-labelledby="active-hub" className="grid gap-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="section-kicker">{messageHubVisuals[activeHub.context.hubKind].label} hub</p><h2 className="section-title mt-1" id="active-hub">{activeHub.context.sourceName}</h2></div><Link className="btn-secondary" href="/dashboard/messages">Back to all messages</Link></div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="section-kicker">{messageHubVisuals[activeHub.context.hubKind].label} hub</p><h2 className="section-title mt-1" id="active-hub">{activeHub.context.sourceName}</h2></div><Link className="btn-secondary" href={updatesFilterHref({ filter: activeFilter, profileId: activeProfileId })}>Back to all messages</Link></div>
                 {activeHub.items.map((notification) => <NotificationCard context={contextFor(notification)} key={notification.id} notification={notification} />)}
               </section>
             ) : recentItems.length > 0 ? (
@@ -393,7 +440,11 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           <section className="empty-state">
             <h2 className="section-title">You&apos;re all caught up.</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-              {activeFilter === "all" ? "Targeted updates will appear here when something relevant happens." : `No ${notificationFilters.find((filter) => filter.value === activeFilter)?.label ?? "matching"} updates yet.`}
+              {activeProfileId
+                ? `No ${activeFilter === "all" ? "" : `${notificationFilters.find((filter) => filter.value === activeFilter)?.label ?? "matching"} `}updates for ${manageableProfiles.find((profile) => profile.id === activeProfileId)?.first_name ?? "this profile"}.`
+                : activeFilter === "all"
+                  ? "Targeted updates will appear here when something relevant happens."
+                  : `No ${notificationFilters.find((filter) => filter.value === activeFilter)?.label ?? "matching"} updates yet.`}
             </p>
             <Link className="btn-primary mt-5" href="/dashboard">
               View your players

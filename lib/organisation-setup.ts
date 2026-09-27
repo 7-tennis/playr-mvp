@@ -3,6 +3,8 @@ import type { createServerSupabaseClient } from "@/utils/supabase/server";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createServerSupabaseClient>>;
 
+const coachRMembershipRoles = ["head_coach", "coach", "assistant_coach"] as const;
+
 export type OrganisationSetupStep = {
   id: string;
   title: string;
@@ -91,6 +93,42 @@ export function setupProgress(snapshot: OrganisationSetupSnapshot) {
 
 export function setupIsComplete(snapshot: OrganisationSetupSnapshot | null) {
   return snapshot?.setup.status === "complete";
+}
+
+export async function userHasCompletedCoachRIdentity(
+  supabase: ServerSupabaseClient,
+  userId: string
+) {
+  const { data: memberships, error: membershipError } = await supabase
+    .from("organisation_memberships")
+    .select("venue_id")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .in("role", [...coachRMembershipRoles]);
+
+  if (membershipError) {
+    console.warn("[playr-setup]", { event: "coachr_identity_memberships_failed", code: membershipError.code, userId: userId.slice(0, 8) });
+    return false;
+  }
+
+  const venueIds = [...new Set((memberships ?? []).map((membership) => membership.venue_id))];
+  if (venueIds.length === 0) return false;
+
+  const { data: completedSetup, error: setupError } = await supabase
+    .from("organisation_product_setups")
+    .select("venue_id")
+    .in("venue_id", venueIds)
+    .eq("product_context", "coachr")
+    .eq("status", "complete")
+    .limit(1)
+    .maybeSingle();
+
+  if (setupError) {
+    console.warn("[playr-setup]", { event: "coachr_identity_setup_failed", code: setupError.code, userId: userId.slice(0, 8) });
+    return false;
+  }
+
+  return Boolean(completedSetup);
 }
 
 function defaultSetup(venueId: string, product: OrganisationSetupProduct, status: OrganisationSetupStatus = "not_started"): OrganisationProductSetup {

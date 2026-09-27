@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getPermissionContext } from "@/lib/permissions";
-import { loadOrganisationSetup, productDashboardPath, productSetupPath } from "@/lib/organisation-setup";
+import { loadOrganisationSetup, productDashboardPath, productSetupPath, userHasCompletedCoachRIdentity } from "@/lib/organisation-setup";
 import type { OrganisationRole, OrganisationSetupProduct, OrganisationType, PlayerConnectionAcceptanceResult } from "@/types/courtside";
 
 function text(formData: FormData, key: string) {
@@ -127,6 +127,9 @@ export async function acceptOrganisationInvitation(formData: FormData) {
 
     if (setupProduct !== "teamr") {
       const setup = await loadOrganisationSetup(context.supabase, invitation.venue_id, setupProduct);
+      if (setupProduct === "coachr" && setup.setup.status !== "complete" && await userHasCompletedCoachRIdentity(context.supabase, context.user.id)) {
+        redirect(productDashboardPath(setupProduct));
+      }
       redirect(setup.setup.status === "complete" ? productDashboardPath(setupProduct) : productSetupPath(setupProduct, setup.setup.current_step));
     }
   }

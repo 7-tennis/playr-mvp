@@ -32,6 +32,43 @@ export function notificationMatchesFilter(
   return organisationType === "club" || organisationType === "club_academy";
 }
 
+export function notificationProfileId(notification: Notification) {
+  if (notification.junior_profile_id) return notification.junior_profile_id;
+  if (notification.profile_id) return notification.profile_id;
+
+  for (const key of ["juniorProfileId", "junior_profile_id", "playerProfileId", "player_profile_id", "profileId"]) {
+    const value = notification.metadata?.[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+
+  return null;
+}
+
+export function normalizeNotificationProfile(value: string | undefined, manageableProfileIds: string[]) {
+  return value && manageableProfileIds.includes(value) ? value : null;
+}
+
+export function notificationMatchesProfile(notification: Notification, profileId: string | null) {
+  return profileId === null || notificationProfileId(notification) === profileId;
+}
+
+export function updatesFilterHref({
+  filter = "all",
+  hub,
+  profileId
+}: {
+  filter?: NotificationFilter;
+  hub?: string | null;
+  profileId?: string | null;
+}) {
+  const params = new URLSearchParams();
+  if (filter !== "all") params.set("filter", filter);
+  if (profileId) params.set("profile", profileId);
+  if (hub) params.set("hub", hub);
+  const query = params.toString();
+  return `/dashboard/messages${query ? `?${query}` : ""}`;
+}
+
 export function safeNotificationHref(value: string | null | undefined) {
   if (!value || !value.startsWith("/dashboard/") || value.startsWith("//") || value.includes("\\")) return null;
   try {
