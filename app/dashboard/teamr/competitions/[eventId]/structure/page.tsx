@@ -30,7 +30,8 @@ function errorFor(value?: string) {
     competition_not_configured: "Configure the competition before generating it.",
     competition_not_adjustable: "Only an unlocked generated group structure can be adjusted.",
     competition_group_mismatch: "That group move is not valid for this event.",
-    competition_group_would_be_empty: "A move cannot leave an empty group."
+    competition_group_would_be_empty: "A move cannot leave an empty group.",
+    competition_operations_exist: "Remove all court schedules and match-level staff assignments before regenerating structure."
   };
   return value ? messages[value] ?? "The competition operation could not be completed." : null;
 }
@@ -56,7 +57,7 @@ export default async function CompetitionStructurePage({ params, searchParams }:
   return <TeamRPageFrame context={context} subtitle={`${event.title} · ${event.host?.name ?? "Organisation"}`} title="Competition Structure" venue={venue}>
     <StatusAlert className="mb-4" message={messageFor(searchParams?.message)} tone="success" />
     <StatusAlert className="mb-4" message={errorFor(searchParams?.error)} tone="error" />
-    <div className="mb-4"><Link className="text-sm font-black text-court-teal" href={`/dashboard/teamr/competitions/${event.id}`}>← Back to event</Link></div>
+    <div className="mb-4 flex flex-wrap gap-3"><Link className="text-sm font-black text-court-teal" href={`/dashboard/teamr/competitions/${event.id}`}>← Back to event</Link>{competition && ["generated", "locked"].includes(competition.status) ? <Link className="text-sm font-black text-court-teal" href={`/dashboard/teamr/competitions/${event.id}/operations`}>Courts & Schedule</Link> : null}</div>
 
     <section className="surface-card p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="section-kicker">Competition operations</p><h2 className="section-title mt-1">{competition ? competitionFormatLabel(competition.format) : "Not configured"}</h2></div>{competition ? <span className={`ui-chip ${competition.status === "locked" ? "ui-chip-success" : competition.status === "generated" ? "ui-chip-brand" : "ui-chip-muted"}`}>{formatLabel(competition.status)}</span> : null}</div>

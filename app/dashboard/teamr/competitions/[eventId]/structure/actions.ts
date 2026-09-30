@@ -21,7 +21,7 @@ function numberOrNull(value: string) {
 
 function errorCode(error: { message?: string } | null) {
   const message = error?.message ?? "";
-  for (const code of ["competition_access", "competition_event_not_mutable", "competition_format_invalid", "competition_participants_invalid", "competition_participants_changed", "competition_groups_invalid", "competition_knockout_invalid", "competition_progression_invalid", "competition_locked", "competition_stale", "competition_not_configured", "competition_not_adjustable", "competition_group_mismatch", "competition_group_would_be_empty"]) {
+  for (const code of ["competition_access", "competition_event_not_mutable", "competition_format_invalid", "competition_participants_invalid", "competition_participants_changed", "competition_groups_invalid", "competition_knockout_invalid", "competition_progression_invalid", "competition_locked", "competition_stale", "competition_not_configured", "competition_not_adjustable", "competition_group_mismatch", "competition_group_would_be_empty", "competition_operations_exist"]) {
     if (message.includes(code)) return code;
   }
   return "competition_operation_failed";
