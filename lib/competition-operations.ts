@@ -51,6 +51,31 @@ export type CompetitionOperations = {
   matches: CompetitionOperationsMatch[];
 };
 
+export type CompetitionScheduleState = {
+  settings: null | {
+    mode: "timed" | "queue";
+    schedule_start: string | null;
+    match_duration_minutes: number | null;
+    minimum_rest_minutes: number;
+    generation_status: "generated" | "adjusted" | "stale";
+    generated_at: string;
+    estimated_finish: string | null;
+  };
+  validation: {
+    valid: boolean;
+    generation_status: "generated" | "adjusted" | "stale" | "not_generated";
+    unscheduled_matches: number;
+    player_conflicts: number;
+    player_rest_conflicts: number;
+    court_conflicts: number;
+    staff_conflicts: number;
+    dependency_conflicts: number;
+    event_window_conflicts: number;
+    estimated_finish: string | null;
+    court_utilisation: Array<{ court_id: string; label: string; matches: number }>;
+  };
+};
+
 export async function loadCompetitionOperations(supabase: ServerSupabase, eventId: string) {
   const { data, error } = await supabase.rpc("get_event_competition_operations", { p_event_id: eventId });
   if (error) {
@@ -58,6 +83,16 @@ export async function loadCompetitionOperations(supabase: ServerSupabase, eventI
     return { data: null as CompetitionOperations | null, error: "Competition operations could not be loaded." };
   }
   return { data: data as unknown as CompetitionOperations, error: null };
+}
+
+export async function loadCompetitionSchedule(supabase: ServerSupabase, eventId: string) {
+  const { data, error } = await supabase.rpc("get_event_competition_schedule", { p_event_id: eventId });
+  if (error) {
+    // Phase 2C.2 remains usable while the new local migration is pending deployment.
+    console.error("[competition-schedule] load_failed", { code: error.code, eventId, message: error.message });
+    return { data: null as CompetitionScheduleState | null, error: "Automatic schedule details could not be loaded." };
+  }
+  return { data: data as unknown as CompetitionScheduleState, error: null };
 }
 
 export function eventDateTimeInput(value: string | null | undefined) {
@@ -77,6 +112,7 @@ export function competitionOperationsMessage(code: string | null | undefined) {
     matches_distributed: "Unscheduled matches distributed across active courts.",
     staff_assigned: "Operational staff assigned to the match.",
     staff_removed: "Operational staff removed from the match."
+    ,schedule_generated: "Schedule ready. PlayR assigned every structural match to a safe court order."
   };
   return code ? messages[code] ?? null : null;
 }
@@ -102,6 +138,14 @@ export function competitionOperationsError(code: string | null | undefined) {
     competition_match_staff_duplicate: "That staff member is already assigned to this match.",
     competition_operations_exist: "Remove match schedules and operational assignments before regenerating structure.",
     competition_courts_required: "Add at least one active event court before distributing matches."
+    ,competition_schedule_confirmation_required: "Regeneration needs confirmation because it will replace the current court and time plan."
+    ,competition_schedule_settings_invalid: "Check the schedule type, start, duration, rest and court count."
+    ,competition_schedule_plan_invalid: "PlayR could not validate the proposed schedule. No existing schedule was changed."
+    ,competition_schedule_structure_invalid: "The competition structure contains a missing feeder match."
+    ,competition_schedule_courts_invalid: "Choose between 1 and 32 valid event courts."
+    ,competition_schedule_unfeasible: "PlayR could not create a safe running order from this structure. No existing schedule was changed."
+    ,competition_schedule_event_window_conflict: "The complete schedule does not fit inside the event window. Add courts, shorten matches, extend the event or reduce rest."
+    ,competition_player_rest_conflict: "The proposed schedule does not provide the requested player rest interval."
   };
   return code ? errors[code] ?? "The competition operation could not be completed." : null;
 }

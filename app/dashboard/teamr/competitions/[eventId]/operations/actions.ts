@@ -3,6 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import {
+  buildCompetitionSchedule,
+  CompetitionScheduleError,
+  type ScheduleCourt,
+  type ScheduleMatch
+} from "@/lib/competition-scheduler";
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -35,8 +41,91 @@ function errorCode(error: { message?: string } | null) {
     "competition_staff_time_conflict", "competition_progression_time_conflict", "competition_progression_queue_conflict",
     "competition_time_outside_event", "competition_queue_position_invalid", "competition_match_not_scheduled", "competition_match_staff_invalid",
     "competition_match_staff_duplicate", "competition_operations_exist", "competition_courts_required"
+    ,"competition_schedule_confirmation_required", "competition_schedule_settings_invalid", "competition_schedule_plan_invalid"
+    ,"competition_schedule_structure_invalid", "competition_schedule_courts_invalid", "competition_schedule_unfeasible"
+    ,"competition_schedule_event_window_conflict", "competition_player_rest_conflict"
   ];
   return codes.find((code) => message.includes(code)) ?? "competition_operation_failed";
+}
+
+type ScheduleInput = {
+  event: { starts_at: string; ends_at: string };
+  courts: ScheduleCourt[];
+  matches: ScheduleMatch[];
+  has_existing_operations: boolean;
+};
+
+function selectedCourts(input: ScheduleInput, requestedCount: number) {
+  const selected = input.courts.slice(0, requestedCount).map((court, index) => ({
+    id: court.id,
+    is_new: false,
+    label: court.label,
+    order: index + 1
+  }));
+  const labels = new Set(input.courts.map((court) => court.label.toLocaleLowerCase()));
+  let suffix = 1;
+  while (selected.length < requestedCount) {
+    while (labels.has(`court ${suffix}`)) suffix += 1;
+    const label = `Court ${suffix}`;
+    labels.add(label.toLocaleLowerCase());
+    selected.push({ id: crypto.randomUUID(), is_new: true, label, order: selected.length + 1 });
+    suffix += 1;
+  }
+  return selected;
+}
+
+export async function generateCompetitionSchedule(formData: FormData) {
+  const eventId = text(formData, "eventId");
+  const mode = text(formData, "mode");
+  const courtCount = integerOrNull(text(formData, "courtCount"));
+  const duration = integerOrNull(text(formData, "matchDurationMinutes"));
+  const minimumRest = integerOrNull(text(formData, "minimumRestMinutes")) ?? 0;
+  const requestedStart = sastOrNull(text(formData, "scheduleStart"));
+  const confirmReplace = text(formData, "confirmReplace") === "yes";
+  if (!eventId || !["timed", "queue"].includes(mode) || courtCount === null || courtCount < 1 || courtCount > 32
+    || minimumRest < 0 || minimumRest > 240 || (mode === "timed" && (duration === null || requestedStart === "invalid" || !requestedStart))) {
+    redirect(`${path(eventId)}?error=competition_schedule_settings_invalid`);
+  }
+
+  const supabase = await client();
+  const { data, error: inputError } = await supabase.rpc("get_event_competition_schedule_input", { p_event_id: eventId });
+  if (inputError) redirect(`${path(eventId)}?error=${errorCode(inputError)}`);
+  const input = data as unknown as ScheduleInput;
+  if (input.has_existing_operations && !confirmReplace) {
+    redirect(`${path(eventId)}?error=competition_schedule_confirmation_required`);
+  }
+
+  const courts = selectedCourts(input, courtCount);
+  let plan;
+  try {
+    plan = buildCompetitionSchedule(input.matches, courts, {
+      eventEndAt: input.event.ends_at,
+      matchDurationMinutes: mode === "timed" ? duration : null,
+      minimumRestMinutes: minimumRest,
+      mode: mode as "timed" | "queue",
+      startAt: mode === "timed" ? requestedStart as string : null
+    });
+  } catch (error) {
+    const code = error instanceof CompetitionScheduleError ? error.code : "competition_schedule_unfeasible";
+    redirect(`${path(eventId)}?error=${code}`);
+  }
+
+  const { error } = await supabase.rpc("generate_event_competition_schedule", {
+    p_confirm_replace: confirmReplace,
+    p_event_id: eventId,
+    p_operations: plan.operations,
+    p_settings: {
+      courts: courts.map((court) => ({ court_order: court.order, id: court.id, is_new: court.is_new, label: court.label })),
+      estimated_finish: plan.estimatedFinish,
+      match_duration_minutes: mode === "timed" ? duration : null,
+      minimum_rest_minutes: minimumRest,
+      mode,
+      schedule_start: mode === "timed" ? requestedStart : null
+    }
+  });
+  if (error) redirect(`${path(eventId)}?error=${errorCode(error)}`);
+  refresh(eventId);
+  redirect(`${path(eventId)}?message=schedule_generated`);
 }
 
 async function client() {
